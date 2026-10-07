@@ -1,0 +1,15 @@
+node_modules
+dist
+release
+.DS_Store
+*.local
+*.tsbuildinfo
+vite-dev*.log
+vite-desktop-test*.log
+.env
+*.pem
+electron/app-update-source.local.json
+LOCAL_DEPLOY.md
+task_plan.md
+findings.md
+progress.md

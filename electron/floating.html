@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>提示词助手悬浮图标</title>
+    <style>
+      html,
+      body {
+        width: 64px;
+        height: 64px;
+        margin: 0;
+        overflow: hidden;
+        background: transparent;
+        user-select: none;
+      }
+
+      button {
+        display: grid;
+        width: 64px;
+        height: 64px;
+        margin: 0;
+        place-items: center;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        cursor: grab;
+        padding: 0;
+      }
+
+      button:active {
+        cursor: grabbing;
+        transform: scale(0.98);
+      }
+
+      img {
+        display: block;
+        width: 48px;
+        height: 48px;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <button id="float-button" type="button" title="提示词助手">
+      <img src="../assets/icon.png" alt="" />
+    </button>
+    <script>
+      const button = document.getElementById('float-button');
+      let dragging = false;
+      let moved = false;
+
+      button.addEventListener('mousedown', (event) => {
+        if (event.button !== 0) return;
+        dragging = true;
+        moved = false;
+        window.promptAssistantFloating?.startDrag({ x: event.screenX, y: event.screenY });
+      });
+
+      window.addEventListener('mousemove', (event) => {
+        if (!dragging) return;
+        moved = true;
+        window.promptAssistantFloating?.drag({ x: event.screenX, y: event.screenY });
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false;
+        window.promptAssistantFloating?.endDrag();
+      });
+
+      button.addEventListener('click', () => {
+        if (moved) return;
+        window.promptAssistantFloating?.showMain();
+      });
+
+      button.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+        window.promptAssistantFloating?.openMenu();
+      });
+    </script>
+  </body>
+</html>

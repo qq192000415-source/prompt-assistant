@@ -1,0 +1,1287 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>提示词助手整体 UI 优化方案预览</title>
+    <style>
+      :root {
+        --page: #eef2f7;
+        --panel: #ffffff;
+        --surface: #f7f9fc;
+        --surface-2: #f1f5f9;
+        --line: #d8e0ea;
+        --line-soft: #e8edf3;
+        --text: #172033;
+        --muted: #64748b;
+        --subtle: #8a98aa;
+        --primary: #2563eb;
+        --primary-2: #1d4ed8;
+        --primary-soft: #eaf1ff;
+        --teal: #0f8f83;
+        --teal-soft: #e8f7f5;
+        --danger: #ef4444;
+        --warning: #f59e0b;
+        --shadow: 0 18px 45px rgba(23, 32, 51, 0.13);
+        --radius: 8px;
+        --radius-sm: 6px;
+        --sidebar: 274px;
+        --middle: 356px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: linear-gradient(180deg, #f8fafc 0%, var(--page) 100%);
+        color: var(--text);
+        font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+        line-height: 1.45;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      .page {
+        max-width: 1680px;
+        margin: 0 auto;
+        padding: 22px;
+      }
+
+      .preview-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 20px;
+        align-items: end;
+        margin-bottom: 16px;
+      }
+
+      .eyebrow {
+        margin: 0 0 6px;
+        color: var(--primary);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 26px;
+        letter-spacing: 0;
+      }
+
+      .intro {
+        max-width: 920px;
+        margin: 8px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .tokens {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(86px, 1fr));
+        gap: 8px;
+        min-width: 520px;
+      }
+
+      .token {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        background: rgba(255, 255, 255, 0.76);
+        border: 1px solid var(--line-soft);
+        border-radius: var(--radius);
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .swatch {
+        width: 18px;
+        height: 18px;
+        border-radius: 5px;
+        border: 1px solid rgba(23, 32, 51, 0.1);
+        flex: 0 0 auto;
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px;
+        margin-bottom: 14px;
+        background: rgba(255, 255, 255, 0.78);
+        border: 1px solid var(--line-soft);
+        border-radius: var(--radius);
+      }
+
+      .tabs {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .tab,
+      .mode-toggle,
+      .tiny-btn,
+      .icon-btn,
+      .primary-btn {
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--text);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        transition: 160ms ease;
+      }
+
+      .tab {
+        min-height: 34px;
+        padding: 7px 12px;
+        color: var(--muted);
+        font-weight: 650;
+      }
+
+      .tab:hover,
+      .mode-toggle:hover,
+      .tiny-btn:hover,
+      .icon-btn:hover {
+        border-color: #b9c5d3;
+        background: #f8fafc;
+      }
+
+      .tab.active {
+        border-color: var(--primary);
+        background: var(--primary);
+        color: white;
+      }
+
+      .mode-toggle {
+        min-height: 34px;
+        padding: 7px 12px;
+        color: var(--primary);
+        font-weight: 700;
+      }
+
+      .scene {
+        display: none;
+      }
+
+      .scene.active {
+        display: block;
+      }
+
+      .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+
+      .note {
+        padding: 12px 14px;
+        background: rgba(255, 255, 255, 0.78);
+        border: 1px solid var(--line-soft);
+        border-radius: var(--radius);
+      }
+
+      .note strong {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 13px;
+      }
+
+      .note span {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .app-frame {
+        overflow: hidden;
+        height: min(790px, calc(100vh - 170px));
+        min-height: 680px;
+        background: var(--panel);
+        border: 1px solid #cfd8e3;
+        border-radius: 10px;
+        box-shadow: var(--shadow);
+      }
+
+      .app {
+        display: grid;
+        height: 100%;
+        background: var(--surface);
+      }
+
+      .appbar {
+        display: grid;
+        grid-template-columns: var(--sidebar) minmax(420px, 1fr) auto;
+        align-items: center;
+        gap: 14px;
+        height: 54px;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.96);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        gap: 10px;
+        font-weight: 750;
+      }
+
+      .app-mark {
+        width: 26px;
+        height: 26px;
+        display: grid;
+        place-items: center;
+        border-radius: 7px;
+        background: linear-gradient(145deg, #19b8aa, #2563eb);
+        color: #fff;
+        font-size: 14px;
+        font-weight: 900;
+      }
+
+      .menus {
+        display: flex;
+        gap: 14px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .searchbar {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        height: 38px;
+        border: 1px solid #b8c7da;
+        border-radius: var(--radius);
+        background: #fff;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+      }
+
+      .search-icon {
+        width: 38px;
+        text-align: center;
+        color: var(--subtle);
+        font-size: 18px;
+      }
+
+      .scope-pill {
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        height: 24px;
+        margin-right: 8px;
+        padding: 0 9px;
+        border-radius: 999px;
+        background: var(--teal-soft);
+        color: #0a6f66;
+        font-size: 12px;
+        font-weight: 750;
+      }
+
+      .searchbar input {
+        width: 100%;
+        min-width: 0;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: var(--text);
+      }
+
+      .app-actions {
+        display: flex;
+        justify-content: end;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .primary-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        min-height: 34px;
+        padding: 0 13px;
+        background: var(--primary);
+        border-color: var(--primary);
+        color: #fff;
+        font-weight: 700;
+      }
+
+      .primary-btn:hover {
+        background: var(--primary-2);
+      }
+
+      .icon-btn {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        color: var(--muted);
+      }
+
+      .tiny-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-height: 30px;
+        padding: 0 10px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .appbody {
+        display: grid;
+        min-height: 0;
+      }
+
+      .sidebar {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        min-height: 0;
+        background: #f2f5f9;
+        border-right: 1px solid var(--line);
+      }
+
+      .side-top {
+        padding: 14px;
+        border-bottom: 1px solid var(--line-soft);
+      }
+
+      .side-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .side-scroll {
+        min-height: 0;
+        overflow: auto;
+        padding: 8px 12px 14px;
+      }
+
+      .section-label {
+        margin: 14px 8px 7px;
+        color: var(--subtle);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+      }
+
+      .nav-row {
+        display: grid;
+        grid-template-columns: 24px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 6px;
+        min-height: 34px;
+        margin-bottom: 3px;
+        padding: 0 8px;
+        border: 1px solid transparent;
+        border-radius: var(--radius-sm);
+        color: #273247;
+        font-size: 14px;
+      }
+
+      .nav-row.active {
+        border-color: #b7cdfa;
+        background: #dbeafe;
+        color: #1e3a8a;
+      }
+
+      .nav-row.context-only {
+        border-color: transparent;
+        background: transparent;
+        color: var(--muted);
+      }
+
+      .nav-row.context-only .nav-name::after {
+        content: "原位置";
+        margin-left: 7px;
+        padding: 1px 6px;
+        border-radius: 999px;
+        background: #eef2f7;
+        color: #728096;
+        font-size: 11px;
+        font-weight: 650;
+      }
+
+      .nav-icon {
+        color: var(--subtle);
+        font-size: 16px;
+      }
+
+      .nav-name {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+
+      .count {
+        color: var(--subtle);
+        font-size: 12px;
+      }
+
+      .side-footer {
+        padding: 12px;
+        border-top: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .sync-pill {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 34px;
+        padding: 0 10px;
+        border: 1px solid var(--line-soft);
+        border-radius: var(--radius);
+        background: #fff;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: #22c55e;
+      }
+
+      .side-footer .footer-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .results-pane {
+        min-width: 0;
+        min-height: 0;
+        overflow: auto;
+        background: #fbfcfe;
+        border-right: 1px solid var(--line);
+      }
+
+      .pane-head {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        padding: 14px 16px 10px;
+        background: rgba(251, 252, 254, 0.96);
+        border-bottom: 1px solid var(--line-soft);
+      }
+
+      .pane-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .pane-title h2 {
+        margin: 0;
+        font-size: 16px;
+        letter-spacing: 0;
+      }
+
+      .result-meta {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .filter-row {
+        display: flex;
+        gap: 7px;
+        margin-top: 10px;
+        overflow: hidden;
+      }
+
+      .chip {
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        min-height: 26px;
+        padding: 0 8px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .chip.active {
+        border-color: #bfdbfe;
+        background: var(--primary-soft);
+        color: var(--primary);
+      }
+
+      .result-list {
+        padding: 10px;
+      }
+
+      .result-item {
+        display: grid;
+        gap: 6px;
+        padding: 11px 12px;
+        margin-bottom: 8px;
+        border: 1px solid transparent;
+        border-radius: var(--radius);
+        background: transparent;
+      }
+
+      .result-item.active {
+        border-color: #c7d7ef;
+        background: #fff;
+        box-shadow: 0 6px 16px rgba(23, 32, 51, 0.06);
+      }
+
+      .result-line {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .result-title {
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-weight: 750;
+      }
+
+      .source {
+        color: var(--subtle);
+        font-size: 12px;
+      }
+
+      .snippet {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      mark {
+        padding: 0 2px;
+        background: #fef3c7;
+        color: #92400e;
+        border-radius: 3px;
+      }
+
+      .detail-pane {
+        min-width: 0;
+        min-height: 0;
+        overflow: auto;
+        background: var(--surface);
+      }
+
+      .doc-shell {
+        max-width: 940px;
+        margin: 0 auto;
+        padding: 22px 28px 44px;
+      }
+
+      .doc-top {
+        display: grid;
+        gap: 10px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .breadcrumb {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .doc-title-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: start;
+        gap: 16px;
+      }
+
+      .doc-title {
+        margin: 0;
+        font-size: 25px;
+        line-height: 1.25;
+        letter-spacing: 0;
+      }
+
+      .doc-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .doc-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+      }
+
+      .doc-card {
+        margin-top: 16px;
+        padding: 18px;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+      }
+
+      .doc-card p {
+        margin: 0 0 14px;
+        color: #273247;
+        font-size: 15px;
+        line-height: 1.78;
+      }
+
+      .doc-card p:last-child {
+        margin-bottom: 0;
+      }
+
+      .subhead {
+        margin: 20px 0 8px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .field-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .field {
+        padding: 10px;
+        border: 1px solid var(--line-soft);
+        border-radius: var(--radius-sm);
+        background: #fff;
+      }
+
+      .field span {
+        display: block;
+        margin-bottom: 3px;
+        color: var(--subtle);
+        font-size: 11px;
+      }
+
+      .field strong {
+        font-size: 13px;
+      }
+
+      .search-banner,
+      .browse-banner {
+        margin: 14px 16px 0;
+        padding: 10px 12px;
+        border-radius: var(--radius);
+        font-size: 13px;
+      }
+
+      .search-banner {
+        border: 1px solid #bfdbfe;
+        background: #eff6ff;
+        color: #1d4ed8;
+      }
+
+      .browse-banner {
+        border: 1px solid var(--line-soft);
+        background: #fff;
+        color: var(--muted);
+      }
+
+      body[data-mode="browse"] .search-only {
+        display: none !important;
+      }
+
+      body[data-mode="search"] .browse-only {
+        display: none !important;
+      }
+
+      .three-col .appbody {
+        grid-template-columns: var(--sidebar) var(--middle) minmax(0, 1fr);
+      }
+
+      .two-col .appbody {
+        grid-template-columns: var(--sidebar) minmax(0, 1fr);
+      }
+
+      .two-col-main {
+        min-width: 0;
+        min-height: 0;
+        overflow: auto;
+        padding: 20px 26px 42px;
+      }
+
+      .content-bar {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 16px;
+        margin: -20px -26px 20px;
+        padding: 14px 26px;
+        background: rgba(247, 249, 252, 0.97);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .section-title {
+        margin: 0;
+        font-size: 22px;
+      }
+
+      .prompt-stream {
+        display: grid;
+        gap: 18px;
+        max-width: 1040px;
+        margin: 0 auto;
+      }
+
+      .prompt-block {
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 18px;
+      }
+
+      .prompt-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: start;
+        gap: 14px;
+        margin-bottom: 9px;
+      }
+
+      .prompt-head h3 {
+        margin: 0;
+        font-size: 20px;
+      }
+
+      .prompt-body {
+        padding: 16px 18px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: #fff;
+        color: #273247;
+        font-size: 15px;
+        line-height: 1.75;
+      }
+
+      .command .appbody {
+        grid-template-columns: var(--sidebar) minmax(0, 1fr);
+      }
+
+      .command-workspace {
+        min-height: 0;
+        overflow: auto;
+        padding: 22px 26px;
+      }
+
+      .command-strip {
+        max-width: 1080px;
+        margin: 0 auto 18px;
+        padding: 14px;
+        border: 1px solid #bfdbfe;
+        border-radius: 10px;
+        background: #eff6ff;
+      }
+
+      .command-box {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        height: 52px;
+        padding: 0 14px;
+        border: 1px solid #93c5fd;
+        border-radius: var(--radius);
+        background: #fff;
+        box-shadow: 0 10px 28px rgba(37, 99, 235, 0.12);
+      }
+
+      .command-input {
+        color: var(--text);
+        font-size: 17px;
+        font-weight: 700;
+      }
+
+      .kbd {
+        padding: 3px 7px;
+        border: 1px solid #cbd5e1;
+        border-bottom-width: 2px;
+        border-radius: 5px;
+        background: #fff;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .workspace-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 330px;
+        gap: 18px;
+        max-width: 1080px;
+        margin: 0 auto;
+      }
+
+      .table {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        overflow: hidden;
+        background: #fff;
+      }
+
+      .table-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1.4fr) minmax(120px, 0.8fr) 92px 108px;
+        gap: 10px;
+        align-items: center;
+        min-height: 46px;
+        padding: 0 14px;
+        border-bottom: 1px solid var(--line-soft);
+        font-size: 13px;
+      }
+
+      .table-row:last-child {
+        border-bottom: 0;
+      }
+
+      .table-head {
+        background: #f8fafc;
+        color: var(--muted);
+        font-weight: 800;
+        font-size: 12px;
+      }
+
+      .side-panel {
+        display: grid;
+        gap: 12px;
+      }
+
+      .mini-panel {
+        padding: 13px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: #fff;
+      }
+
+      .mini-panel h3 {
+        margin: 0 0 8px;
+        font-size: 14px;
+      }
+
+      .mini-panel p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      @media (max-width: 1180px) {
+        .preview-head {
+          grid-template-columns: 1fr;
+        }
+
+        .tokens,
+        .summary-grid {
+          min-width: 0;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .appbar {
+          grid-template-columns: 220px minmax(260px, 1fr) auto;
+        }
+
+        :root {
+          --sidebar: 232px;
+          --middle: 318px;
+        }
+      }
+    </style>
+  </head>
+  <body data-mode="search">
+    <div class="page">
+      <header class="preview-head">
+        <div>
+          <p class="eyebrow">提示词助手 UI/UX 整体优化预览</p>
+          <h1>从“分类列表 + 正文阅读”升级为高效率提示词工作台</h1>
+          <p class="intro">
+            当前软件属于 Windows 桌面端知识库/提示词管理工具，核心不是展示型网站，而是高频检索、分类整理、复制复用、编辑同步。下面三套方向都解决搜索范围歧义，同时覆盖整体布局、操作入口、视觉层级和长期扩展性。
+          </p>
+        </div>
+        <div class="tokens" aria-label="设计系统关键令牌">
+          <div class="token"><span class="swatch" style="background:#2563eb"></span>主操作蓝</div>
+          <div class="token"><span class="swatch" style="background:#0f8f83"></span>全局/同步绿</div>
+          <div class="token"><span class="swatch" style="background:#f7f9fc"></span>工作底色</div>
+          <div class="token"><span class="swatch" style="background:#172033"></span>正文文字</div>
+          <div class="token"><span class="swatch" style="background:#d8e0ea"></span>边界线</div>
+        </div>
+      </header>
+
+      <div class="toolbar">
+        <div class="tabs" role="tablist" aria-label="界面方案">
+          <button class="tab active" data-scene="option-a">A 三栏效率工作台</button>
+          <button class="tab" data-scene="option-b">B 双栏阅读增强</button>
+          <button class="tab" data-scene="option-c">C 快捷检索中心</button>
+        </div>
+        <button class="mode-toggle" id="modeToggle">当前：搜索中状态</button>
+      </div>
+
+      <section class="scene active" id="option-a">
+        <div class="summary-grid">
+          <div class="note"><strong>推荐方向</strong><span>搜索、分类、结果、正文同时可见，最适合高频复制和管理。</span></div>
+          <div class="note"><strong>搜索歧义处理</strong><span>顶部明确“全局”，左侧原选中分类降级为“原位置”，不再像过滤范围。</span></div>
+          <div class="note"><strong>改动级别</strong><span>中等改动：重组布局和状态表达，保留现有核心功能逻辑。</span></div>
+        </div>
+        <div class="app-frame">
+          <div class="app three-col">
+            <div class="appbar">
+              <div class="brand">
+                <span class="app-mark">提</span>
+                <div>
+                  <div>提示词助手 1.3.19</div>
+                  <div class="menus"><span>文件</span><span>视图</span><span>设置</span></div>
+                </div>
+              </div>
+              <label class="searchbar" aria-label="全局搜索">
+                <span class="search-icon">⌕</span>
+                <span class="scope-pill">全部提示词</span>
+                <input value="Gemini" aria-label="搜索关键词" />
+              </label>
+              <div class="app-actions">
+                <button class="icon-btn" title="导入">⇪</button>
+                <button class="primary-btn">＋ 新建提示词</button>
+              </div>
+            </div>
+            <div class="appbody">
+              <aside class="sidebar">
+                <div class="side-top">
+                  <div class="side-actions">
+                    <button class="tiny-btn">＋ 分类</button>
+                    <button class="tiny-btn">↧ 导入</button>
+                  </div>
+                </div>
+                <div class="side-scroll">
+                  <div class="section-label">快速入口</div>
+                  <div class="nav-row"><span class="nav-icon">⌂</span><span class="nav-name">全部提示词</span><span class="count">72</span></div>
+                  <div class="nav-row"><span class="nav-icon">♡</span><span class="nav-name">收藏</span><span class="count">8</span></div>
+                  <div class="nav-row"><span class="nav-icon">↺</span><span class="nav-name">最近使用</span><span class="count">12</span></div>
+                  <div class="section-label">分类</div>
+                  <div class="nav-row"><span class="nav-icon">▸</span><span class="nav-name">源代码回退检查点</span><span class="count">1</span></div>
+                  <div class="nav-row"><span class="nav-icon">▸</span><span class="nav-name">markdown</span><span class="count">4</span></div>
+                  <div class="nav-row context-only search-only"><span class="nav-icon">▾</span><span class="nav-name">开发流程</span><span class="count">9</span></div>
+                  <div class="nav-row active browse-only"><span class="nav-icon">▾</span><span class="nav-name">开发流程</span><span class="count">9</span></div>
+                  <div class="nav-row"><span class="nav-icon">•</span><span class="nav-name">01-Gemini对齐需求</span><span class="count"></span></div>
+                  <div class="nav-row"><span class="nav-icon">•</span><span class="nav-name">02-Gemini生成文档</span><span class="count"></span></div>
+                  <div class="nav-row"><span class="nav-icon">•</span><span class="nav-name">03-Gemini敲定技术栈</span><span class="count"></span></div>
+                  <div class="nav-row"><span class="nav-icon">▸</span><span class="nav-name">未分类</span><span class="count">21</span></div>
+                  <div class="nav-row"><span class="nav-icon">▸</span><span class="nav-name">skills</span><span class="count">4</span></div>
+                </div>
+                <div class="side-footer">
+                  <div class="sync-pill"><span class="dot"></span><span>云端在线 admin@example.com</span></div>
+                  <div class="footer-actions">
+                    <button class="tiny-btn">同步</button>
+                    <button class="tiny-btn">退出</button>
+                  </div>
+                </div>
+              </aside>
+
+              <main class="results-pane">
+                <div class="pane-head">
+                  <div class="pane-title">
+                    <h2 class="search-only">全局搜索结果</h2>
+                    <h2 class="browse-only">开发流程</h2>
+                    <button class="tiny-btn">排序</button>
+                  </div>
+                  <div class="result-meta search-only">在全部 72 条提示词中找到 12 条，当前左侧分类只表示原来的浏览位置。</div>
+                  <div class="result-meta browse-only">当前分类下 9 条提示词。</div>
+                  <div class="filter-row search-only">
+                    <span class="chip active">全部匹配</span>
+                    <span class="chip">标题</span>
+                    <span class="chip">正文</span>
+                    <span class="chip">分类</span>
+                    <span class="chip">标签</span>
+                  </div>
+                </div>
+                <div class="search-banner search-only">搜索范围：全部提示词。结果会显示来源分类，和左侧高亮无关。</div>
+                <div class="browse-banner browse-only">正在浏览“开发流程”，顶部搜索仍会进入全局搜索。</div>
+                <div class="result-list">
+                  <article class="result-item active">
+                    <div class="result-line"><span class="result-title">01-Gemini对齐需求</span><span class="source">开发流程</span></div>
+                    <div class="snippet">我准备开发一个淘宝/天猫的商品自动上架软件，请先阅读资料...</div>
+                  </article>
+                  <article class="result-item">
+                    <div class="result-line"><span class="result-title">02-Gemini生成项目上下文文档</span><span class="source">开发流程</span></div>
+                    <div class="snippet">请帮我输出一份详细的需求确认文档，作为后续开发的核心内容。</div>
+                  </article>
+                  <article class="result-item">
+                    <div class="result-line"><span class="result-title">Gemini 图片理解修复</span><span class="source">未分类</span></div>
+                    <div class="snippet">处理截图、txt 文件、SKU 图片目录结构和边缘情况。</div>
+                  </article>
+                  <article class="result-item">
+                    <div class="result-line"><span class="result-title">全局搜索测试提示词</span><span class="source">ui界面</span></div>
+                    <div class="snippet">匹配标题、正文、主文件夹、子分类和标签，不受左侧选中项限制。</div>
+                  </article>
+                </div>
+              </main>
+
+              <section class="detail-pane">
+                <div class="doc-shell">
+                  <div class="doc-top">
+                    <div class="breadcrumb">全部提示词 / 开发流程 / 01-Gemini对齐需求</div>
+                    <div class="doc-title-row">
+                      <h2 class="doc-title">01-Gemini对齐需求（附带你的截图和 txt 文件一起发）</h2>
+                      <div class="doc-actions">
+                        <button class="tiny-btn">编辑</button>
+                        <button class="primary-btn">复制提示词</button>
+                        <button class="icon-btn">♡</button>
+                        <button class="icon-btn">⋯</button>
+                      </div>
+                    </div>
+                    <div class="doc-meta">
+                      <span class="chip active">全局命中</span>
+                      <span class="chip">开发流程</span>
+                      <span class="chip">Gemini</span>
+                      <span class="chip">最近复制 2 次</span>
+                    </div>
+                  </div>
+                  <div class="doc-card">
+                    <p>我准备开发一个淘宝/天猫的商品自动上架软件。我已经上传了后台页面的参考截图、商品发布流程文件（txt、UTF-8 无 BOM 编码），以及本地测试图片目录结构。</p>
+                    <p>请仔细阅读这些资料，先不要急于写代码。请总结你对这个业务流程的初步理解，然后作为专业的研发工程师，向我提问：在实际开发前，还有哪些边缘情况需要进一步澄清？</p>
+                  </div>
+                  <div class="subhead">结构化信息</div>
+                  <div class="field-grid">
+                    <div class="field"><span>主文件夹</span><strong>开发流程</strong></div>
+                    <div class="field"><span>子分类</span><strong>项目初始化</strong></div>
+                    <div class="field"><span>标签</span><strong>Gemini / 需求</strong></div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene" id="option-b">
+        <div class="summary-grid">
+          <div class="note"><strong>适合场景</strong><span>如果主要工作是浏览长提示词、快速复制、偶尔管理分类，这套最稳。</span></div>
+          <div class="note"><strong>视觉变化</strong><span>延续当前双栏结构，但强化顶部搜索状态、正文阅读密度和操作固定位置。</span></div>
+          <div class="note"><strong>改动级别</strong><span>较低到中等：更像当前界面的高质感升级。</span></div>
+        </div>
+        <div class="app-frame">
+          <div class="app two-col">
+            <div class="appbar">
+              <div class="brand">
+                <span class="app-mark">提</span>
+                <div>
+                  <div>提示词助手</div>
+                  <div class="menus"><span>文件</span><span>视图</span><span>设置</span></div>
+                </div>
+              </div>
+              <label class="searchbar" aria-label="全局搜索">
+                <span class="search-icon">⌕</span>
+                <span class="scope-pill">全局</span>
+                <input value="打包" />
+              </label>
+              <div class="app-actions">
+                <button class="tiny-btn">恢复记录</button>
+                <button class="primary-btn">＋ 新建提示词</button>
+              </div>
+            </div>
+            <div class="appbody">
+              <aside class="sidebar">
+                <div class="side-top">
+                  <div class="side-actions">
+                    <button class="tiny-btn">＋ 分类</button>
+                    <button class="tiny-btn">＋ 提示词</button>
+                  </div>
+                </div>
+                <div class="side-scroll">
+                  <div class="section-label">分类</div>
+                  <div class="nav-row"><span class="nav-icon">▸</span><span class="nav-name">markdown</span><span class="count">4</span></div>
+                  <div class="nav-row"><span class="nav-icon">▸</span><span class="nav-name">Master Prompt</span><span class="count">7</span></div>
+                  <div class="nav-row context-only search-only"><span class="nav-icon">▾</span><span class="nav-name">未分类</span><span class="count">21</span></div>
+                  <div class="nav-row active browse-only"><span class="nav-icon">▾</span><span class="nav-name">未分类</span><span class="count">21</span></div>
+                  <div class="nav-row"><span class="nav-icon">•</span><span class="nav-name">0.1打包要求</span><span class="count"></span></div>
+                  <div class="nav-row"><span class="nav-icon">•</span><span class="nav-name">02.打包要求</span><span class="count"></span></div>
+                  <div class="nav-row"><span class="nav-icon">•</span><span class="nav-name">03.打包要求</span><span class="count"></span></div>
+                  <div class="nav-row"><span class="nav-icon">•</span><span class="nav-name">01.拆任务</span><span class="count"></span></div>
+                  <div class="nav-row"><span class="nav-icon">▸</span><span class="nav-name">图案提取</span><span class="count">7</span></div>
+                </div>
+                <div class="side-footer">
+                  <div class="sync-pill"><span class="dot"></span><span>云端已同步</span></div>
+                  <div class="footer-actions">
+                    <button class="tiny-btn">同步</button>
+                    <button class="tiny-btn">退出</button>
+                  </div>
+                </div>
+              </aside>
+              <main class="two-col-main">
+                <div class="content-bar">
+                  <div>
+                    <h2 class="section-title search-only">全局搜索：打包</h2>
+                    <h2 class="section-title browse-only">未分类</h2>
+                    <div class="result-meta search-only">搜索全部提示词，按相关度排序。左侧分类只保留位置上下文。</div>
+                    <div class="result-meta browse-only">按标题顺序显示 21 条提示词。</div>
+                  </div>
+                  <div class="doc-actions">
+                    <button class="tiny-btn">列表密度</button>
+                    <button class="tiny-btn">标题排序</button>
+                  </div>
+                </div>
+                <div class="prompt-stream">
+                  <article class="prompt-block">
+                    <div class="prompt-head">
+                      <h3>0.1打包要求</h3>
+                      <div class="doc-actions"><button class="tiny-btn">编辑</button><button class="primary-btn">复制提示词</button><button class="icon-btn">♡</button><button class="icon-btn">⋯</button></div>
+                    </div>
+                    <div class="prompt-body">打包时，所有显示版本号的地方（包含界面及启动文件），需统一在原版本号后追加“1”。</div>
+                  </article>
+                  <article class="prompt-block">
+                    <div class="prompt-head">
+                      <h3>02.打包要求</h3>
+                      <div class="doc-actions"><button class="tiny-btn">编辑</button><button class="primary-btn">复制提示词</button><button class="icon-btn">♡</button><button class="icon-btn">⋯</button></div>
+                    </div>
+                    <div class="prompt-body">项目规则里：以后只要“修改后准备打包”，必须先递增版本号，并且界面标题、接口版本、包名、启动器 exe 文件名和说明文档都要同步。</div>
+                  </article>
+                  <article class="prompt-block">
+                    <div class="prompt-head">
+                      <h3>03.打包要求</h3>
+                      <div class="doc-actions"><button class="tiny-btn">编辑</button><button class="primary-btn">复制提示词</button><button class="icon-btn">♡</button><button class="icon-btn">⋯</button></div>
+                    </div>
+                    <div class="prompt-body">先保存一个稳定点，然后打包发布。</div>
+                  </article>
+                </div>
+              </main>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene" id="option-c">
+        <div class="summary-grid">
+          <div class="note"><strong>适合场景</strong><span>重度键盘用户、提示词很多、经常“搜到后直接复制”的工作流。</span></div>
+          <div class="note"><strong>核心变化</strong><span>搜索升级为命令中心：搜索、复制、编辑、新建、跳转分类都从同一入口完成。</span></div>
+          <div class="note"><strong>改动级别</strong><span>最高：效率上限最好，但需要更多交互设计和快捷键打磨。</span></div>
+        </div>
+        <div class="app-frame">
+          <div class="app command">
+            <div class="appbar">
+              <div class="brand">
+                <span class="app-mark">提</span>
+                <div>
+                  <div>提示词助手</div>
+                  <div class="menus"><span>工作台</span><span>分类</span><span>设置</span></div>
+                </div>
+              </div>
+              <label class="searchbar" aria-label="全局搜索">
+                <span class="search-icon">⌘</span>
+                <span class="scope-pill">命令中心</span>
+                <input value="Gemini 复制" />
+              </label>
+              <div class="app-actions">
+                <button class="icon-btn">?</button>
+                <button class="primary-btn">＋ 新建</button>
+              </div>
+            </div>
+            <div class="appbody">
+              <aside class="sidebar">
+                <div class="side-top">
+                  <div class="sync-pill"><span class="dot"></span><span>云端在线</span></div>
+                </div>
+                <div class="side-scroll">
+                  <div class="section-label">智能视图</div>
+                  <div class="nav-row active"><span class="nav-icon">⌘</span><span class="nav-name">命令中心</span><span class="count"></span></div>
+                  <div class="nav-row"><span class="nav-icon">⌂</span><span class="nav-name">全部提示词</span><span class="count">72</span></div>
+                  <div class="nav-row"><span class="nav-icon">↺</span><span class="nav-name">最近复制</span><span class="count">9</span></div>
+                  <div class="nav-row"><span class="nav-icon">♡</span><span class="nav-name">收藏</span><span class="count">8</span></div>
+                  <div class="section-label">常用分类</div>
+                  <div class="nav-row"><span class="nav-icon">▸</span><span class="nav-name">开发流程</span><span class="count">9</span></div>
+                  <div class="nav-row"><span class="nav-icon">▸</span><span class="nav-name">未分类</span><span class="count">21</span></div>
+                  <div class="nav-row"><span class="nav-icon">▸</span><span class="nav-name">skills</span><span class="count">4</span></div>
+                </div>
+                <div class="side-footer">
+                  <div class="footer-actions">
+                    <button class="tiny-btn">同步</button>
+                    <button class="tiny-btn">设置</button>
+                  </div>
+                </div>
+              </aside>
+              <main class="command-workspace">
+                <div class="command-strip">
+                  <div class="command-box">
+                    <span class="search-icon">⌕</span>
+                    <span class="command-input">Gemini 复制</span>
+                    <span><span class="kbd">Enter</span> 复制选中项</span>
+                  </div>
+                  <div class="result-meta" style="margin-top:8px;">全局匹配 12 条。可继续输入“编辑 / 分类 / 收藏”缩小动作。</div>
+                </div>
+                <div class="workspace-grid">
+                  <section class="table">
+                    <div class="table-row table-head"><span>提示词</span><span>来源</span><span>匹配</span><span>动作</span></div>
+                    <div class="table-row"><strong>01-Gemini对齐需求</strong><span>开发流程</span><span>标题</span><button class="tiny-btn">复制</button></div>
+                    <div class="table-row"><strong>02-Gemini生成项目上下文文档</strong><span>开发流程</span><span>标题</span><button class="tiny-btn">复制</button></div>
+                    <div class="table-row"><strong>Gemini 敲定技术栈</strong><span>开发流程</span><span>正文</span><button class="tiny-btn">复制</button></div>
+                    <div class="table-row"><strong>图片理解边缘情况</strong><span>图案提取</span><span>标签</span><button class="tiny-btn">复制</button></div>
+                    <div class="table-row"><strong>全局搜索测试提示词</strong><span>ui界面</span><span>正文</span><button class="tiny-btn">复制</button></div>
+                  </section>
+                  <aside class="side-panel">
+                    <div class="mini-panel">
+                      <h3>选中项预览</h3>
+                      <p>我准备开发一个淘宝/天猫的商品自动上架软件。请先总结业务流程，再向我提问...</p>
+                    </div>
+                    <div class="mini-panel">
+                      <h3>快捷动作</h3>
+                      <p>Enter 复制，Ctrl+E 编辑，Ctrl+D 收藏，Ctrl+L 定位到来源分类。</p>
+                    </div>
+                    <div class="mini-panel">
+                      <h3>设计重点</h3>
+                      <p>把“找内容”和“执行动作”合并，减少鼠标移动和重复点击。</p>
+                    </div>
+                  </aside>
+                </div>
+              </main>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const tabs = Array.from(document.querySelectorAll(".tab"));
+      const scenes = Array.from(document.querySelectorAll(".scene"));
+      const modeToggle = document.getElementById("modeToggle");
+
+      function activateScene(target, pushHash) {
+        const nextTab = tabs.find((tab) => tab.dataset.scene === target) || tabs[0];
+        const nextTarget = nextTab.dataset.scene;
+        tabs.forEach((item) => item.classList.toggle("active", item === nextTab));
+        scenes.forEach((scene) => scene.classList.toggle("active", scene.id === nextTarget));
+        if (pushHash) {
+          history.replaceState(null, "", "#" + nextTarget);
+        }
+      }
+
+      tabs.forEach((tab) => {
+        tab.addEventListener("click", () => activateScene(tab.dataset.scene, true));
+      });
+
+      window.addEventListener("hashchange", () => {
+        activateScene(location.hash.replace("#", "") || "option-a", false);
+      });
+
+      activateScene(location.hash.replace("#", "") || "option-a", false);
+
+      modeToggle.addEventListener("click", () => {
+        const isSearch = document.body.dataset.mode === "search";
+        document.body.dataset.mode = isSearch ? "browse" : "search";
+        modeToggle.textContent = isSearch ? "当前：普通浏览状态" : "当前：搜索中状态";
+      });
+    </script>
+  </body>
+</html>
