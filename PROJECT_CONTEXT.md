@@ -168,6 +168,7 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 
 - 2026-10-07：为公开二次开发去掉仓库内的个人管理员邮箱、更新服务器和 SSH 默认路径。云同步、管理员邮箱和更新地址改由 `.env` 提供。源码版本推进到 `1.3.21`。个人部署参数留在本机 `.env` 和 `LOCAL_DEPLOY.md`。
 - 2026-10-07：公开仓库为 `https://github.com/qq192000415-source/prompt-assistant`。推上去的是不含旧提交历史的源码快照，避免旧历史里的服务器信息一并公开。
+- 2026-10-07：仓库首页 `README.md` 增加主界面截图 `docs/app-home.jpg`。截图不进入安装包。
 - 2026-05-09：修复顶部搜索从全局搜索退化为当前分类/子分类内搜索的问题；源码版本推进到 `1.3.16` 并发布。
 - 2026-05-13：处理 Supabase “服务器在线但表权限/RLS 不完全可用”的判断。补充 `supabase-schema.sql`：强制 RLS，并给 anon 增加受 RLS 保护的 select 授权；新增 `scripts/check-supabase-access.cjs`。使用管理员账号验证登录后读取和原样 upsert 成功。
 - 2026-05-14：按用户要求开始 Supabase-only 迁移。旧服务器不是用户自己的，后续不再使用；旧服务器云端数据当前拿不到，因此不执行旧服务器数据导入，保留本机 localStorage 登录 Supabase 后同步上云的路径。删除旧服务端资产，版本推进到 `1.3.17`。
