@@ -48,6 +48,7 @@ Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 - 文档库：文档条目复用 PromptItem（`kind: 'document'` + `file`），合并、删除记录、恢复、排序沿用提示词逻辑。文档分类单独存，云端放在 `export_settings.documentLibrary`，不给表加列，避免没跑 SQL 的部署同步失败。
 - 文档的核心场景是发给别人：主按钮是“复制文件”（Windows 剪贴板文件列表），标题可拖出去；.md/.txt 另有“复制内容”。提示词条目不挂附件。
 - 搜索在当前库内全局匹配，另一个库也有结果时显示提示，一键切换。
+- 公开仓库只放不带历史的快照：本地 `master` 有完整旧历史，不能直接推。同步流程：`git checkout public-source` → `git read-tree -u --reset master` → 扫描 IP/邮箱/域名/密钥 → 提交 → `git push origin public-source:main` → 切回 `master`。
 - 安装包更新文件放在部署者自己的 HTTPS 目录，默认远程路径是 `/prompt-assistant-updates/win/`。
 - 禁止写入或提交 Supabase secret key、service_role key、服务器密码等秘密信息。
 - 修改会被打包的源码或配置后，必须递增可见应用版本和 package 版本，并运行测试、语法检查、完整打包和发布验证。
@@ -200,6 +201,7 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 
 ### Log Entries
 
+- 2026-10-12：按快照流程把源码同步到 GitHub `main`（提交 `67d5c60`，内容与本地 1.3.26 一致）。推送前扫描过，没有 IP、邮箱、更新域名、密钥。
 - 2026-10-12：版本 `1.3.26`。新增文档库：左栏「提示词 | 文档」切换，各自独立分类；文档原样保存，可复制文件、拖出、复制内容、打开、另存为、在文件夹中显示，.md 用 react-markdown 排版。文件存本机 `attachments` 和 Supabase Storage。修复：数据目录随版本号变化，导致升级后本机提示词和登录状态找不到；现在固定目录并自动迁移。
 - 2026-10-12：版本 `1.3.25`。把合并、去重逻辑移到 `src/librarySync.ts`，TXT/CSV 导入解析移到 `src/promptStorage.ts`，新增行为测试。云端写入改为按 `updated_at` 的乐观锁，冲突时先合并再写；窗口重新获得焦点时检查云端是否被其他设备改过，有就合并进来。外链只放行 http/https。清理：旧 vite 日志、5 月的计划文件、`output/` 方案图、`assets/extracted-icon-check.png`、未使用的 `cloudConfig` 导出、两个已合并的旧 codex 分支。`tsconfig.app.json` 开启 `allowImportingTsExtensions`，让 Node 测试能加载 `promptStorage.ts`。
 - 2026-10-12：项目交由 Claude Code 负责后续迭代。整理文档：修正过期的“腾讯云”描述、样式技术栈和互相矛盾的发布记录；把代码审查发现的问题写进 Task List。只改文档，未改打包源码，不需要递增版本和发布。工具差异：AGENTS.md 要求用 `apply_patch`，Claude Code 用等价的 Edit 工具做手工编辑。
