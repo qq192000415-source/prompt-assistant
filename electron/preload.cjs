@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     open: (sha, name) => ipcRenderer.invoke('documents:open', sha, name),
     showInFolder: (sha, name) => ipcRenderer.invoke('documents:show-in-folder', sha, name),
     copyFile: (sha, name) => ipcRenderer.invoke('documents:copy-file', sha, name),
+    sharePath: (sha, name) => ipcRenderer.invoke('documents:share-path', sha, name),
     saveAs: (sha, name) => ipcRenderer.invoke('documents:save-as', sha, name),
     startDrag: (sha, name) => ipcRenderer.send('documents:start-drag', sha, name),
   },

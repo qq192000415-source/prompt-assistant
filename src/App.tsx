@@ -17,6 +17,7 @@ import {
   FileJson,
   FilePlus,
   FileText,
+  Files,
   Folder,
   FolderOpen,
   Heart,
@@ -1528,13 +1529,13 @@ function App() {
     showToast(instruction.trim() ? '配套指令已保存' : '配套指令已清空');
   };
 
-  const copyPrompt = async (id: string, content: string) => {
+  const copyPrompt = async (id: string, content: string, message = '已复制到剪贴板') => {
     try {
       await copyToClipboard(content);
       const now = new Date().toISOString();
       markLibraryChanged();
       setPrompts((items) => items.map((item) => (item.id === id ? { ...item, lastUsedAt: now } : item)));
-      showToast('已复制到剪贴板');
+      showToast(message);
     } catch {
       showToast('复制失败，请手动选中文本复制');
     }
@@ -3823,14 +3824,59 @@ function MarkdownView({ text }: { text: string }) {
 }
 
 type DocumentInstructionProps = {
+  fileName: string;
+  fileText: string | null;
   instruction: string;
-  onCopy: (text: string) => void;
-  onSave: (text: string) => void;
+  ready: boolean;
+  onCopy: (content: string, message?: string) => void;
+  onCopyFile: () => void;
+  onGetSharePath: () => Promise<string>;
+  onSave: (content: string) => void;
 };
 
-function DocumentInstruction({ instruction, onCopy, onSave }: DocumentInstructionProps) {
+// 指令和文件一起给 AI：
+// - .md/.txt：一次复制“指令 + 文件全文”，聊天窗口、编辑器、终端粘贴都完整。
+// - 其他格式：剪贴板同时放文件和文字时，Chromium 系软件只收文件、丢掉文字，所以分两步：
+//   ① 复制“指令 + 文件路径”（终端 AI 到这一步就够了），② 再复制文件。
+function DocumentInstruction({
+  fileName,
+  fileText,
+  instruction,
+  ready,
+  onCopy,
+  onCopyFile,
+  onGetSharePath,
+  onSave,
+}: DocumentInstructionProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(instruction);
+  const [awaitingFile, setAwaitingFile] = useState(false);
+
+  useEffect(() => {
+    if (!awaitingFile) return;
+    const timer = window.setTimeout(() => setAwaitingFile(false), 60_000);
+    return () => window.clearTimeout(timer);
+  }, [awaitingFile]);
+
+  const copyInstructionWithFile = async () => {
+    if (fileText !== null) {
+      onCopy(
+        `${instruction}\n\n---------- ${fileName} ----------\n${fileText}`,
+        '指令和文件内容已一起复制，粘贴到 AI 对话、编辑器或终端都可以',
+      );
+      return;
+    }
+
+    try {
+      onCopy(
+        `${instruction}\n\n文件：${await onGetSharePath()}`,
+        '① 指令已复制（终端里的 AI 粘贴这一步就够了）。聊天窗口粘贴后，再点「② 复制文件」',
+      );
+      setAwaitingFile(true);
+    } catch (error) {
+      pushToast(error instanceof Error ? error.message : '复制失败');
+    }
+  };
 
   const startEdit = () => {
     setDraft(instruction);
@@ -3889,7 +3935,32 @@ function DocumentInstruction({ instruction, onCopy, onSave }: DocumentInstructio
       <div className="document-instruction-head">
         <span className="document-instruction-label">配套指令</span>
         <div className="document-instruction-actions">
-          <Button className="button primary compact" type="button" onClick={() => onCopy(instruction)}>
+          {awaitingFile ? (
+            <Button
+              className="button primary compact is-next-step"
+              type="button"
+              disabled={!ready}
+              onClick={() => {
+                setAwaitingFile(false);
+                onCopyFile();
+              }}
+            >
+              <Copy size={15} />
+              ② 复制文件
+            </Button>
+          ) : (
+            <Button
+              className="button primary compact"
+              type="button"
+              disabled={!ready}
+              title={fileText !== null ? '一次复制指令和文件全文' : '分两步：先复制指令，再复制文件'}
+              onClick={() => void copyInstructionWithFile()}
+            >
+              <Files size={15} />
+              {fileText !== null ? '复制指令+内容' : '复制指令+文件'}
+            </Button>
+          )}
+          <Button className="button ghost compact" type="button" onClick={() => onCopy(instruction)}>
             <Copy size={15} />
             复制指令
           </Button>
@@ -3908,7 +3979,7 @@ function DocumentInstruction({ instruction, onCopy, onSave }: DocumentInstructio
 type DocumentViewProps = {
   item: PromptItem;
   onCopyFile: (item: PromptItem) => Promise<void>;
-  onCopyText: (id: string, content: string) => Promise<void>;
+  onCopyText: (id: string, content: string, message?: string) => Promise<void>;
   onDelete: (id: string) => void;
   onEnsureLocal: (file: DocumentFile) => Promise<void>;
   onSaveInstruction: (id: string, instruction: string) => void;
@@ -4049,9 +4120,14 @@ function DocumentView({
       </header>
 
       <DocumentInstruction
+        fileName={file.name}
+        fileText={text}
         instruction={item.description ?? ''}
-        onCopy={(text) => void onCopyText(item.id, text)}
-        onSave={(text) => onSaveInstruction(item.id, text)}
+        ready={ready}
+        onCopy={(content, message) => void onCopyText(item.id, content, message)}
+        onCopyFile={() => void onCopyFile(item)}
+        onGetSharePath={() => api!.sharePath(file.sha256, file.name)}
+        onSave={(content) => onSaveInstruction(item.id, content)}
       />
 
       <div className="full-prompt-content document-content">

@@ -71,6 +71,7 @@ type DesktopDocumentsApi = {
   open: (sha: string, name: string) => Promise<void>;
   showInFolder: (sha: string, name: string) => Promise<void>;
   copyFile: (sha: string, name: string) => Promise<void>;
+  sharePath: (sha: string, name: string) => Promise<string>;
   saveAs: (sha: string, name: string) => Promise<boolean>;
   startDrag: (sha: string, name: string) => void;
 };

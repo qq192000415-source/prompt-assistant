@@ -722,6 +722,11 @@ ipcMain.handle('documents:copy-file', (_event, sha, name) =>
   copyFileToClipboard(attachmentStore.materialize(documentsDir(), sha, name)),
 );
 
+// 给“指令 + 文件路径”用：终端里的 AI 可以按这个路径直接读文件。
+ipcMain.handle('documents:share-path', (_event, sha, name) =>
+  fs.realpathSync.native(attachmentStore.materialize(documentsDir(), sha, name)),
+);
+
 ipcMain.handle('documents:save-as', async (_event, sha, name) => {
   const result = await dialog.showSaveDialog(mainWindow, { defaultPath: attachmentStore.safeFileName(name) });
   if (result.canceled || !result.filePath) return false;
