@@ -4,7 +4,7 @@ Last updated: 2026-10-12
 
 Project root: 仓库根目录
 
-Current source version: `1.3.26`
+Current source version: `1.3.27`
 
 Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 
@@ -14,7 +14,7 @@ Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 
 - 当前主项目目录：仓库根目录
 - 当前分支：`master`
-- 当前源码版本：`1.3.26`
+- 当前源码版本：`1.3.27`
 - 云同步只使用 Supabase Auth + `public.prompt_libraries`，不再使用自建/VPS 同步服务。
 - 本机数据目录固定为 `%APPDATA%\prompt-assistant`（1.3.26 起）。旧版本按版本号分目录（`提示词助手X.Y.Z`），首次启动自动从最近使用的旧目录搬数据，旧目录保留。
 - 安装版自动更新源由部署者写入本机 `.env` 的 `UPDATE_BASE_URL`。仓库不保存真实服务器地址。
@@ -47,6 +47,7 @@ Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 - Supabase 只负责 Auth、RLS、`prompt_libraries` 数据同步和文档库文件（Storage 私有 bucket `prompt-attachments`）；不承担安装包更新文件发布。
 - 文档库：文档条目复用 PromptItem（`kind: 'document'` + `file`），合并、删除记录、恢复、排序沿用提示词逻辑。文档分类单独存，云端放在 `export_settings.documentLibrary`，不给表加列，避免没跑 SQL 的部署同步失败。
 - 文档的核心场景是发给别人：主按钮是“复制文件”（Windows 剪贴板文件列表），标题可拖出去；.md/.txt 另有“复制内容”。提示词条目不挂附件。
+- 文档可以写一段「配套指令」（存在条目的 `description` 字段，会同步、能搜到），把文件发给 AI 时配合使用，有单独的“复制指令”按钮。
 - 搜索在当前库内全局匹配，另一个库也有结果时显示提示，一键切换。
 - 公开仓库只放不带历史的快照：本地 `master` 有完整旧历史，不能直接推。同步流程：`git checkout public-source` → `git read-tree -u --reset master` → 扫描 IP/邮箱/域名/密钥 → 提交 → `git push origin public-source:main` → 切回 `master`。
 - 安装包更新文件放在部署者自己的 HTTPS 目录，默认远程路径是 `/prompt-assistant-updates/win/`。
@@ -128,7 +129,7 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 
 ### Current Progress
 
-当前源码版本为 `1.3.26`。左栏可在「提示词 | 文档」间切换，文档库原样保存文件。界面升级到 shadcn/ui 设计令牌，保留双栏工作流，并支持本机浅色/深色外观。安装包更新源改为本项目自己的子域名，地址只写在本机 `.env`，不和其他项目共用主机名。
+当前源码版本为 `1.3.27`。左栏可在「提示词 | 文档」间切换，文档库原样保存文件。界面升级到 shadcn/ui 设计令牌，保留双栏工作流，并支持本机浅色/深色外观。安装包更新源改为本项目自己的子域名，地址只写在本机 `.env`，不和其他项目共用主机名。
 
 - 云同步：Supabase Auth + `prompt_libraries`，地址来自 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY`
 - 安装包更新：部署者自己的 HTTPS 目录，地址来自 `UPDATE_BASE_URL`
@@ -148,6 +149,7 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 
 ### Latest Verification
 
+- 2026-10-12：`1.3.27` 测试 43 项通过，`npx tsc -b` 通过。Electron 开发版实测：文档上点“添加配套指令”，写两行后按 Ctrl+S 保存，正常显示、写入 localStorage 的 `description`；复制指令拿到原文；搜索指令里的文字能搜到这个文档。
 - 2026-10-12：`1.3.26` 测试 43 项全部通过（新增文件存储 6 项、数据目录迁移 3 项、文档逻辑 3 项），`npx tsc -b` 和全部 `.cjs` 的 `node --check` 都通过。改坏“按条目类型过滤删除记录”后新测试能失败。在 Electron 开发版用独立数据目录（`PROMPT_ASSISTANT_USER_DATA`）实测：文档库显示 3 个文件，.md 排版（标题、列表、表格）、.txt 原样、.docx 显示无法预览的提示；复制文件后 Windows 剪贴板里是 `需求说明.docx`、3000 字节、非只读；复制内容拿到 Markdown 原文；搜索时显示另一个库的匹配提示并能切换；切回提示词库后看不到文档，6 个原有分类不变；删除文档再恢复，回到文档库，分类不串；深色模式正常。真实 `%APPDATA%` 没有被测试写入。旧目录选择在本机预演选中 `提示词助手1.3.24`。未实测：原生选择文件对话框、拖出、打开、另存为、在文件夹中显示、云端文件上传下载。
 - 2026-10-12：`1.3.25` 测试 31 项全部通过（含 11 项新增行为测试）；`npx tsc -b` 通过；所有 `electron/`、`scripts/` 下的 `.cjs` 文件 `node --check` 通过。故意删掉合并里的删除过滤后，新测试能失败，说明测试有效。浏览器打开开发版：标题、分类树、16 条提示词正常渲染，控制台只有开发模式下的 favicon 404。`release:publish` 生成了安装版、便携版、`win-unpacked`，上传安装包、blockmap、`latest.yml` 后公网校验通过。乐观锁没有用真实账号验证（没有测试账号）。
 - 2026-10-07：界面升级后 `npm.cmd test` 20 项通过，`npx tsc -b` 通过。浏览器核对了桌面浅色/深色、设置、新建提示词、文件菜单、复制提示、390px 窄屏和侧栏抽屉。
@@ -201,6 +203,7 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 
 ### Log Entries
 
+- 2026-10-12：版本 `1.3.27`。文档新增「配套指令」：文件信息下方可以添加、编辑、复制一段给 AI 的指令。
 - 2026-10-12：按快照流程把源码同步到 GitHub `main`（提交 `67d5c60`，内容与本地 1.3.26 一致）。推送前扫描过，没有 IP、邮箱、更新域名、密钥。
 - 2026-10-12：版本 `1.3.26`。新增文档库：左栏「提示词 | 文档」切换，各自独立分类；文档原样保存，可复制文件、拖出、复制内容、打开、另存为、在文件夹中显示，.md 用 react-markdown 排版。文件存本机 `attachments` 和 Supabase Storage。修复：数据目录随版本号变化，导致升级后本机提示词和登录状态找不到；现在固定目录并自动迁移。
 - 2026-10-12：版本 `1.3.25`。把合并、去重逻辑移到 `src/librarySync.ts`，TXT/CSV 导入解析移到 `src/promptStorage.ts`，新增行为测试。云端写入改为按 `updated_at` 的乐观锁，冲突时先合并再写；窗口重新获得焦点时检查云端是否被其他设备改过，有就合并进来。外链只放行 http/https。清理：旧 vite 日志、5 月的计划文件、`output/` 方案图、`assets/extracted-icon-check.png`、未使用的 `cloudConfig` 导出、两个已合并的旧 codex 分支。`tsconfig.app.json` 开启 `allowImportingTsExtensions`，让 Node 测试能加载 `promptStorage.ts`。

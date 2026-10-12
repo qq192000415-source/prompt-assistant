@@ -1517,6 +1517,17 @@ function App() {
     return true;
   };
 
+  // 文档的配套指令存在 description 里：发文件给 AI 时，配合这段指令一起用。
+  const updateDocumentInstruction = (id: string, instruction: string) => {
+    markLibraryChanged();
+    setPrompts((items) =>
+      items.map((item) =>
+        item.id === id ? { ...item, description: instruction.trim(), updatedAt: new Date().toISOString() } : item,
+      ),
+    );
+    showToast(instruction.trim() ? '配套指令已保存' : '配套指令已清空');
+  };
+
   const copyPrompt = async (id: string, content: string) => {
     try {
       await copyToClipboard(content);
@@ -1973,6 +1984,7 @@ function App() {
             onCopyText={copyPrompt}
             onDelete={deletePrompt}
             onEnsureLocal={ensureDocumentLocal}
+            onSaveInstruction={updateDocumentInstruction}
             onToggleFavorite={toggleFavorite}
           />
         ) : mode === 'detail' && selectedPrompt ? (
@@ -2001,6 +2013,7 @@ function App() {
                 onCopyText={copyPrompt}
                 onDelete={deletePrompt}
                 onEnsureLocal={ensureDocumentLocal}
+                onSaveInstruction={updateDocumentInstruction}
                 onToggleFavorite={toggleFavorite}
               />
             )}
@@ -3809,17 +3822,109 @@ function MarkdownView({ text }: { text: string }) {
   );
 }
 
+type DocumentInstructionProps = {
+  instruction: string;
+  onCopy: (text: string) => void;
+  onSave: (text: string) => void;
+};
+
+function DocumentInstruction({ instruction, onCopy, onSave }: DocumentInstructionProps) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(instruction);
+
+  const startEdit = () => {
+    setDraft(instruction);
+    setEditing(true);
+  };
+
+  const save = () => {
+    onSave(draft);
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <div className="document-instruction is-editing">
+        <span className="document-instruction-label">配套指令</span>
+        <Textarea
+          autoFocus
+          className="document-instruction-editor"
+          placeholder="比如：请按这份规范审查我的项目代码，列出不符合的地方。"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              setEditing(false);
+            }
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+              event.preventDefault();
+              save();
+            }
+          }}
+        />
+        <div className="inline-edit-actions">
+          <Button className="button ghost compact" type="button" onClick={() => setEditing(false)}>
+            取消
+          </Button>
+          <Button className="button primary compact" type="button" onClick={save}>
+            保存
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!instruction) {
+    return (
+      <button className="document-instruction-empty" type="button" onClick={startEdit}>
+        <Plus size={15} />
+        添加配套指令（把文件发给 AI 时一起用）
+      </button>
+    );
+  }
+
+  return (
+    <div className="document-instruction">
+      <div className="document-instruction-head">
+        <span className="document-instruction-label">配套指令</span>
+        <div className="document-instruction-actions">
+          <Button className="button primary compact" type="button" onClick={() => onCopy(instruction)}>
+            <Copy size={15} />
+            复制指令
+          </Button>
+          <Button className="icon-button" type="button" title="编辑配套指令" onClick={startEdit}>
+            <Pencil size={15} />
+          </Button>
+        </div>
+      </div>
+      <p className="document-instruction-text" onDoubleClick={startEdit} title="双击编辑">
+        {instruction}
+      </p>
+    </div>
+  );
+}
+
 type DocumentViewProps = {
   item: PromptItem;
   onCopyFile: (item: PromptItem) => Promise<void>;
   onCopyText: (id: string, content: string) => Promise<void>;
   onDelete: (id: string) => void;
   onEnsureLocal: (file: DocumentFile) => Promise<void>;
+  onSaveInstruction: (id: string, instruction: string) => void;
   onToggleFavorite: (id: string) => void;
 };
 
 // 文档卡片：主要动作是把文件发出去（复制文件、拖出去），其次是复制文字、打开、另存为。
-function DocumentView({ item, onCopyFile, onCopyText, onDelete, onEnsureLocal, onToggleFavorite }: DocumentViewProps) {
+function DocumentView({
+  item,
+  onCopyFile,
+  onCopyText,
+  onDelete,
+  onEnsureLocal,
+  onSaveInstruction,
+  onToggleFavorite,
+}: DocumentViewProps) {
   const file = item.file;
   const api = window.promptAssistantDesktop?.documents;
   const [status, setStatus] = useState<'checking' | 'ready' | 'missing'>('checking');
@@ -3942,6 +4047,12 @@ function DocumentView({ item, onCopyFile, onCopyText, onDelete, onEnsureLocal, o
           </Button>
         </div>
       </header>
+
+      <DocumentInstruction
+        instruction={item.description ?? ''}
+        onCopy={(text) => void onCopyText(item.id, text)}
+        onSave={(text) => onSaveInstruction(item.id, text)}
+      />
 
       <div className="full-prompt-content document-content">
         {!api ? (

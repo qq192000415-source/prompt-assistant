@@ -3061,3 +3061,75 @@ h2 {
   border: 0;
   border-top: 1px solid var(--border);
 }
+
+/* 文档配套指令 */
+.document-instruction {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--accent-weak);
+}
+
+.document-instruction.is-editing {
+  background: var(--surface);
+}
+
+.document-instruction-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.document-instruction-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.document-instruction-label {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.document-instruction-text {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.document-instruction-editor {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.document-instruction-empty {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.document-instruction-empty:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.document-instruction-empty:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
