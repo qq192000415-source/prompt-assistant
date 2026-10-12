@@ -161,7 +161,6 @@ test('public source keeps deployer endpoints out of the repository', () => {
     'electron/app-update-source.json',
     'scripts/publish-update-to-server.cjs',
     'scripts/write-update-source.cjs',
-    'output/overall-ui-options.html',
   ];
 
   for (const file of files) {
@@ -218,7 +217,7 @@ test('侧栏新增分类按钮使用应用内弹窗创建分类', () => {
 
   assert.match(appSource, /const \[isCategoryCreatorOpen, setIsCategoryCreatorOpen\] = useState\(false\);/);
   assert.match(appSource, /onAddCategory=\{openCategoryCreator\}/);
-  assert.match(appSource, /onCreatePrompt=\{openNewEditor\}/);
+  assert.match(appSource, /onCreatePrompt=\{isDocumentMode \? \(\) => void addDocuments\(\) : openNewEditor\}/);
   assert.match(appSource, /className="sidebar-primary-actions"/);
   assert.match(appSource, /className="button ghost sidebar-action-button"[\s\S]+?添加分类/);
   assert.match(appSource, /className="button primary sidebar-action-button"[\s\S]+?新建提示词/);
@@ -256,7 +255,7 @@ test('顶部菜单栏承载筛选、导入导出、设置和搜索，云端操�
   assert.match(topMenuSource, /onClick=\{\(\) => runMenuAction\(onOpenSettings\)\}/);
   assert.doesNotMatch(topMenuSource, /top-cloud-status/);
   assert.doesNotMatch(topMenuSource, /onOpenSoftwareAbout/);
-  assert.match(topMenuSource, /placeholder="搜索全部提示词"/);
+  assert.match(topMenuSource, /placeholder=\{`搜索全部\$\{searchLabel\}`\}/);
   assert.match(topMenuSource, /className="search-scope-chip"/);
   assert.match(topMenuSource, /className="top-menu-drag-region"/);
   assert.match(topMenuSource, /className="top-window-controls-reserve"/);
@@ -299,7 +298,6 @@ test('顶部搜索有关键词时保持全局搜索，不受当前分类视图�
 test('新增和导入的子文件追加到所属主文件夹末尾', () => {
   const appSource = readText('src', 'App.tsx');
 
-  assert.match(appSource, /const appendPromptsToCategoryEnd = \(items: PromptItem\[], additions: PromptItem\[]\) => \{/);
   assert.match(appSource, /setPrompts\(\(items\) => appendPromptsToCategoryEnd\(items, \[newPrompt\]\)\);/);
   assert.match(appSource, /setPrompts\(\(items\) => appendPromptsToCategoryEnd\(items, normalized\)\);/);
   assert.doesNotMatch(appSource, /setPrompts\(\(items\) => dedupePrompts\(\[newPrompt, \.\.\.items\]\)\);/);

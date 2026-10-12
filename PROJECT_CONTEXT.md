@@ -1,10 +1,10 @@
 # PROJECT_CONTEXT
 
-Last updated: 2026-10-07
+Last updated: 2026-10-12
 
 Project root: 仓库根目录
 
-Current source version: `1.3.21`
+Current source version: `1.3.26`
 
 Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 
@@ -14,8 +14,9 @@ Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 
 - 当前主项目目录：仓库根目录
 - 当前分支：`master`
-- 当前源码版本：`1.3.21`
+- 当前源码版本：`1.3.26`
 - 云同步只使用 Supabase Auth + `public.prompt_libraries`，不再使用自建/VPS 同步服务。
+- 本机数据目录固定为 `%APPDATA%\prompt-assistant`（1.3.26 起）。旧版本按版本号分目录（`提示词助手X.Y.Z`），首次启动自动从最近使用的旧目录搬数据，旧目录保留。
 - 安装版自动更新源由部署者写入本机 `.env` 的 `UPDATE_BASE_URL`。仓库不保存真实服务器地址。
 - 本机个人部署参数放在被 Git 忽略的 `LOCAL_DEPLOY.md` 和 `.env`。
 - 旧服务器云端数据当前拿不到，因此不从旧服务器拉取；用户登录 Supabase 后，会把本机 localStorage 数据按原同步规则同步到云端。
@@ -28,7 +29,7 @@ Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 
 - Frontend: React + TypeScript + Vite
 - Desktop: Electron
-- Styling: CSS
+- Styling: Tailwind CSS 4 + shadcn/ui 设计令牌（`src/styles.css`、`src/components/ui/`）
 - Local data: browser localStorage
 - Cloud sync: Supabase Auth + `prompt_libraries` table + RLS
 - Auto update: `electron-updater` + 部署者自己的 HTTPS generic provider
@@ -43,7 +44,10 @@ Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 - 云同步必须双向同步；本地明确删除过的数据不能被云端旧数据重新拉回。
 - 普通用户不能查看或修改 Supabase URL、publishable key 或其他云端配置。
 - 管理员邮箱来自 `VITE_ADMIN_EMAILS`。未配置时，本机可以直接修改云端设置。
-- Supabase 只负责 Auth、RLS 和 `prompt_libraries` 数据同步；不再承担安装包更新文件发布。
+- Supabase 只负责 Auth、RLS、`prompt_libraries` 数据同步和文档库文件（Storage 私有 bucket `prompt-attachments`）；不承担安装包更新文件发布。
+- 文档库：文档条目复用 PromptItem（`kind: 'document'` + `file`），合并、删除记录、恢复、排序沿用提示词逻辑。文档分类单独存，云端放在 `export_settings.documentLibrary`，不给表加列，避免没跑 SQL 的部署同步失败。
+- 文档的核心场景是发给别人：主按钮是“复制文件”（Windows 剪贴板文件列表），标题可拖出去；.md/.txt 另有“复制内容”。提示词条目不挂附件。
+- 搜索在当前库内全局匹配，另一个库也有结果时显示提示，一键切换。
 - 安装包更新文件放在部署者自己的 HTTPS 目录，默认远程路径是 `/prompt-assistant-updates/win/`。
 - 禁止写入或提交 Supabase secret key、service_role key、服务器密码等秘密信息。
 - 修改会被打包的源码或配置后，必须递增可见应用版本和 package 版本，并运行测试、语法检查、完整打包和发布验证。
@@ -86,8 +90,16 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 
 - `src/App.tsx`
   - 主应用组件；管理 UI 状态、分类树、提示词展示、设置弹窗、登录弹窗、导入导出、删除记录、Supabase 同步入口和桌面设置入口。
+  - 约 3950 行。合并、去重逻辑在 `src/librarySync.ts`，TXT/CSV 导入解析在 `src/promptStorage.ts`。
+- `electron/attachmentStore.cjs`
+  - 文档文件本机存储：按 sha256 存在 `<userData>/attachments`，单文件上限 50MB，校验 sha，生成原文件名的临时副本用于打开（只读）、复制和拖出（可写）。
+- `electron/userDataMigration.cjs`
+  - 把旧版本按版本号分开的数据目录搬到固定目录。
+- `src/librarySync.ts`
+  - 纯函数：云端合并（`mergeCloudSnapshot`）、去重、删除记录/同步记录清理、导出设置归一。不碰 localStorage，可直接在 Node 里测试。
 - `src/cloudSync.ts`
   - Supabase-only 云同步核心逻辑。
+  - `saveCloudSnapshot` 按 `updated_at` 做乐观锁：云端被其他设备改过时抛 `CloudConflictError`，App 先合并再写回。
   - 兼容旧 localStorage 中的 `vps` 配置，自动归一到 Supabase 或未配置，并清理旧 VPS JWT 登录态。
 - `supabase-schema.sql`
   - Supabase 建表、授权和 RLS 策略；不包含 Storage bucket 预案。
@@ -97,14 +109,17 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
   - 离线导入预案；以后拿到旧 `store.json` 后，用 service role 匹配/创建 Supabase Auth 用户并 upsert 到 `prompt_libraries`。
   - 不迁移旧 bcrypt 密码哈希，迁移账号走 Supabase 重置密码流程。
 - `scripts/publish-update-to-server.cjs`
-  - 腾讯云服务器自动更新发布脚本。
+  - 更新源发布脚本，服务器参数全部来自 `.env`。
   - 使用本机 SSH key 上传当前安装包更新文件并清理旧包。
 - `electron/main.cjs`
-  - Electron 主进程；接入自动更新检查、下载、重启安装 IPC，并指向腾讯云服务器更新源。
+  - Electron 主进程；接入自动更新检查、下载、重启安装 IPC，更新地址来自打包时写入的 `electron/app-update-source.local.json`。
 - `tests/app-ui-assets.test.mjs`
   - 覆盖版本一致性、打包规则、服务器更新发布、Supabase-only 云同步、UI 关键行为和图标资源。
+  - 读源码做正则匹配，不执行业务逻辑。
+- `tests/library-logic.test.mjs`
+  - 行为测试：直接导入 `src/*.ts`（Node 24 原生去类型），覆盖去重、追加顺序、云端合并、删除不复活、同步记录清理、CSV/TXT 导入。
 - `WINDOWS_PACKAGE.md`
-  - Windows 打包、腾讯云服务器更新发布和 Supabase 云同步说明。
+  - Windows 打包、更新服务器发布和 Supabase 云同步说明。
 - `AGENTS.md`
   - AI 自动读取入口和硬性规则。
 
@@ -112,7 +127,7 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 
 ### Current Progress
 
-当前源码版本为 `1.3.21`。公开仓库把云同步和安装包更新都改成部署者自己的配置，仓库内不再写个人服务器或管理员邮箱。
+当前源码版本为 `1.3.26`。左栏可在「提示词 | 文档」间切换，文档库原样保存文件。界面升级到 shadcn/ui 设计令牌，保留双栏工作流，并支持本机浅色/深色外观。安装包更新源改为本项目自己的子域名，地址只写在本机 `.env`，不和其他项目共用主机名。
 
 - 云同步：Supabase Auth + `prompt_libraries`，地址来自 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY`
 - 安装包更新：部署者自己的 HTTPS 目录，地址来自 `UPDATE_BASE_URL`
@@ -128,12 +143,21 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 - 版本推进到 `1.3.20`。
 - 按方案 B 完成整体 UI 视觉和效率优化：保留双栏阅读流，强化顶部全局搜索范围表达，搜索时将左侧分类选中态降级为位置上下文，并统一浅色工作台设计系统。
 - 侧栏主文件夹/子文件操作菜单改为固定浮层，不再打开菜单时破坏分类列表滚动边界或覆盖底部云同步区域。
+- 界面升级为 shadcn/ui + Tailwind 设计令牌：中性表面、发丝边框、单一蓝色强调色、浅色/深色外观，以及菜单、弹窗和提示的短过渡。业务逻辑未改。
 
 ### Latest Verification
 
+- 2026-10-12：`1.3.26` 测试 43 项全部通过（新增文件存储 6 项、数据目录迁移 3 项、文档逻辑 3 项），`npx tsc -b` 和全部 `.cjs` 的 `node --check` 都通过。改坏“按条目类型过滤删除记录”后新测试能失败。在 Electron 开发版用独立数据目录（`PROMPT_ASSISTANT_USER_DATA`）实测：文档库显示 3 个文件，.md 排版（标题、列表、表格）、.txt 原样、.docx 显示无法预览的提示；复制文件后 Windows 剪贴板里是 `需求说明.docx`、3000 字节、非只读；复制内容拿到 Markdown 原文；搜索时显示另一个库的匹配提示并能切换；切回提示词库后看不到文档，6 个原有分类不变；删除文档再恢复，回到文档库，分类不串；深色模式正常。真实 `%APPDATA%` 没有被测试写入。旧目录选择在本机预演选中 `提示词助手1.3.24`。未实测：原生选择文件对话框、拖出、打开、另存为、在文件夹中显示、云端文件上传下载。
+- 2026-10-12：`1.3.25` 测试 31 项全部通过（含 11 项新增行为测试）；`npx tsc -b` 通过；所有 `electron/`、`scripts/` 下的 `.cjs` 文件 `node --check` 通过。故意删掉合并里的删除过滤后，新测试能失败，说明测试有效。浏览器打开开发版：标题、分类树、16 条提示词正常渲染，控制台只有开发模式下的 favicon 404。`release:publish` 生成了安装版、便携版、`win-unpacked`，上传安装包、blockmap、`latest.yml` 后公网校验通过。乐观锁没有用真实账号验证（没有测试账号）。
+- 2026-10-07：界面升级后 `npm.cmd test` 20 项通过，`npx tsc -b` 通过。浏览器核对了桌面浅色/深色、设置、新建提示词、文件菜单、复制提示、390px 窄屏和侧栏抽屉。
+- 2026-10-07：`npm.cmd run release:publish` 已在本地生成 `1.3.22` 安装版、便携版、`release/win-unpacked/` 和 blockmap。上传更新源失败：`.env` 中的 SSH 私钥文件不在本机，因此没有发布，也没有校验公网 `latest.yml`。
+- 2026-10-07：已在本机当前用户安装 `1.3.22`，程序位于 `%LOCALAPPDATA%\Programs\prompt-library\提示词助手1.3.22.exe`。桌面和开始菜单快捷方式已指向该版本，旧的 `1.3.20` 快捷方式已删除。更新源仍未发布。
+- 2026-10-07：用部署者提供的 SSH 私钥上传了 `1.3.22` 安装包、blockmap 和 `latest.yml`，并清掉了该目录里的旧包。服务器本机用更新域名访问这三个文件都是 HTTP 200，大小一致。公网 DNS 不再把更新域名指到这台服务器，所以从本机做公网 HTTPS 校验失败，已安装的 `1.3.22` 还不能从公网拉到这次更新。证书有效期到 2026-10-08。
+- 2026-10-07：按每个项目独立子域名，为提示词助手单独加了 DNS 和 Caddy 站点，不再使用已经失效的旧更新主机名，也没有挂到其他项目的站点上。源码版本推进到 `1.3.23`。`npm.cmd test` 20 项通过，`release:publish` 已上传安装包、blockmap 和 `latest.yml`，公网校验三个文件都是 200。本机已安装并打开 `1.3.23`。Cloudflare 令牌没有写入仓库。
+- 2026-10-07：修复正文标题栏滚到顶栏下方时透出滚动内容的缝。标题栏改为不透明，并向上补住顶栏与标题栏之间的空隙。版本推进到 `1.3.24`。`npm.cmd test` 20 项通过，`release:publish` 公网校验安装包、blockmap 和 `latest.yml` 均为 200。本机已安装 `1.3.24`。
 - 2026-10-07：`node --check` 覆盖 `electron/main.cjs`、`electron/preload.cjs`、`scripts/load-env-file.cjs`、`scripts/write-update-source.cjs`、`scripts/publish-update-to-server.cjs`、`scripts/clean-release.cjs`、`scripts/check-supabase-access.cjs`、`scripts/import-vps-store-to-supabase.cjs`，全部通过。
 - 2026-10-07：`npm.cmd test` 通过，20 项测试全绿。公开源码检查确认仓库文件不再包含个人邮箱、更新域名、私钥路径和公网 IP。
-- 2026-10-07：本轮没有打包，也没有执行 `release:publish`。现有用户的安装版更新源仍停留在已发布的 `1.3.20`。
+- 2026-10-07：（1.3.21 公开源码那一轮）本轮没有打包，也没有执行 `release:publish`。当时更新源停留在 `1.3.20`；之后已被 1.3.23、1.3.24 的发布取代。
 - 2026-05-13：`node --check scripts/check-supabase-access.cjs` 通过。
 - 2026-05-13：`scripts/check-supabase-access.cjs --write` 使用管理员测试账号验证 Supabase：匿名表探测被权限/RLS 拦截；登录后读取成功；登录后原样 upsert 自己的 `prompt_libraries` 快照成功。
 - 2026-05-14：`npm.cmd run release:publish` 曾完成 `1.3.17` 本地打包；Supabase Storage 上传因单文件大小限制失败，因此改用腾讯云服务器作为安装包更新源。
@@ -163,9 +187,23 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 | Done | Supabase 表和 RLS | `prompt_libraries` 自有行读写 |
 | Done | Supabase-only 云同步迁移 | 移除旧同步服务依赖 |
 | Done | 腾讯云服务器更新源迁移 | Caddy 静态目录、SSH 发布脚本、1.3.18 发布验证完成 |
+| Done | 公开仓库远端分支整理 | 2026-10-12 已删除远端 `master` 和 tag `提示词助手1.3.24`，远端只剩快照分支 `main`。本地 `master` 已取消上游跟踪，不要直接推到公开仓库 |
+| Todo | 文档库实机补测 | 原生选择文件对话框、拖出到微信/桌面、打开、另存为、在文件夹中显示，需要人工点一遍 |
+| Todo | 文档云端同步实测 | 需要在 Supabase SQL Editor 执行最新 `supabase-schema.sql` 开启 bucket，再登录测试上传和下载 |
+| Todo | 文档编辑信息 | 目前文档只能在侧栏改名，不能改分类或标签；需要时复用编辑弹窗 |
+| Todo | 乐观锁实库验证 | 需要测试账号：设置 `SUPABASE_TEST_EMAIL`、`SUPABASE_TEST_PASSWORD` 后运行 `node scripts/check-supabase-access.cjs --write` |
+| Done | 自动同步写前不读云端 | `App.tsx` 自动同步直接 upsert 整份快照。多设备同时在线时后写者覆盖云端，另一台改动要等它重启合并才补回。方案：按 `updated_at` 条件更新，冲突时拉取、合并再写 |
+| Done | 同步/去重/导入改成可测 | 把 `App.tsx` 顶部纯函数移到独立模块，用真实输入写行为测试 |
+| Todo P2 | 去掉明文记住密码 | `prompt-library.cloudRememberedLogin.v1` 存明文密码；Supabase 已持久化会话，只记邮箱即可 |
+| Done | 外链协议白名单 | `electron/main.cjs` 的 `openExternal` 只放行 `http:`、`https:` |
+| Todo P3 | schema 去掉 anon select 授权 | RLS 已拦截，授权本身无用 |
 
 ### Log Entries
 
+- 2026-10-12：版本 `1.3.26`。新增文档库：左栏「提示词 | 文档」切换，各自独立分类；文档原样保存，可复制文件、拖出、复制内容、打开、另存为、在文件夹中显示，.md 用 react-markdown 排版。文件存本机 `attachments` 和 Supabase Storage。修复：数据目录随版本号变化，导致升级后本机提示词和登录状态找不到；现在固定目录并自动迁移。
+- 2026-10-12：版本 `1.3.25`。把合并、去重逻辑移到 `src/librarySync.ts`，TXT/CSV 导入解析移到 `src/promptStorage.ts`，新增行为测试。云端写入改为按 `updated_at` 的乐观锁，冲突时先合并再写；窗口重新获得焦点时检查云端是否被其他设备改过，有就合并进来。外链只放行 http/https。清理：旧 vite 日志、5 月的计划文件、`output/` 方案图、`assets/extracted-icon-check.png`、未使用的 `cloudConfig` 导出、两个已合并的旧 codex 分支。`tsconfig.app.json` 开启 `allowImportingTsExtensions`，让 Node 测试能加载 `promptStorage.ts`。
+- 2026-10-12：项目交由 Claude Code 负责后续迭代。整理文档：修正过期的“腾讯云”描述、样式技术栈和互相矛盾的发布记录；把代码审查发现的问题写进 Task List。只改文档，未改打包源码，不需要递增版本和发布。工具差异：AGENTS.md 要求用 `apply_patch`，Claude Code 用等价的 Edit 工具做手工编辑。
+- 2026-10-07：按 UI 组件库地图把界面升级到 shadcn/ui。基础库是 shadcn/ui，主题令牌统一配色、字号、圆角和阴影，外观选择只存在本机 localStorage。源码版本推进到 `1.3.22`。搜索、分类、编辑、导入导出和云同步逻辑未改。
 - 2026-10-07：为公开二次开发去掉仓库内的个人管理员邮箱、更新服务器和 SSH 默认路径。云同步、管理员邮箱和更新地址改由 `.env` 提供。源码版本推进到 `1.3.21`。个人部署参数留在本机 `.env` 和 `LOCAL_DEPLOY.md`。
 - 2026-10-07：公开仓库为 `https://github.com/qq192000415-source/prompt-assistant`。推上去的是不含旧提交历史的源码快照，避免旧历史里的服务器信息一并公开。
 - 2026-10-07：仓库首页 `README.md` 增加主界面截图 `docs/app-home.jpg`。截图不进入安装包。

@@ -15,10 +15,10 @@ test('scheme B makes global search scope explicit and de-emphasizes sidebar sele
   assert.match(appSource, /<PromptList[\s\S]+?query=\{query\}/);
   assert.match(appSource, /className=\{`top-search-box \$\{query\.trim\(\) \? 'is-global-search' : ''\}`\}/);
   assert.match(appSource, /className="search-scope-chip"/);
-  assert.match(appSource, /placeholder="搜索全部提示词"/);
+  assert.match(appSource, /placeholder=\{`搜索全部\$\{searchLabel\}`\}/);
   assert.match(appSource, /const normalizedQuery = query\.trim\(\);/);
   assert.match(appSource, /全局搜索：\{normalizedQuery\}/);
-  assert.match(appSource, /搜索全部提示词，按相关度排序。左侧分类只保留位置上下文。/);
+  assert.match(appSource, /搜索全部\$\{itemLabel\}，按相关度排序。左侧分类只保留位置上下文。/);
   assert.match(appSource, /search-context/);
   assert.match(appSource, /className="context-badge"/);
   assert.match(appSource, />原位置</);

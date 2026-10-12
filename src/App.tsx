@@ -13,8 +13,12 @@ import {
   Cloud,
   Copy,
   Download,
+  ExternalLink,
   FileJson,
+  FilePlus,
+  FileText,
   Folder,
+  FolderOpen,
   Heart,
   Import,
   Info,
@@ -29,38 +33,76 @@ import {
   Search,
   Star,
   Tag,
+  Moon,
+  Sun,
   Trash2,
   X,
 } from 'lucide-react';
+import { Badge } from './components/ui/badge';
+import { Button } from './components/ui/button';
+import { Input } from './components/ui/input';
+import { Separator } from './components/ui/separator';
+import { Toaster } from './components/ui/sonner';
+import { Switch } from './components/ui/switch';
+import { Textarea } from './components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './components/ui/tooltip';
+import { applyTheme, readTheme, type ThemeMode } from './lib/theme';
+import { toast as pushToast } from 'sonner';
 import {
   getCloudConfig,
   getCloudSettingsForEmail,
   getCloudSettingsForProvider,
+  CloudConflictError,
+  downloadCloudFile,
   getCurrentCloudSession,
   hasConfiguredCloudEndpoint,
   isAdminCloudUser,
   loadCloudSettings,
   loadCloudSnapshot,
+  loadCloudUpdatedAt,
+  listCloudFileShas,
   saveCloudSnapshot,
   saveCloudSettings,
   signInToCloud,
   signOutFromCloud,
   signUpToCloud,
   subscribeToCloudAuth,
+  uploadCloudFile,
   type CloudSettings,
   type CloudSession,
   type CloudSnapshot,
 } from './cloudSync';
 import {
+  DOCUMENT_CATEGORY_STORAGE_KEY,
+  DOCUMENT_SUBCATEGORY_STORAGE_KEY,
   loadCategories,
   loadPrompts,
   loadSubcategories,
+  parseCsvPrompts,
   parseImportedPrompts,
+  parseTextPrompts,
   saveCategories,
   savePrompts,
   saveSubcategories,
 } from './promptStorage';
 import { SAMPLE_PROMPTS } from './data';
+import {
+  appendPromptsToCategoryEnd,
+  cleanCloudSnapshotRecords,
+  cleanSyncRecords,
+  dedupePrompts,
+  defaultExportSettings,
+  findDuplicatePrompt,
+  getPromptDuplicateKey,
+  hasCloudSnapshotData,
+  isDocumentItem,
+  isExportMode,
+  isFreshRecord,
+  isValidDateString,
+  mergeCloudSnapshot,
+  normalizeExportSettings,
+  type ExportSettings,
+} from './librarySync';
 import {
   copyToClipboard,
   createId,
@@ -73,7 +115,10 @@ import {
   parseTags,
   parseVariables,
 } from './promptUtils';
-import type { DeletedPromptRecord, DisplayMode, PromptDraft, PromptItem, SyncRecord, ViewKey } from './types';
+import type { DeletedPromptRecord, DisplayMode, DocumentFile, PromptDraft, PromptItem, SyncRecord, ViewKey } from './types';
+import ReactMarkdown from 'react-markdown';
+import remarkBreaks from 'remark-breaks';
+import remarkGfm from 'remark-gfm';
 import { APP_VERSION, APP_VERSION_LABEL } from './appMeta';
 
 const emptyDraft: PromptDraft = {
@@ -92,9 +137,6 @@ const SYNC_RECORDS_KEY = 'prompt-library.syncRecords.v1';
 const EXPORT_SETTINGS_KEY = 'prompt-library.exportSettings.v1';
 const CLOUD_REMEMBERED_LOGIN_KEY = 'prompt-library.cloudRememberedLogin.v1';
 const SAMPLE_PROMPT_IDS = new Set(SAMPLE_PROMPTS.map((prompt) => prompt.id));
-const MAX_SYNC_RECORDS = 80;
-const RECORD_RETENTION_DAYS = 30;
-const RECORD_RETENTION_MS = RECORD_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 420;
 const ROW_ACTION_MENU_WIDTH = 132;
@@ -105,7 +147,6 @@ const ROW_ACTION_MENU_ITEM_GAP = 2;
 const ROW_ACTION_MENU_PADDING_Y = 10;
 
 type FileFormat = 'json' | 'txt' | 'csv';
-type ExportMode = 'download' | 'picker';
 type MoveDirection = -1 | 1;
 type RowActionMenuPosition = {
   top: number;
@@ -117,14 +158,6 @@ type ConfirmDialogState = {
   message: string;
   confirmLabel?: string;
   onConfirm: () => void;
-};
-
-type ExportSettings = {
-  mode: ExportMode;
-  pathHint: string;
-  libraryUpdatedAt?: string;
-  deletedRecordsUpdatedAt?: string;
-  syncRecordsUpdatedAt?: string;
 };
 
 type RememberedCloudLogin = {
@@ -155,11 +188,6 @@ type SavePickerWindow = Window & {
 
 type DesktopSettingsInput = Partial<Omit<DesktopRuntimeSettings, 'floatingIcon'>> & {
   floatingIcon?: Partial<DesktopRuntimeSettings['floatingIcon']>;
-};
-
-const defaultExportSettings: ExportSettings = {
-  mode: 'download',
-  pathHint: '',
 };
 
 const defaultDesktopSettings: DesktopRuntimeSettings = {
@@ -247,11 +275,6 @@ const normalizeDesktopSettings = (
   };
 };
 
-const isExportMode = (mode: unknown): mode is ExportMode => mode === 'download' || mode === 'picker';
-
-const isValidDateString = (value: unknown): value is string =>
-  typeof value === 'string' && Number.isFinite(Date.parse(value));
-
 const loadExportSettings = (): ExportSettings => {
   try {
     const raw = window.localStorage.getItem(EXPORT_SETTINGS_KEY);
@@ -272,25 +295,6 @@ const loadExportSettings = (): ExportSettings => {
 
 const saveExportSettings = (settings: ExportSettings) => {
   window.localStorage.setItem(EXPORT_SETTINGS_KEY, JSON.stringify(settings));
-};
-
-const normalizeExportSettings = (value: unknown, fallback: ExportSettings = defaultExportSettings): ExportSettings => {
-  if (!value || typeof value !== 'object') {
-    return fallback;
-  }
-
-  const candidate = value as Partial<ExportSettings>;
-  return {
-    mode: isExportMode(candidate.mode) ? candidate.mode : fallback.mode,
-    pathHint: typeof candidate.pathHint === 'string' ? candidate.pathHint : fallback.pathHint,
-    libraryUpdatedAt: isValidDateString(candidate.libraryUpdatedAt) ? candidate.libraryUpdatedAt : fallback.libraryUpdatedAt,
-    deletedRecordsUpdatedAt: isValidDateString(candidate.deletedRecordsUpdatedAt)
-      ? candidate.deletedRecordsUpdatedAt
-      : fallback.deletedRecordsUpdatedAt,
-    syncRecordsUpdatedAt: isValidDateString(candidate.syncRecordsUpdatedAt)
-      ? candidate.syncRecordsUpdatedAt
-      : fallback.syncRecordsUpdatedAt,
-  };
 };
 
 const loadRememberedCloudLogin = (): RememberedCloudLogin => {
@@ -315,310 +319,6 @@ const clearRememberedCloudLogin = () => {
   window.localStorage.removeItem(CLOUD_REMEMBERED_LOGIN_KEY);
 };
 
-const getPromptTime = (prompt: PromptItem) => Date.parse(prompt.updatedAt || prompt.createdAt);
-
-const getDeletedPromptTime = (promptId: string, deletedRecords: DeletedPromptRecord[]) =>
-  Math.max(
-    -Infinity,
-    ...deletedRecords
-      .filter((record) => record.prompt.id === promptId)
-      .map((record) => Date.parse(record.deletedAt))
-      .filter(Number.isFinite),
-  );
-
-const isPromptDeletedByRecords = (prompt: PromptItem, deletedRecords: DeletedPromptRecord[]) => {
-  const deletedAt = getDeletedPromptTime(prompt.id, deletedRecords);
-  return Number.isFinite(deletedAt) && deletedAt >= getPromptTime(prompt);
-};
-
-const hasDeletedCategoryRecord = (category: string, deletedRecords: DeletedPromptRecord[]) =>
-  deletedRecords.some((record) => record.source === 'category' && record.sourceName === category && isFreshRecord(record.deletedAt));
-
-const filterCategoriesByDeletedRecords = (
-  categories: string[],
-  prompts: PromptItem[],
-  deletedRecords: DeletedPromptRecord[],
-) =>
-  categories.filter((category) => prompts.some((prompt) => prompt.category === category) || !hasDeletedCategoryRecord(category, deletedRecords));
-
-const filterSubcategoriesByPrompts = (subcategories: Record<string, string[]>, prompts: PromptItem[]) =>
-  Object.fromEntries(
-    Object.entries(subcategories)
-      .map(([category, items]) => [
-        category,
-        items.filter((subcategory) =>
-          prompts.some((prompt) => prompt.category === category && prompt.subcategory === subcategory),
-        ),
-      ])
-      .filter(([, items]) => Array.isArray(items) && items.length),
-  );
-
-const normalizePromptDuplicatePart = (value?: string) =>
-  (value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
-
-const getPromptDuplicateKey = (prompt: Pick<PromptItem, 'category' | 'subcategory' | 'title' | 'content'>) =>
-  [
-    normalizePromptDuplicatePart(prompt.category),
-    normalizePromptDuplicatePart(prompt.subcategory),
-    normalizePromptDuplicatePart(prompt.title),
-    normalizePromptDuplicatePart(prompt.content),
-  ].join('\u001f');
-
-const dedupePrompts = (items: PromptItem[]) => {
-  const seen = new Set<string>();
-  const deduped: PromptItem[] = [];
-
-  for (const item of items) {
-    const key = getPromptDuplicateKey(item);
-    if (seen.has(key)) continue;
-
-    seen.add(key);
-    deduped.push(item);
-  }
-
-  return deduped;
-};
-
-const appendPromptsToCategoryEnd = (items: PromptItem[], additions: PromptItem[]) => {
-  const additionKeys = new Set(additions.map(getPromptDuplicateKey));
-  const ordered = items.filter((item) => !additionKeys.has(getPromptDuplicateKey(item)));
-
-  for (const prompt of additions) {
-    let insertIndex = ordered.length;
-
-    for (let index = ordered.length - 1; index >= 0; index -= 1) {
-      if (ordered[index].category === prompt.category) {
-        insertIndex = index + 1;
-        break;
-      }
-    }
-
-    ordered.splice(insertIndex, 0, prompt);
-  }
-
-  return dedupePrompts(ordered);
-};
-
-const findDuplicatePrompt = (
-  items: PromptItem[],
-  prompt: Pick<PromptItem, 'category' | 'subcategory' | 'title' | 'content'>,
-  ignoreId?: string,
-) => {
-  const key = getPromptDuplicateKey(prompt);
-  return items.find((item) => item.id !== ignoreId && getPromptDuplicateKey(item) === key);
-};
-
-const mergePrompts = (localPrompts: PromptItem[], cloudPrompts: PromptItem[], deletedRecords: DeletedPromptRecord[]) => {
-  const merged = new Map<string, PromptItem>();
-
-  for (const prompt of cloudPrompts) {
-    merged.set(prompt.id, prompt);
-  }
-
-  for (const prompt of localPrompts) {
-    const existing = merged.get(prompt.id);
-    if (!existing || Date.parse(prompt.updatedAt) >= Date.parse(existing.updatedAt)) {
-      merged.set(prompt.id, prompt);
-    }
-  }
-
-  return dedupePrompts(Array.from(merged.values()).filter((prompt) => !isPromptDeletedByRecords(prompt, deletedRecords)));
-};
-
-const mergeDeletedRecords = (localRecords: DeletedPromptRecord[], cloudRecords: DeletedPromptRecord[]) => {
-  const merged = new Map<string, DeletedPromptRecord>();
-
-  for (const record of cloudRecords.filter((item) => isFreshRecord(item.deletedAt))) {
-    merged.set(record.id, record);
-  }
-
-  for (const record of localRecords.filter((item) => isFreshRecord(item.deletedAt))) {
-    const existing = merged.get(record.id);
-    if (!existing || Date.parse(record.deletedAt) >= Date.parse(existing.deletedAt)) {
-      merged.set(record.id, record);
-    }
-  }
-
-  return Array.from(merged.values()).sort((a, b) => Date.parse(b.deletedAt) - Date.parse(a.deletedAt));
-};
-
-const mergeSyncRecords = (localRecords: SyncRecord[], cloudRecords: SyncRecord[]) => {
-  const merged = new Map<string, SyncRecord>();
-
-  for (const record of cloudRecords.filter((item) => isFreshRecord(item.createdAt))) {
-    merged.set(record.id, record);
-  }
-
-  for (const record of localRecords.filter((item) => isFreshRecord(item.createdAt))) {
-    merged.set(record.id, record);
-  }
-
-  return cleanSyncRecords(Array.from(merged.values()));
-};
-
-const getLatestTime = (dates: string[]) =>
-  dates
-    .map((date) => Date.parse(date))
-    .filter(Number.isFinite)
-    .reduce((latest, time) => Math.max(latest, time), 0);
-
-const getLatestDeletedRecordTime = (records: DeletedPromptRecord[]) =>
-  getLatestTime(records.filter((record) => isFreshRecord(record.deletedAt)).map((record) => record.deletedAt));
-
-const getLatestSyncRecordTime = (records: SyncRecord[]) =>
-  getLatestTime(records.filter((record) => isFreshRecord(record.createdAt)).map((record) => record.createdAt));
-
-const getLatestPromptChangeTime = (prompts: PromptItem[] = []) =>
-  getLatestTime(
-    prompts.flatMap((prompt) =>
-      [prompt.createdAt, prompt.updatedAt, prompt.lastUsedAt].filter((date): date is string => Boolean(date)),
-    ),
-  );
-
-const timestampFromTime = (time: number) => (time > 0 ? new Date(time).toISOString() : undefined);
-
-const getSnapshotLibraryTime = (snapshot: CloudSnapshot) => {
-  const settings = normalizeExportSettings(snapshot.exportSettings);
-  const explicitTime = Date.parse(settings.libraryUpdatedAt ?? '');
-  return Number.isFinite(explicitTime) ? explicitTime : getLatestPromptChangeTime(snapshot.prompts);
-};
-
-const getSnapshotDeletedStateTime = (snapshot: CloudSnapshot) => {
-  const settings = normalizeExportSettings(snapshot.exportSettings);
-  const explicitTime = Date.parse(settings.deletedRecordsUpdatedAt ?? '');
-  return Number.isFinite(explicitTime) ? explicitTime : getLatestDeletedRecordTime(snapshot.deletedRecords);
-};
-
-const getSnapshotSyncStateTime = (snapshot: CloudSnapshot) => {
-  const settings = normalizeExportSettings(snapshot.exportSettings);
-  const explicitTime = Date.parse(settings.syncRecordsUpdatedAt ?? '');
-  return Number.isFinite(explicitTime) ? explicitTime : getLatestSyncRecordTime(snapshot.syncRecords ?? []);
-};
-
-const chooseDeletedRecords = (localSnapshot: CloudSnapshot, cloudSnapshot: CloudSnapshot) => {
-  const localTime = getSnapshotDeletedStateTime(localSnapshot);
-  const cloudTime = getSnapshotDeletedStateTime(cloudSnapshot);
-
-  if (localTime > cloudTime) {
-    return localSnapshot.deletedRecords.filter((record) => isFreshRecord(record.deletedAt));
-  }
-
-  if (cloudTime > localTime) {
-    return cloudSnapshot.deletedRecords.filter((record) => isFreshRecord(record.deletedAt));
-  }
-
-  return mergeDeletedRecords(localSnapshot.deletedRecords, cloudSnapshot.deletedRecords);
-};
-
-const chooseSyncRecords = (localSnapshot: CloudSnapshot, cloudSnapshot: CloudSnapshot) => {
-  const localTime = getSnapshotSyncStateTime(localSnapshot);
-  const cloudTime = getSnapshotSyncStateTime(cloudSnapshot);
-
-  if (localTime > cloudTime) {
-    return cleanSyncRecords(localSnapshot.syncRecords ?? []);
-  }
-
-  if (cloudTime > localTime) {
-    return cleanSyncRecords(cloudSnapshot.syncRecords ?? []);
-  }
-
-  return mergeSyncRecords(localSnapshot.syncRecords ?? [], cloudSnapshot.syncRecords ?? []);
-};
-
-const mergeExportSettingsState = (
-  localSnapshot: CloudSnapshot,
-  cloudSnapshot: CloudSnapshot,
-  deletedRecords: DeletedPromptRecord[],
-  syncRecords: SyncRecord[],
-) => {
-  const localSettings = normalizeExportSettings(localSnapshot.exportSettings);
-  const cloudSettings = normalizeExportSettings(cloudSnapshot.exportSettings, localSettings);
-  const localLibraryTime = getSnapshotLibraryTime(localSnapshot);
-  const cloudLibraryTime = getSnapshotLibraryTime(cloudSnapshot);
-  const localDeletedTime = getSnapshotDeletedStateTime(localSnapshot);
-  const cloudDeletedTime = getSnapshotDeletedStateTime(cloudSnapshot);
-  const localSyncTime = getSnapshotSyncStateTime(localSnapshot);
-  const cloudSyncTime = getSnapshotSyncStateTime(cloudSnapshot);
-
-  return {
-    ...cloudSettings,
-    ...localSettings,
-    libraryUpdatedAt:
-      localLibraryTime >= cloudLibraryTime
-        ? localSettings.libraryUpdatedAt ?? timestampFromTime(localLibraryTime)
-        : cloudSettings.libraryUpdatedAt ?? timestampFromTime(cloudLibraryTime),
-    deletedRecordsUpdatedAt:
-      localDeletedTime >= cloudDeletedTime
-        ? localSettings.deletedRecordsUpdatedAt ?? deletedRecords[0]?.deletedAt
-        : cloudSettings.deletedRecordsUpdatedAt ?? deletedRecords[0]?.deletedAt,
-    syncRecordsUpdatedAt:
-      localSyncTime >= cloudSyncTime
-        ? localSettings.syncRecordsUpdatedAt ?? syncRecords[0]?.createdAt
-        : cloudSettings.syncRecordsUpdatedAt ?? syncRecords[0]?.createdAt,
-  };
-};
-
-const mergeStringList = (cloudItems: string[], localItems: string[]) =>
-  Array.from(new Set([...cloudItems, ...localItems].map((item) => item.trim()).filter(Boolean)));
-
-const mergeSubcategoryMap = (localMap: Record<string, string[]>, cloudMap: Record<string, string[]>) => {
-  const categories = new Set([...Object.keys(cloudMap), ...Object.keys(localMap)]);
-
-  return Object.fromEntries(
-    Array.from(categories)
-      .map((category) => [category, mergeStringList(cloudMap[category] ?? [], localMap[category] ?? [])])
-      .filter(([, subcategories]) => Array.isArray(subcategories) && subcategories.length),
-  );
-};
-
-const mergeCloudSnapshot = (localSnapshot: CloudSnapshot, cloudSnapshot: CloudSnapshot): CloudSnapshot => {
-  const deletedRecords = chooseDeletedRecords(localSnapshot, cloudSnapshot);
-  const syncRecords = chooseSyncRecords(localSnapshot, cloudSnapshot);
-  const localPromptIds = new Set(localSnapshot.prompts.map((prompt) => prompt.id));
-  const localLibraryTime = getSnapshotLibraryTime(localSnapshot);
-  const cloudLibraryTime = getSnapshotLibraryTime(cloudSnapshot);
-  const preferLocalLibrary = localLibraryTime >= cloudLibraryTime;
-  const localLibraryIsNewerAndEmpty = localLibraryTime > cloudLibraryTime && localSnapshot.prompts.length === 0;
-  const localDeletedTime = getSnapshotDeletedStateTime(localSnapshot);
-  const cloudDeletedTime = getSnapshotDeletedStateTime(cloudSnapshot);
-  let prompts = localLibraryIsNewerAndEmpty
-    ? []
-    : mergePrompts(localSnapshot.prompts, cloudSnapshot.prompts, deletedRecords);
-
-  if (localDeletedTime > cloudDeletedTime) {
-    prompts = prompts.filter((prompt) => localPromptIds.has(prompt.id) || getPromptTime(prompt) > localDeletedTime);
-  }
-  prompts = dedupePrompts(prompts);
-
-  const categories = filterCategoriesByDeletedRecords(
-    preferLocalLibrary
-      ? localSnapshot.categories
-      : mergeStringList(cloudSnapshot.categories, localSnapshot.categories),
-    prompts,
-    deletedRecords,
-  );
-  const subcategories = filterSubcategoriesByPrompts(
-    preferLocalLibrary
-      ? localSnapshot.subcategories
-      : mergeSubcategoryMap(localSnapshot.subcategories, cloudSnapshot.subcategories),
-    prompts,
-  );
-  const exportSettings = mergeExportSettingsState(localSnapshot, cloudSnapshot, deletedRecords, syncRecords);
-
-  return {
-    prompts,
-    categories,
-    subcategories,
-    deletedRecords,
-    syncRecords,
-    exportSettings,
-    updatedAt: new Date().toISOString(),
-  };
-};
-
-const hasCloudSnapshotData = (snapshot: CloudSnapshot | null) =>
-  Boolean(snapshot && (snapshot.prompts.length > 0 || snapshot.deletedRecords.length > 0 || snapshot.categories.length > 0));
-
 const isSampleOnlySnapshot = (snapshot: CloudSnapshot) =>
   snapshot.prompts.length > 0 &&
   snapshot.prompts.every((prompt) => SAMPLE_PROMPT_IDS.has(prompt.id)) &&
@@ -642,11 +342,6 @@ const isDeletedPromptRecord = (item: unknown): item is DeletedPromptRecord => {
     typeof record.prompt?.title === 'string' &&
     typeof record.prompt?.content === 'string'
   );
-};
-
-const isFreshRecord = (date: string) => {
-  const time = Date.parse(date);
-  return Number.isFinite(time) && Date.now() - time <= RECORD_RETENTION_MS;
 };
 
 const loadDeletedRecords = (): DeletedPromptRecord[] => {
@@ -676,12 +371,6 @@ const isSyncRecord = (item: unknown): item is SyncRecord => {
   );
 };
 
-const cleanSyncRecords = (records: SyncRecord[]) =>
-  records
-    .filter((record) => isFreshRecord(record.createdAt))
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-    .slice(0, MAX_SYNC_RECORDS);
-
 const createSyncRecord = (
   action: SyncRecord['action'],
   status: SyncRecord['status'],
@@ -693,22 +382,6 @@ const createSyncRecord = (
   message,
   createdAt: new Date().toISOString(),
 });
-
-const cleanCloudSnapshotRecords = (snapshot: CloudSnapshot): CloudSnapshot => {
-  const deletedRecords = snapshot.deletedRecords.filter((record) => isFreshRecord(record.deletedAt));
-  const prompts = dedupePrompts(snapshot.prompts.filter((prompt) => !isPromptDeletedByRecords(prompt, deletedRecords)));
-  const categories = filterCategoriesByDeletedRecords(snapshot.categories, prompts, deletedRecords);
-  const subcategories = filterSubcategoriesByPrompts(snapshot.subcategories, prompts);
-
-  return {
-    ...snapshot,
-    prompts,
-    categories,
-    subcategories,
-    deletedRecords,
-    syncRecords: cleanSyncRecords(snapshot.syncRecords ?? []),
-  };
-};
 
 const loadSyncRecords = (): SyncRecord[] => {
   try {
@@ -782,135 +455,6 @@ const downloadBlob = (blob: Blob, fileName: string) => {
   URL.revokeObjectURL(url);
 };
 
-const parseCsvRows = (raw: string) => {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let cell = '';
-  let quoted = false;
-
-  for (let index = 0; index < raw.length; index += 1) {
-    const char = raw[index];
-
-    if (quoted) {
-      if (char === '"' && raw[index + 1] === '"') {
-        cell += '"';
-        index += 1;
-      } else if (char === '"') {
-        quoted = false;
-      } else {
-        cell += char;
-      }
-      continue;
-    }
-
-    if (char === '"') {
-      quoted = true;
-    } else if (char === ',') {
-      row.push(cell);
-      cell = '';
-    } else if (char === '\n') {
-      row.push(cell);
-      rows.push(row);
-      row = [];
-      cell = '';
-    } else if (char !== '\r') {
-      cell += char;
-    }
-  }
-
-  row.push(cell);
-  rows.push(row);
-  return rows.filter((cells) => cells.some((item) => item.trim()));
-};
-
-const makeImportedPrompt = (title: string, category: string, content: string): PromptItem => {
-  const now = new Date().toISOString();
-  return {
-    id: createId(),
-    title: title.trim() || `导入提示词 ${now.slice(11, 19)}`,
-    description: '',
-    content: content.trim(),
-    category: category.trim() || '其他',
-    subcategory: undefined,
-    tags: [],
-    favorite: false,
-    createdAt: now,
-    updatedAt: now,
-  };
-};
-
-const parseTextPrompts = (raw: string): PromptItem[] => {
-  const blocks = raw
-    .split(/\n\s*---\s*\n|\n{2,}(?=主文件名：)/g)
-    .map((block) => block.trim())
-    .filter(Boolean);
-
-  const prompts = blocks
-    .map((block, index) => {
-      const lines = block.split(/\r?\n/);
-      if (lines[0]?.startsWith('主文件名：')) {
-        const category = lines.shift()?.replace(/^主文件名：/, '').trim() || '其他';
-        const titleLine = lines[0]?.startsWith('子文件名：') ? lines.shift() : '';
-        const title = titleLine?.replace(/^子文件名：/, '').trim() || `导入提示词 ${index + 1}`;
-        if (lines[0]?.startsWith('提示词内容：')) {
-          lines.shift();
-        }
-
-        const content = lines.join('\n').trim();
-        return content ? makeImportedPrompt(title, category, content) : null;
-      }
-
-      const firstLine = lines.shift()?.trim() ?? '';
-      const title = firstLine.replace(/^#+\s*/, '').trim() || `导入提示词 ${index + 1}`;
-      let category = '其他';
-
-      if (lines[0]?.startsWith('主文件夹：') || lines[0]?.startsWith('分类：')) {
-        category = lines.shift()?.replace(/^主文件夹：|^分类：/, '').trim() || '其他';
-      }
-
-      const content = lines.join('\n').trim() || block;
-      return content ? makeImportedPrompt(title, category, content) : null;
-    })
-    .filter((prompt): prompt is PromptItem => Boolean(prompt));
-
-  if (!prompts.length) {
-    throw new Error('没有找到可导入的提示词。');
-  }
-
-  return prompts;
-};
-
-const parseCsvPrompts = (raw: string): PromptItem[] => {
-  const rows = parseCsvRows(raw);
-  const header = rows[0]?.map((item) => item.trim()) ?? [];
-  const hasHeader = header.some((item) => ['主文件夹', '分类', '子文件名称', '标题', '提示词内容', '正文', 'content'].includes(item));
-  const dataRows = hasHeader ? rows.slice(1) : rows;
-
-  const getIndex = (names: string[], fallback: number) => {
-    const index = header.findIndex((item) => names.includes(item));
-    return index === -1 ? fallback : index;
-  };
-
-  const categoryIndex = hasHeader ? getIndex(['主文件夹', '分类', 'category'], 0) : 0;
-  const titleIndex = hasHeader ? getIndex(['子文件名称', '标题', 'title'], 1) : 1;
-  const contentIndex = hasHeader ? getIndex(['提示词内容', '正文', 'content'], 2) : 2;
-
-  const prompts = dataRows
-    .map((row, index) => {
-      const category = row[categoryIndex] ?? '其他';
-      const title = row[titleIndex] ?? row[0] ?? `导入提示词 ${index + 1}`;
-      const content = row[contentIndex] ?? row[row.length - 1] ?? '';
-      return content.trim() ? makeImportedPrompt(title, category, content) : null;
-    })
-    .filter((prompt): prompt is PromptItem => Boolean(prompt));
-
-  if (!prompts.length) {
-    throw new Error('没有找到可导入的提示词。');
-  }
-
-  return prompts;
-};
-
 const parseImportedByFormat = (raw: string, format: FileFormat) => {
   const cleanRaw = raw.replace(/^\uFEFF/, '');
   if (format === 'txt') return parseTextPrompts(cleanRaw);
@@ -918,12 +462,82 @@ const parseImportedByFormat = (raw: string, format: FileFormat) => {
   return parseImportedPrompts(cleanRaw);
 };
 
+type LibraryMode = 'prompts' | 'documents';
+
+const LIBRARY_MODE_KEY = 'prompt-library.libraryMode.v1';
+
+const loadLibraryMode = (): LibraryMode => {
+  try {
+    return window.localStorage.getItem(LIBRARY_MODE_KEY) === 'documents' ? 'documents' : 'prompts';
+  } catch {
+    return 'prompts';
+  }
+};
+
+const saveLibraryMode = (mode: LibraryMode) => {
+  try {
+    window.localStorage.setItem(LIBRARY_MODE_KEY, mode);
+  } catch {
+    // 记不住上次的库不影响使用。
+  }
+};
+
+// .md/.txt 的文字也存进条目正文，供全局搜索；预览和复制内容始终读文件本身。
+// ponytail: 正文最多存 20 万字，防止撑爆 localStorage；更大的文件只能按标题搜到。
+const SEARCHABLE_TEXT_LIMIT = 200_000;
+
+const getFileExtension = (name: string) => name.toLowerCase().match(/\.([^.]+)$/)?.[1] ?? '';
+const isMarkdownDocument = (name: string) => ['md', 'markdown'].includes(getFileExtension(name));
+const isTextDocument = (name: string) => isMarkdownDocument(name) || getFileExtension(name) === 'txt';
+
+const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+};
+
+const deriveCategories = (storedCategories: string[], items: PromptItem[]) =>
+  uniqueCategories([...storedCategories, ...items.map((item) => item.category)]);
+
+const deriveSubcategoryMap = (storedSubcategories: Record<string, string[]>, items: PromptItem[]) => {
+  const map: Record<string, string[]> = {};
+
+  for (const [category, subcategories] of Object.entries(storedSubcategories)) {
+    map[category] = uniqueSubcategories(subcategories);
+  }
+
+  for (const item of items) {
+    if (!item.subcategory) continue;
+    map[item.category] = uniqueSubcategories([...(map[item.category] ?? []), item.subcategory]);
+  }
+
+  return map;
+};
+
 function App() {
-  const [prompts, setPrompts] = useState<PromptItem[]>(() => dedupePrompts(loadPrompts()));
+  const [allItems, setAllItems] = useState<PromptItem[]>(() => dedupePrompts(loadPrompts()));
+  const [libraryMode, setLibraryMode] = useState<LibraryMode>(loadLibraryMode);
+  const isDocumentMode = libraryMode === 'documents';
   const [deletedRecords, setDeletedRecords] = useState<DeletedPromptRecord[]>(() => loadDeletedRecords());
   const [syncRecords, setSyncRecords] = useState<SyncRecord[]>(() => loadSyncRecords());
-  const [storedCategories, setStoredCategories] = useState<string[]>(() => loadCategories());
-  const [storedSubcategories, setStoredSubcategories] = useState<Record<string, string[]>>(() => loadSubcategories());
+  const [promptCategories, setPromptCategories] = useState<string[]>(() => loadCategories());
+  const [promptSubcategories, setPromptSubcategories] = useState<Record<string, string[]>>(() => loadSubcategories());
+  const [documentCategories, setDocumentCategories] = useState<string[]>(() => loadCategories(DOCUMENT_CATEGORY_STORAGE_KEY, []));
+  const [documentSubcategories, setDocumentSubcategories] = useState<Record<string, string[]>>(() =>
+    loadSubcategories(DOCUMENT_SUBCATEGORY_STORAGE_KEY),
+  );
+  // 提示词和文档共用一套界面和处理函数：prompts / setPrompts / 分类状态都指向当前库，
+  // 另一个库的条目原样保留。
+  const prompts = useMemo(() => allItems.filter((item) => isDocumentItem(item) === isDocumentMode), [allItems, isDocumentMode]);
+  const setPrompts = (update: (items: PromptItem[]) => PromptItem[]) =>
+    setAllItems((items) => [
+      ...update(items.filter((item) => isDocumentItem(item) === isDocumentMode)),
+      ...items.filter((item) => isDocumentItem(item) !== isDocumentMode),
+    ]);
+  const storedCategories = isDocumentMode ? documentCategories : promptCategories;
+  const setStoredCategories = isDocumentMode ? setDocumentCategories : setPromptCategories;
+  const storedSubcategories = isDocumentMode ? documentSubcategories : promptSubcategories;
+  const setStoredSubcategories = isDocumentMode ? setDocumentSubcategories : setPromptSubcategories;
   const [activeView, setActiveView] = useState<ViewKey>('all');
   const [displayMode, setDisplayMode] = useState<DisplayMode>('collection');
   const [query, setQuery] = useState('');
@@ -953,11 +567,18 @@ function App() {
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
   const [closeRequestOpen, setCloseRequestOpen] = useState(false);
   const [rememberCloseChoice, setRememberCloseChoice] = useState(false);
-  const [toast, setToast] = useState('');
+  const [theme, setTheme] = useState<ThemeMode>(() => readTheme());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const latestSnapshotRef = useRef<CloudSnapshot | null>(null);
+  const cloudUpdatedAtRef = useRef<string | null>(null);
   const canManageCloudSettings = isAdminCloudUser(cloudSession?.user.email, cloudSettings);
-  const showToast = (message: string) => setToast(message);
+  const showToast = (message: string) => {
+    pushToast(message);
+  };
+
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
 
   const openSettingsPanel = (options?: { about?: boolean }) => {
     setSettingsAboutInitiallyOpen(Boolean(options?.about));
@@ -973,8 +594,12 @@ function App() {
   };
 
   useEffect(() => {
-    savePrompts(prompts);
-  }, [prompts]);
+    savePrompts(allItems);
+  }, [allItems]);
+
+  useEffect(() => {
+    saveLibraryMode(libraryMode);
+  }, [libraryMode]);
 
   useEffect(() => {
     saveDeletedRecords(deletedRecords);
@@ -985,12 +610,20 @@ function App() {
   }, [syncRecords]);
 
   useEffect(() => {
-    saveCategories(storedCategories);
-  }, [storedCategories]);
+    saveCategories(promptCategories);
+  }, [promptCategories]);
 
   useEffect(() => {
-    saveSubcategories(storedSubcategories);
-  }, [storedSubcategories]);
+    saveSubcategories(promptSubcategories);
+  }, [promptSubcategories]);
+
+  useEffect(() => {
+    saveCategories(documentCategories, DOCUMENT_CATEGORY_STORAGE_KEY);
+  }, [documentCategories]);
+
+  useEffect(() => {
+    saveSubcategories(documentSubcategories, DOCUMENT_SUBCATEGORY_STORAGE_KEY);
+  }, [documentSubcategories]);
 
   useEffect(() => {
     window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth));
@@ -1056,33 +689,22 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!toast) return;
-    const timer = window.setTimeout(() => setToast(''), 2200);
-    return () => window.clearTimeout(timer);
-  }, [toast]);
-
-  const categories = useMemo(
-    () => uniqueCategories([...storedCategories, ...prompts.map((prompt) => prompt.category)]),
-    [storedCategories, prompts],
-  );
-
-  const subcategoryMap = useMemo(() => {
-    const map: Record<string, string[]> = {};
-
-    for (const [category, subcategories] of Object.entries(storedSubcategories)) {
-      map[category] = uniqueSubcategories(subcategories);
-    }
-
-    for (const prompt of prompts) {
-      if (!prompt.subcategory) continue;
-      map[prompt.category] = uniqueSubcategories([...(map[prompt.category] ?? []), prompt.subcategory]);
-    }
-
-    return map;
-  }, [storedSubcategories, prompts]);
+  const categories = useMemo(() => deriveCategories(storedCategories, prompts), [storedCategories, prompts]);
+  const subcategoryMap = useMemo(() => deriveSubcategoryMap(storedSubcategories, prompts), [storedSubcategories, prompts]);
 
   const visiblePrompts = useMemo(() => filterPrompts(prompts, activeView, query), [prompts, activeView, query]);
+  // 搜索在当前库里进行；另一个库也有匹配时给出提示，一键切过去看。
+  const otherLibraryMatchCount = useMemo(
+    () =>
+      query.trim()
+        ? filterPrompts(
+            allItems.filter((item) => isDocumentItem(item) !== isDocumentMode),
+            'all',
+            query,
+          ).length
+        : 0,
+    [allItems, isDocumentMode, query],
+  );
   const selectedPrompt = prompts.find((prompt) => prompt.id === selectedId) ?? null;
 
   const addSyncRecord = (action: SyncRecord['action'], status: SyncRecord['status'], message: string) => {
@@ -1113,9 +735,11 @@ function App() {
 
   const applySnapshot = (snapshot: CloudSnapshot) => {
     const cleanSnapshot = cleanCloudSnapshotRecords(snapshot);
-    setPrompts(cleanSnapshot.prompts);
-    setStoredCategories(cleanSnapshot.categories);
-    setStoredSubcategories(cleanSnapshot.subcategories);
+    setAllItems(cleanSnapshot.prompts);
+    setPromptCategories(cleanSnapshot.categories);
+    setPromptSubcategories(cleanSnapshot.subcategories);
+    setDocumentCategories(cleanSnapshot.documentCategories);
+    setDocumentSubcategories(cleanSnapshot.documentSubcategories);
     setDeletedRecords(cleanSnapshot.deletedRecords);
     setSyncRecords(cleanSnapshot.syncRecords);
     setExportSettings(normalizeExportSettings(cleanSnapshot.exportSettings, exportSettings));
@@ -1124,16 +748,39 @@ function App() {
     );
   };
 
-  useEffect(() => {
-    latestSnapshotRef.current = {
-      prompts: dedupePrompts(prompts),
-      categories,
-      subcategories: subcategoryMap,
+  // 其他设备改过云端时：拉取、合并到本机，再按新的 updated_at 写回。
+  const mergeCloudIntoLocal = async (userId: string, settings: CloudSettings, action: SyncRecord['action'], message: string) => {
+    const cloudSnapshot = await loadCloudSnapshot(userId, settings);
+    const localSnapshot = latestSnapshotRef.current;
+    if (!localSnapshot) return;
+    const merged = cloudSnapshot ? mergeCloudSnapshot(localSnapshot, cloudSnapshot) : localSnapshot;
+    const nextSnapshot = cleanCloudSnapshotRecords({
+      ...merged,
+      syncRecords: [createSyncRecord(action, 'success', message), ...(merged.syncRecords ?? [])],
+      updatedAt: new Date().toISOString(),
+    });
+    applySnapshot(nextSnapshot);
+    cloudUpdatedAtRef.current = await saveCloudSnapshot(userId, nextSnapshot, cloudSnapshot?.updatedAt ?? null, settings);
+  };
+
+  const buildSnapshot = (): CloudSnapshot => {
+    const promptItems = allItems.filter((item) => !isDocumentItem(item));
+    const documentItems = allItems.filter(isDocumentItem);
+    return {
+      prompts: dedupePrompts(allItems),
+      categories: deriveCategories(promptCategories, promptItems),
+      subcategories: deriveSubcategoryMap(promptSubcategories, promptItems),
+      documentCategories: deriveCategories(documentCategories, documentItems),
+      documentSubcategories: deriveSubcategoryMap(documentSubcategories, documentItems),
       deletedRecords,
       syncRecords,
       exportSettings,
     };
-  }, [categories, deletedRecords, exportSettings, prompts, subcategoryMap, syncRecords]);
+  };
+
+  useEffect(() => {
+    latestSnapshotRef.current = buildSnapshot();
+  }, [allItems, deletedRecords, documentCategories, documentSubcategories, exportSettings, promptCategories, promptSubcategories, syncRecords]);
 
   useEffect(() => {
     if (!cloudLoginEnabled) return;
@@ -1182,14 +829,7 @@ function App() {
     const loadAndMergeCloud = async () => {
       setCloudStatus('正在加载云端数据');
       try {
-        const localSnapshot = latestSnapshotRef.current ?? {
-          prompts,
-          categories,
-          subcategories: subcategoryMap,
-          deletedRecords,
-          syncRecords,
-          exportSettings,
-        };
+        const localSnapshot = latestSnapshotRef.current ?? buildSnapshot();
         const cloudSnapshot = await loadCloudSnapshot(userId, sessionCloudSettings);
         const shouldPullCloudOnly = cloudSnapshot && hasCloudSnapshotData(cloudSnapshot) && isSampleOnlySnapshot(localSnapshot);
         const nextSnapshot =
@@ -1214,7 +854,12 @@ function App() {
 
         applySnapshot(cleanSnapshot);
 
-        await saveCloudSnapshot(userId, cleanSnapshot, sessionCloudSettings);
+        cloudUpdatedAtRef.current = await saveCloudSnapshot(
+          userId,
+          cleanSnapshot,
+          cloudSnapshot?.updatedAt ?? null,
+          sessionCloudSettings,
+        );
         if (canceled) return;
         setCloudReadyUserId(userId);
         setCloudStatus('云端已同步');
@@ -1251,11 +896,17 @@ function App() {
         updatedAt: new Date().toISOString(),
       });
 
-      void saveCloudSnapshot(userId, snapshotToSave, sessionCloudSettings)
-        .then(() => {
-          setCloudStatus('云端已同步');
+      void saveCloudSnapshot(userId, snapshotToSave, cloudUpdatedAtRef.current, sessionCloudSettings)
+        .then((updatedAt) => {
+          cloudUpdatedAtRef.current = updatedAt;
           setSyncRecords((records) => cleanSyncRecords([syncRecord, ...records]));
         })
+        .catch((error) =>
+          error instanceof CloudConflictError
+            ? mergeCloudIntoLocal(userId, sessionCloudSettings, 'auto', '已合并其他设备的修改')
+            : Promise.reject(error),
+        )
+        .then(() => setCloudStatus('云端已同步'))
         .catch((error) => {
           setCloudStatus('同步失败');
           const message = error instanceof Error ? error.message : '云端同步失败';
@@ -1265,7 +916,52 @@ function App() {
     }, 900);
 
     return () => window.clearTimeout(timer);
-  }, [activeCloudSettings, categories, cloudReadyUserId, cloudSession?.user.id, deletedRecords, exportSettings, prompts, subcategoryMap]);
+  }, [
+    activeCloudSettings,
+    allItems,
+    cloudReadyUserId,
+    cloudSession?.user.id,
+    deletedRecords,
+    documentCategories,
+    documentSubcategories,
+    exportSettings,
+    promptCategories,
+    promptSubcategories,
+  ]);
+
+  // 登录合并完成后，把本机有、云端还没有的文档文件补传上去（包括删除记录里的，方便恢复）。
+  useEffect(() => {
+    const snapshot = latestSnapshotRef.current;
+    if (!snapshot || !cloudReadyUserId || cloudSession?.user.id !== cloudReadyUserId) return;
+
+    const files = [...snapshot.prompts, ...snapshot.deletedRecords.map((record) => record.prompt)].flatMap((item) =>
+      item.file ? [item.file] : [],
+    );
+    void pushDocumentFiles(files);
+  }, [cloudReadyUserId]);
+
+  // 回到窗口时检查其他设备有没有改过云端，有就合并进来。
+  useEffect(() => {
+    const userId = cloudSession?.user.id;
+    if (!userId || cloudReadyUserId !== userId) return;
+
+    const sessionCloudSettings = activeCloudSettings;
+    const pullIfChanged = () => {
+      void loadCloudUpdatedAt(userId, sessionCloudSettings)
+        .then((updatedAt) =>
+          updatedAt && updatedAt !== cloudUpdatedAtRef.current
+            ? mergeCloudIntoLocal(userId, sessionCloudSettings, 'auto', '已拉取其他设备的修改')
+            : undefined,
+        )
+        .catch((error) => {
+          setCloudStatus('同步失败');
+          addSyncRecord('auto', 'error', error instanceof Error ? error.message : '拉取云端数据失败');
+        });
+    };
+
+    window.addEventListener('focus', pullIfChanged);
+    return () => window.removeEventListener('focus', pullIfChanged);
+  }, [activeCloudSettings, cloudReadyUserId, cloudSession?.user.id]);
 
   useEffect(() => {
     if (mode !== 'list') return;
@@ -1340,6 +1036,14 @@ function App() {
       setUpdateStatus((current) => ({ ...current, status: 'error', message }));
       showToast(message);
     }
+  };
+
+  const changeLibraryMode = (nextMode: LibraryMode) => {
+    setLibraryMode(nextMode);
+    setActiveView('all');
+    setDisplayMode('collection');
+    setMode('list');
+    setSelectedId(null);
   };
 
   const changeView = (view: ViewKey) => {
@@ -1671,8 +1375,9 @@ function App() {
     const record = deletedRecords.find((item) => item.id === recordId);
     if (!record) return;
 
-    const existingIds = new Set(prompts.map((prompt) => prompt.id));
+    const existingIds = new Set(allItems.map((prompt) => prompt.id));
     const idExists = existingIds.has(record.prompt.id);
+    const restoreIntoDocuments = isDocumentItem(record.prompt);
     const restoredPrompt: PromptItem = {
       ...record.prompt,
       id: idExists ? createId() : record.prompt.id,
@@ -1680,9 +1385,11 @@ function App() {
       updatedAt: new Date().toISOString(),
     };
 
-    setStoredCategories((items) => uniqueCategories([...items, restoredPrompt.category]));
+    (restoreIntoDocuments ? setDocumentCategories : setPromptCategories)((items) =>
+      uniqueCategories([...items, restoredPrompt.category]),
+    );
     if (restoredPrompt.subcategory) {
-      setStoredSubcategories((items) => ({
+      (restoreIntoDocuments ? setDocumentSubcategories : setPromptSubcategories)((items) => ({
         ...items,
         [restoredPrompt.category]: uniqueSubcategories([
           ...(items[restoredPrompt.category] ?? []),
@@ -1693,6 +1400,7 @@ function App() {
     markDeletedRecordsChanged();
     setPrompts((items) => appendPromptsToCategoryEnd(items, [restoredPrompt]));
     setDeletedRecords((items) => items.filter((item) => item.id !== recordId));
+    setLibraryMode(restoreIntoDocuments ? 'documents' : 'prompts');
     setActiveView(`category:${restoredPrompt.category}`);
     setDisplayMode('single');
     setMode('list');
@@ -1821,7 +1529,107 @@ function App() {
     }
   };
 
+  const documentsApi = window.promptAssistantDesktop?.documents;
+
+  const pushDocumentFiles = async (files: DocumentFile[]) => {
+    const userId = cloudSession?.user.id;
+    if (!documentsApi || !userId || cloudReadyUserId !== userId || !files.length) return;
+
+    try {
+      const cloudShas = await listCloudFileShas(userId, activeCloudSettings);
+      for (const sha of new Set(files.map((file) => file.sha256))) {
+        if (cloudShas.has(sha) || !(await documentsApi.has(sha))) continue;
+        await uploadCloudFile(userId, sha, await documentsApi.readBytes(sha), activeCloudSettings);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '上传文档到云端失败';
+      addSyncRecord('auto', 'error', message);
+      showToast(message);
+    }
+  };
+
+  const ensureDocumentLocal = async (file: DocumentFile) => {
+    if (!documentsApi) throw new Error('文档需要在桌面版里使用');
+    if (await documentsApi.has(file.sha256)) return;
+
+    const userId = cloudSession?.user.id;
+    if (!userId) throw new Error('本机没有这个文件，登录云同步后可以从云端取回');
+    await documentsApi.writeBytes(file.sha256, await downloadCloudFile(userId, file.sha256, activeCloudSettings));
+  };
+
+  const addDocuments = async (category?: string) => {
+    if (!documentsApi) {
+      showToast('添加文档需要在桌面版里使用');
+      return;
+    }
+
+    const { added, errors } = await documentsApi.pickAndAdd();
+    errors.forEach((error) => showToast(`${error.name}：${error.message}`));
+    if (!added.length) return;
+
+    const activeSubcategoryView = parseSubcategoryView(activeView);
+    const activeCategoryName = activeView.startsWith('category:') ? activeView.slice('category:'.length) : activeSubcategoryView?.category;
+    const targetCategory = category ?? (isDocumentMode ? activeCategoryName : undefined) ?? '其他';
+    const targetSubcategory = category || !isDocumentMode ? undefined : activeSubcategoryView?.subcategory;
+    const existingKeys = new Set(allItems.filter(isDocumentItem).map(getPromptDuplicateKey));
+    const now = new Date().toISOString();
+    const fresh: PromptItem[] = [];
+
+    for (const file of added) {
+      const item: PromptItem = {
+        id: createId(),
+        kind: 'document',
+        file,
+        title: file.name.replace(/\.[^.]+$/, '') || file.name,
+        description: '',
+        content: isTextDocument(file.name) ? (await documentsApi.readText(file.sha256)).slice(0, SEARCHABLE_TEXT_LIMIT) : '',
+        category: targetCategory,
+        subcategory: targetSubcategory,
+        tags: [],
+        favorite: false,
+        createdAt: now,
+        updatedAt: now,
+      };
+      const key = getPromptDuplicateKey(item);
+      if (existingKeys.has(key)) continue;
+      existingKeys.add(key);
+      fresh.push(item);
+    }
+
+    const skipped = added.length - fresh.length;
+    if (!fresh.length) {
+      showToast(`这些文件已经在“${targetCategory}”里了，跳过 ${skipped} 个`);
+      return;
+    }
+
+    markLibraryChanged();
+    setDocumentCategories((items) => uniqueCategories([...items, targetCategory]));
+    setPrompts((items) => appendPromptsToCategoryEnd(items, fresh));
+    setLibraryMode('documents');
+    setSelectedId(fresh[0].id);
+    setMode('list');
+    showToast(skipped ? `已添加 ${fresh.length} 个文档，跳过 ${skipped} 个重复` : `已添加 ${fresh.length} 个文档`);
+    void pushDocumentFiles(fresh.flatMap((item) => (item.file ? [item.file] : [])));
+  };
+
+  const copyDocumentFile = async (item: PromptItem) => {
+    if (!documentsApi || !item.file) return;
+
+    try {
+      await ensureDocumentLocal(item.file);
+      await documentsApi.copyFile(item.file.sha256, item.file.name);
+      const now = new Date().toISOString();
+      markLibraryChanged();
+      setPrompts((items) => items.map((entry) => (entry.id === item.id ? { ...entry, lastUsedAt: now } : entry)));
+      showToast('文件已复制，到微信、QQ、邮件或文件夹里粘贴即可发送');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '复制文件失败');
+    }
+  };
+
   const exportPrompts = async (format: FileFormat) => {
+    // ponytail: 文档不进导出文件，文件本体靠本机和云端保存；要整库备份再加打包导出。
+    const prompts = allItems.filter((item) => !isDocumentItem(item));
     const payload =
       format === 'csv'
         ? { content: `\uFEFF${serializePromptsAsCsv(prompts)}`, extension: 'csv', mime: 'text/csv;charset=utf-8' }
@@ -1996,14 +1804,7 @@ function App() {
     setCloudStatus('正在手动同步');
     try {
       const sessionCloudSettings = activeCloudSettings;
-      const localSnapshot = latestSnapshotRef.current ?? {
-        prompts,
-        categories,
-        subcategories: subcategoryMap,
-        deletedRecords,
-        syncRecords,
-        exportSettings,
-      };
+      const localSnapshot = latestSnapshotRef.current ?? buildSnapshot();
       const cloudSnapshot = await loadCloudSnapshot(userId, sessionCloudSettings);
       const shouldPullCloudOnly = cloudSnapshot && hasCloudSnapshotData(cloudSnapshot) && isSampleOnlySnapshot(localSnapshot);
       const mergedSnapshot = shouldPullCloudOnly
@@ -2019,7 +1820,12 @@ function App() {
       });
 
       applySnapshot(nextSnapshot);
-      await saveCloudSnapshot(userId, nextSnapshot, sessionCloudSettings);
+      cloudUpdatedAtRef.current = await saveCloudSnapshot(
+        userId,
+        nextSnapshot,
+        cloudSnapshot?.updatedAt ?? null,
+        sessionCloudSettings,
+      );
       setCloudReadyUserId(userId);
       setCloudStatus('云端已同步');
       showToast(message);
@@ -2041,7 +1847,7 @@ function App() {
     if (!userId || cloudReadyUserId !== userId || !snapshot) return;
 
     try {
-      await saveCloudSnapshot(
+      cloudUpdatedAtRef.current = await saveCloudSnapshot(
         userId,
         cleanCloudSnapshotRecords({
           ...snapshot,
@@ -2052,6 +1858,7 @@ function App() {
           },
           updatedAt: new Date().toISOString(),
         }),
+        cloudUpdatedAtRef.current,
         activeCloudSettings,
       );
       setCloudStatus('云端已同步');
@@ -2063,10 +1870,11 @@ function App() {
   };
 
   return (
+    <TooltipProvider delayDuration={400}>
     <div className="app-shell">
-      <button className="mobile-menu" type="button" aria-label="打开导航" onClick={() => setSidebarOpen(true)}>
+      <Button className="mobile-menu" type="button" aria-label="打开导航" onClick={() => setSidebarOpen(true)}>
         <Menu size={18} />
-      </button>
+      </Button>
 
       <TopMenuBar
         activeView={activeView}
@@ -2076,14 +1884,18 @@ function App() {
         importFormat={importFormat}
         promptCount={prompts.length}
         query={query}
+        searchLabel={isDocumentMode ? '文档' : '提示词'}
         recentCount={prompts.filter((prompt) => prompt.lastUsedAt).length}
         onChangeView={changeView}
         onExport={exportPrompts}
         onExportFormatChange={setExportFormat}
         onImport={() => fileInputRef.current?.click()}
+        onAddDocuments={() => void addDocuments()}
         onImportFormatChange={setImportFormat}
         onOpenSettings={openSettingsPanel}
         setQuery={setQuery}
+        theme={theme}
+        onToggleTheme={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
       />
 
       <Sidebar
@@ -2094,10 +1906,12 @@ function App() {
         cloudStatus={cloudStatus}
         subcategoryMap={subcategoryMap}
         onAddCategory={openCategoryCreator}
-        onAddSubcategory={openNewEditorInCategory}
+        onAddSubcategory={isDocumentMode ? (category) => void addDocuments(category) : openNewEditorInCategory}
         onChangeView={changeView}
         onClose={() => setSidebarOpen(false)}
-        onCreatePrompt={openNewEditor}
+        onCreatePrompt={isDocumentMode ? () => void addDocuments() : openNewEditor}
+        libraryMode={libraryMode}
+        onChangeLibraryMode={changeLibraryMode}
         onDeleteCategory={deleteCategory}
         onDeletePrompt={deletePrompt}
         onDeleteSubcategory={deleteSubcategory}
@@ -2122,12 +1936,27 @@ function App() {
         {mode === 'detail' && (
           <header className="workspace-header compact-workspace-header">
             <div className="header-actions">
-              <button className="button ghost" type="button" onClick={() => setMode('list')}>
+              <Button className="button ghost" type="button" onClick={() => setMode('list')}>
                 <ArrowLeft size={16} />
                 返回列表
-              </button>
+              </Button>
             </div>
           </header>
+        )}
+
+        {otherLibraryMatchCount > 0 && activeView !== 'trash' && (
+          <div className="library-search-hint">
+            <span>
+              {isDocumentMode ? '提示词' : '文档'}里还有 {otherLibraryMatchCount} 条匹配
+            </span>
+            <Button
+              className="button ghost compact"
+              type="button"
+              onClick={() => changeLibraryMode(isDocumentMode ? 'prompts' : 'documents')}
+            >
+              去看看
+            </Button>
+          </div>
         )}
 
         {activeView === 'trash' ? (
@@ -2136,6 +1965,15 @@ function App() {
             onClearAll={clearDeletedRecords}
             onRemove={removeDeletedRecord}
             onRestore={restoreDeletedRecord}
+          />
+        ) : mode === 'detail' && selectedPrompt && isDocumentItem(selectedPrompt) ? (
+          <DocumentView
+            item={selectedPrompt}
+            onCopyFile={copyDocumentFile}
+            onCopyText={copyPrompt}
+            onDelete={deletePrompt}
+            onEnsureLocal={ensureDocumentLocal}
+            onToggleFavorite={toggleFavorite}
           />
         ) : mode === 'detail' && selectedPrompt ? (
           <PromptDetail
@@ -2148,13 +1986,25 @@ function App() {
           />
         ) : (
           <PromptList
-            activeLabel={getViewLabel(activeView)}
+            activeLabel={isDocumentMode && activeView === 'all' ? '全部文档' : getViewLabel(activeView)}
             displayMode={displayMode}
             prompts={visiblePrompts}
             query={query}
             selectedPrompt={selectedPrompt}
             total={prompts.length}
-            onNew={openNewEditor}
+            libraryMode={libraryMode}
+            renderDocument={(item) => (
+              <DocumentView
+                key={item.id}
+                item={item}
+                onCopyFile={copyDocumentFile}
+                onCopyText={copyPrompt}
+                onDelete={deletePrompt}
+                onEnsureLocal={ensureDocumentLocal}
+                onToggleFavorite={toggleFavorite}
+              />
+            )}
+            onNew={isDocumentMode ? () => void addDocuments() : openNewEditor}
             onCopy={copyPrompt}
             onDelete={deletePrompt}
             onDuplicate={duplicatePrompt}
@@ -2224,6 +2074,8 @@ function App() {
           onCheckUpdate={() => runDesktopUpdateAction('checkForUpdates', '更新检查失败')}
           onDownloadUpdate={() => runDesktopUpdateAction('downloadUpdate', '更新下载失败')}
           onInstallUpdate={() => runDesktopUpdateAction('installUpdate', '更新安装失败')}
+          theme={theme}
+          onThemeChange={setTheme}
           onSave={(settings, nextCloudSettings, nextDesktopSettings) => {
             const normalizedCloudSettings = loadCloudSettings();
             if (canManageCloudSettings) {
@@ -2289,13 +2141,9 @@ function App() {
         <ConfirmDialog dialog={confirmDialog} onCancel={closeConfirmDialog} onConfirm={confirmCurrentDialog} />
       )}
 
-      {toast && (
-        <div className="toast" role="status">
-          <Check size={16} />
-          {toast}
-        </div>
-      )}
+      <Toaster theme={theme} />
     </div>
+    </TooltipProvider>
   );
 }
 
@@ -2306,7 +2154,9 @@ type SidebarProps = {
   cloudEnabled: boolean;
   cloudStatus: string;
   isGlobalSearchActive: boolean;
+  libraryMode: LibraryMode;
   subcategoryMap: Record<string, string[]>;
+  onChangeLibraryMode: (mode: LibraryMode) => void;
   onAddCategory: () => void;
   onAddSubcategory: (category: string) => void;
   onChangeView: (view: ViewKey) => void;
@@ -2338,7 +2188,9 @@ function Sidebar({
   cloudEnabled,
   cloudStatus,
   isGlobalSearchActive,
+  libraryMode,
   subcategoryMap,
+  onChangeLibraryMode,
   onAddCategory,
   onAddSubcategory,
   onChangeView,
@@ -2375,17 +2227,40 @@ function Sidebar({
 
   return (
     <>
-      {open && <button className="sidebar-scrim" type="button" aria-label="关闭导航" onClick={onClose} />}
+      {open && <Button className="sidebar-scrim" type="button" aria-label="关闭导航" onClick={onClose} />}
       <aside className={`sidebar ${open ? 'open' : ''}`} style={{ flexBasis: width, width }}>
+        <div className="library-switch" role="tablist" aria-label="切换库">
+          <button
+            className={`library-switch-option ${libraryMode === 'prompts' ? 'is-active' : ''}`}
+            type="button"
+            role="tab"
+            aria-selected={libraryMode === 'prompts'}
+            onClick={() => onChangeLibraryMode('prompts')}
+          >
+            <BookOpen size={15} />
+            提示词
+          </button>
+          <button
+            className={`library-switch-option ${libraryMode === 'documents' ? 'is-active' : ''}`}
+            type="button"
+            role="tab"
+            aria-selected={libraryMode === 'documents'}
+            onClick={() => onChangeLibraryMode('documents')}
+          >
+            <FileText size={15} />
+            文档
+          </button>
+        </div>
+
         <div className="sidebar-primary-actions">
-          <button className="button ghost sidebar-action-button" type="button" onClick={onAddCategory}>
+          <Button className="button ghost sidebar-action-button" type="button" onClick={onAddCategory}>
             <Plus size={16} />
             添加分类
-          </button>
-          <button className="button primary sidebar-action-button" type="button" onClick={onCreatePrompt}>
-            <Plus size={16} />
-            新建提示词
-          </button>
+          </Button>
+          <Button className="button primary sidebar-action-button" type="button" onClick={onCreatePrompt}>
+            {libraryMode === 'documents' ? <FilePlus size={16} /> : <Plus size={16} />}
+            {libraryMode === 'documents' ? '添加文档' : '新建提示词'}
+          </Button>
         </div>
 
         <nav className="nav-group categories" aria-label="分类">
@@ -2452,24 +2327,24 @@ function Sidebar({
           </div>
           {cloudEmail ? (
             <div className="sidebar-cloud-actions">
-              <button className="sidebar-cloud-action" type="button" onClick={() => void onManualSync()}>
+              <Button className="sidebar-cloud-action" type="button" onClick={() => void onManualSync()}>
                 <Cloud size={15} />
                 同步
-              </button>
-              <button className="sidebar-cloud-action" type="button" onClick={onSignOut}>
+              </Button>
+              <Button className="sidebar-cloud-action" type="button" onClick={onSignOut}>
                 <LogOut size={15} />
                 退出
-              </button>
+              </Button>
             </div>
           ) : (
-            <button className="sidebar-login-button" type="button" disabled={!cloudEnabled} onClick={onOpenAuth}>
+            <Button className="sidebar-login-button" type="button" disabled={!cloudEnabled} onClick={onOpenAuth}>
               <LogIn size={15} />
               登录云端
-            </button>
+            </Button>
           )}
         </div>
 
-        <button
+        <Button
           className="sidebar-resizer"
           type="button"
           aria-label="拖动调整侧边栏宽度"
@@ -2609,7 +2484,7 @@ function CategoryNavItem({
           <span className="nav-meta">{count}</span>
         </form>
       ) : (
-        <button
+        <Button
           className="category-open category-parent-open"
           type="button"
           aria-expanded={expanded}
@@ -2623,13 +2498,13 @@ function CategoryNavItem({
           </span>
           <span className="nav-label">
             {name}
-            {isSearchContext && <span className="context-badge">原位置</span>}
+            {isSearchContext && <Badge className="context-badge">原位置</Badge>}
           </span>
           <span className="nav-meta">{count}</span>
-        </button>
+        </Button>
       )}
       <div className="category-actions row-actions">
-        <button
+        <Button
           className="mini-action"
           type="button"
           aria-label={`${name}操作`}
@@ -2637,14 +2512,14 @@ function CategoryNavItem({
           onClick={toggleActionMenu}
         >
           <MoreHorizontal size={14} />
-        </button>
+        </Button>
         {isActionMenuOpen && actionMenuPosition && createPortal(
           <div
             className="row-action-menu"
             ref={actionMenuRef}
             style={{ top: actionMenuPosition.top, left: actionMenuPosition.left }}
           >
-            <button
+            <Button
               className="row-action-menu-item"
               type="button"
               onClick={() => {
@@ -2654,8 +2529,8 @@ function CategoryNavItem({
             >
               <Plus size={13} />
               新增子文件
-            </button>
-            <button
+            </Button>
+            <Button
               className="row-action-menu-item"
               type="button"
               disabled={!canMoveUp}
@@ -2666,8 +2541,8 @@ function CategoryNavItem({
             >
               <ArrowUp size={13} />
               上移
-            </button>
-            <button
+            </Button>
+            <Button
               className="row-action-menu-item"
               type="button"
               disabled={!canMoveDown}
@@ -2678,8 +2553,8 @@ function CategoryNavItem({
             >
               <ArrowDown size={13} />
               下移
-            </button>
-            <button
+            </Button>
+            <Button
               className="row-action-menu-item"
               type="button"
               onClick={() => {
@@ -2689,8 +2564,8 @@ function CategoryNavItem({
             >
               <Pencil size={13} />
               重命名
-            </button>
-            <button
+            </Button>
+            <Button
               className="row-action-menu-item danger-menu-item"
               type="button"
               onClick={() => {
@@ -2700,7 +2575,7 @@ function CategoryNavItem({
             >
               <Trash2 size={13} />
               删除
-            </button>
+            </Button>
           </div>,
           document.body,
         )}
@@ -2777,14 +2652,14 @@ function SubcategoryNavItem({ active, count, name, onDelete, onOpen, onRename }:
           <span className="nav-meta">{count}</span>
         </form>
       ) : (
-        <button className="category-open" type="button" onClick={onOpen}>
+        <Button className="category-open" type="button" onClick={onOpen}>
           <span className="nav-icon subcategory-dot" />
           <span className="nav-label">{name}</span>
           <span className="nav-meta">{count}</span>
-        </button>
+        </Button>
       )}
       <div className="category-actions">
-        <button
+        <Button
           className="mini-action"
           type="button"
           aria-label={`重命名${name}`}
@@ -2792,10 +2667,10 @@ function SubcategoryNavItem({ active, count, name, onDelete, onOpen, onRename }:
           onClick={() => setIsEditing(true)}
         >
           <Pencil size={13} />
-        </button>
-        <button className="mini-action" type="button" aria-label={`删除${name}`} title="删除" onClick={onDelete}>
+        </Button>
+        <Button className="mini-action" type="button" aria-label={`删除${name}`} title="删除" onClick={onDelete}>
           <Trash2 size={13} />
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -2926,13 +2801,13 @@ function PromptTreeItem({
           />
         </form>
       ) : (
-        <button className="prompt-tree-item" type="button" onClick={onOpen}>
+        <Button className="prompt-tree-item" type="button" onClick={onOpen}>
           <span className="prompt-tree-dot" />
           <span className="prompt-tree-title">{prompt.title}</span>
-        </button>
+        </Button>
       )}
       <div className="prompt-tree-actions row-actions">
-        <button
+        <Button
           className="mini-action"
           type="button"
           aria-label={`${prompt.title}操作`}
@@ -2940,14 +2815,14 @@ function PromptTreeItem({
           onClick={toggleActionMenu}
         >
           <MoreHorizontal size={14} />
-        </button>
+        </Button>
         {isActionMenuOpen && actionMenuPosition && createPortal(
           <div
             className="row-action-menu"
             ref={actionMenuRef}
             style={{ top: actionMenuPosition.top, left: actionMenuPosition.left }}
           >
-            <button
+            <Button
               className="row-action-menu-item"
               type="button"
               disabled={!canMoveUp}
@@ -2958,8 +2833,8 @@ function PromptTreeItem({
             >
               <ArrowUp size={13} />
               上移
-            </button>
-            <button
+            </Button>
+            <Button
               className="row-action-menu-item"
               type="button"
               disabled={!canMoveDown}
@@ -2970,8 +2845,8 @@ function PromptTreeItem({
             >
               <ArrowDown size={13} />
               下移
-            </button>
-            <button
+            </Button>
+            <Button
               className="row-action-menu-item"
               type="button"
               onClick={() => {
@@ -2981,8 +2856,8 @@ function PromptTreeItem({
             >
               <Pencil size={13} />
               重命名
-            </button>
-            <button
+            </Button>
+            <Button
               className="row-action-menu-item danger-menu-item"
               type="button"
               onClick={() => {
@@ -2992,7 +2867,7 @@ function PromptTreeItem({
             >
               <Trash2 size={13} />
               删除
-            </button>
+            </Button>
           </div>,
           document.body,
         )}
@@ -3009,14 +2884,18 @@ type TopMenuBarProps = {
   importFormat: FileFormat;
   promptCount: number;
   query: string;
+  searchLabel: string;
   recentCount: number;
   onChangeView: (view: ViewKey) => void;
   onExport: (format: FileFormat) => void | Promise<void>;
   onExportFormatChange: (format: FileFormat) => void;
   onImport: () => void;
+  onAddDocuments: () => void;
   onImportFormatChange: (format: FileFormat) => void;
   onOpenSettings: () => void;
   setQuery: (query: string) => void;
+  theme: ThemeMode;
+  onToggleTheme: () => void;
 };
 
 function TopMenuBar({
@@ -3027,14 +2906,18 @@ function TopMenuBar({
   importFormat,
   promptCount,
   query,
+  searchLabel,
   recentCount,
   onChangeView,
   onExport,
   onExportFormatChange,
   onImport,
+  onAddDocuments,
   onImportFormatChange,
   onOpenSettings,
   setQuery,
+  theme,
+  onToggleTheme,
 }: TopMenuBarProps) {
   const [openMenu, setOpenMenu] = useState<'file' | 'view' | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -3074,15 +2957,19 @@ function TopMenuBar({
     <header className="top-menu-bar" ref={menuRef}>
       <nav className="top-menu-left" aria-label="顶部菜单">
         <div className="top-menu-item">
-          <button className="top-menu-button" type="button" aria-expanded={openMenu === 'file'} onClick={() => toggleMenu('file')}>
+          <Button className="top-menu-button" type="button" aria-expanded={openMenu === 'file'} onClick={() => toggleMenu('file')}>
             文件
-          </button>
+          </Button>
           {openMenu === 'file' && (
             <div className="top-dropdown-menu" role="menu">
-              <button className="top-dropdown-item" type="button" role="menuitem" onClick={() => runMenuAction(onImport)}>
+              <Button className="top-dropdown-item" type="button" role="menuitem" onClick={() => runMenuAction(onImport)}>
                 <Import size={15} />
                 导入文件
-              </button>
+              </Button>
+              <Button className="top-dropdown-item" type="button" role="menuitem" onClick={() => runMenuAction(onAddDocuments)}>
+                <FilePlus size={15} />
+                添加文档
+              </Button>
               <label className="top-format-row">
                 <span>导入格式</span>
                 <select
@@ -3098,7 +2985,7 @@ function TopMenuBar({
                   ))}
                 </select>
               </label>
-              <button
+              <Button
                 className="top-dropdown-item"
                 type="button"
                 role="menuitem"
@@ -3106,7 +2993,7 @@ function TopMenuBar({
               >
                 <Download size={15} />
                 导出文件
-              </button>
+              </Button>
               <label className="top-format-row">
                 <span>导出格式</span>
                 <select
@@ -3127,9 +3014,9 @@ function TopMenuBar({
         </div>
 
         <div className="top-menu-item">
-          <button className="top-menu-button" type="button" aria-expanded={openMenu === 'view'} onClick={() => toggleMenu('view')}>
+          <Button className="top-menu-button" type="button" aria-expanded={openMenu === 'view'} onClick={() => toggleMenu('view')}>
             视图
-          </button>
+          </Button>
           {openMenu === 'view' && (
             <div className="top-dropdown-menu" role="menu">
               <TopViewMenuItem active={activeView === 'all'} icon={<LayoutList size={15} />} label="全部" meta={promptCount} onClick={() => runMenuAction(() => onChangeView('all'))} />
@@ -3141,21 +3028,34 @@ function TopMenuBar({
         </div>
 
         <div className="top-menu-item">
-          <button className="top-menu-button" type="button" onClick={() => runMenuAction(onOpenSettings)}>
+          <Button className="top-menu-button" type="button" onClick={() => runMenuAction(onOpenSettings)}>
             设置
-          </button>
+          </Button>
         </div>
 
         <label className={`top-search-box ${query.trim() ? 'is-global-search' : ''}`}>
           <Search size={15} />
           <span className="search-scope-chip">全局</span>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索全部提示词" aria-label="搜索提示词" />
+          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`搜索全部${searchLabel}`} aria-label={`搜索${searchLabel}`} />
           {query && (
-            <button className="mini-clear" type="button" aria-label="清空搜索" onClick={() => setQuery('')}>
+            <Button className="mini-clear" type="button" aria-label="清空搜索" onClick={() => setQuery('')}>
               <X size={13} />
-            </button>
+            </Button>
           )}
         </label>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              className="top-menu-button theme-toggle"
+              type="button"
+              aria-label={theme === 'dark' ? '切换到浅色外观' : '切换到深色外观'}
+              onClick={onToggleTheme}
+            >
+              {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{theme === 'dark' ? '浅色外观' : '深色外观'}</TooltipContent>
+        </Tooltip>
       </nav>
 
       <div className="top-menu-drag-region" aria-hidden="true" />
@@ -3175,11 +3075,11 @@ type TopViewMenuItemProps = {
 
 function TopViewMenuItem({ active, icon, label, meta, onClick }: TopViewMenuItemProps) {
   return (
-    <button className={`top-dropdown-item ${active ? 'active' : ''}`} type="button" role="menuitem" onClick={onClick}>
+    <Button className={`top-dropdown-item ${active ? 'active' : ''}`} type="button" role="menuitem" onClick={onClick}>
       {icon}
       <span>{label}</span>
       <small>{meta}</small>
-    </button>
+    </Button>
   );
 }
 
@@ -3194,31 +3094,31 @@ type CloseRequestDialogProps = {
 function CloseRequestDialog({ remember, onCancel, onRememberChange, onTray, onQuit }: CloseRequestDialogProps) {
   return (
     <div className="modal-shell" role="dialog" aria-modal="true" aria-labelledby="close-request-title">
-      <button className="modal-backdrop" type="button" aria-label="取消关闭" onClick={onCancel} />
+      <Button className="modal-backdrop" type="button" aria-label="取消关闭" onClick={onCancel} />
       <section className="editor-panel close-request-panel">
         <div className="editor-header">
           <div>
             <span className="eyebrow">Close</span>
             <h2 id="close-request-title">关闭软件？</h2>
           </div>
-          <button className="icon-button" type="button" aria-label="取消关闭" onClick={onCancel}>
+          <Button className="icon-button" type="button" aria-label="取消关闭" onClick={onCancel}>
             <X size={18} />
-          </button>
+          </Button>
         </div>
 
         <div className="close-request-options">
-          <button className="settings-option close-choice" type="button" onClick={onTray}>
+          <Button className="settings-option close-choice" type="button" onClick={onTray}>
             <span>
               <strong>隐藏到托盘</strong>
               <small>软件继续后台运行，可从托盘或悬浮图标调出。</small>
             </span>
-          </button>
-          <button className="settings-option close-choice" type="button" onClick={onQuit}>
+          </Button>
+          <Button className="settings-option close-choice" type="button" onClick={onQuit}>
             <span>
               <strong>直接关闭软件</strong>
               <small>退出主程序，下次需要重新打开。</small>
             </span>
-          </button>
+          </Button>
         </div>
 
         <label className="remember-close-option">
@@ -3249,12 +3149,12 @@ function ConfirmDialog({ dialog, onCancel, onConfirm }: ConfirmDialogProps) {
           <p>{dialog.message}</p>
         </div>
         <div className="confirm-dialog-actions">
-          <button className="button ghost" type="button" onClick={onCancel}>
+          <Button className="button ghost" type="button" onClick={onCancel}>
             取消
-          </button>
-          <button className="button danger solid-danger" type="button" onClick={onConfirm} autoFocus>
+          </Button>
+          <Button className="button danger solid-danger" type="button" onClick={onConfirm} autoFocus>
             {dialog.confirmLabel ?? '确认'}
-          </button>
+          </Button>
         </div>
       </section>
     </div>
@@ -3276,6 +3176,8 @@ type SettingsPanelProps = {
   onDownloadUpdate: () => void | Promise<void>;
   onInstallUpdate: () => void | Promise<void>;
   onSave: (settings: ExportSettings, cloudSettings: CloudSettings, desktopSettings: DesktopRuntimeSettings) => void;
+  theme: ThemeMode;
+  onThemeChange: (theme: ThemeMode) => void;
 };
 
 function SettingsPanel({
@@ -3293,6 +3195,8 @@ function SettingsPanel({
   onDownloadUpdate,
   onInstallUpdate,
   onSave,
+  theme,
+  onThemeChange,
 }: SettingsPanelProps) {
   const [draft, setDraft] = useState(exportSettings);
   const [cloudDraft, setCloudDraft] = useState(cloudSettings);
@@ -3340,7 +3244,7 @@ function SettingsPanel({
 
   return (
     <div className="modal-shell" role="dialog" aria-modal="true" aria-labelledby="settings-panel-title">
-      <button className="modal-backdrop" type="button" aria-label="关闭设置" onClick={onClose} />
+      <Button className="modal-backdrop" type="button" aria-label="关闭设置" onClick={onClose} />
       <form
         className="editor-panel settings-panel"
         onSubmit={(event) => {
@@ -3364,7 +3268,7 @@ function SettingsPanel({
             <h2 id="settings-panel-title">设置</h2>
           </div>
           <div className="settings-header-actions">
-            <button
+            <Button
               className={`button ghost small-button ${aboutOpen ? 'accent' : ''}`}
               type="button"
               aria-expanded={aboutOpen}
@@ -3373,10 +3277,10 @@ function SettingsPanel({
             >
               <Info size={15} />
               软件说明
-            </button>
-            <button className="icon-button" type="button" aria-label="关闭设置" onClick={onClose}>
+            </Button>
+            <Button className="icon-button" type="button" aria-label="关闭设置" onClick={onClose}>
               <X size={18} />
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -3394,7 +3298,7 @@ function SettingsPanel({
               </div>
               <div>
                 <strong>视觉风格</strong>
-                <p>整体使用浅色背景、低对比边框、8px 圆角和克制的青绿色强调色，目标是长期管理文本时清晰、稳定、不抢内容。</p>
+                <p>界面使用中性灰表面、发丝级边框、8px 圆角和单一蓝色强调色，并支持浅色与深色。目标是长时间阅读正文时清晰、稳定、不抢内容。</p>
               </div>
               <div>
                 <strong>设计思路</strong>
@@ -3402,11 +3306,26 @@ function SettingsPanel({
               </div>
               <div>
                 <strong>技术组成</strong>
-                <p>TypeScript 和 React 负责界面与状态；CSS 负责布局和视觉；Vite 负责开发服务和前端构建；Electron 负责 Windows 桌面窗口、托盘、悬浮图标和打包；Node.js 负责脚本、测试和 Supabase 发布工作流。</p>
+                <p>TypeScript 和 React 负责界面与状态；设计令牌与 CSS 负责布局和视觉；Vite 负责开发服务和前端构建；Electron 负责 Windows 桌面窗口、托盘、悬浮图标和打包；Node.js 负责脚本、测试和 Supabase 发布工作流。</p>
               </div>
             </div>
           </section>
         )}
+
+        <section className="settings-section" aria-labelledby="appearance-settings-title">
+          <div className="settings-section-title">
+            <div>
+              <h3 id="appearance-settings-title">外观</h3>
+              <p>浅色适合长时间阅读，深色适合弱光环境。这个选择只保存在本机。</p>
+            </div>
+            <Switch
+              checked={theme === 'dark'}
+              aria-label="深色模式"
+              onCheckedChange={(checked) => onThemeChange(checked ? 'dark' : 'light')}
+            />
+          </div>
+          <Separator />
+        </section>
 
         <section className="settings-section" aria-labelledby="update-settings-title">
           <div className="settings-section-title">
@@ -3414,10 +3333,10 @@ function SettingsPanel({
               <h3 id="update-settings-title">软件更新</h3>
               <p>自动更新仅支持安装版，便携版和文件夹版仍用于测试和排查。</p>
             </div>
-            <button className="button ghost small-button" type="button" disabled={!canCheckUpdate} onClick={() => void onCheckUpdate()}>
+            <Button className="button ghost small-button" type="button" disabled={!canCheckUpdate} onClick={() => void onCheckUpdate()}>
               <RotateCcw size={15} />
               检查更新
-            </button>
+            </Button>
           </div>
 
           <div className={`update-status-card ${updateStatus.status}`}>
@@ -3439,14 +3358,14 @@ function SettingsPanel({
           )}
 
           <div className="update-actions">
-            <button className="button ghost" type="button" disabled={!canDownloadUpdate} onClick={() => void onDownloadUpdate()}>
+            <Button className="button ghost" type="button" disabled={!canDownloadUpdate} onClick={() => void onDownloadUpdate()}>
               <Download size={16} />
               下载更新
-            </button>
-            <button className="button primary" type="button" disabled={!canInstallUpdate} onClick={() => void onInstallUpdate()}>
+            </Button>
+            <Button className="button primary" type="button" disabled={!canInstallUpdate} onClick={() => void onInstallUpdate()}>
               <Check size={16} />
               重启安装
-            </button>
+            </Button>
           </div>
         </section>
 
@@ -3634,9 +3553,9 @@ function SettingsPanel({
               <h3 id="sync-record-settings-title">同步记录</h3>
               <p>这里只记录同步动作，自动保留最近 30 天。清空记录不会删除本地或云端提示词。</p>
             </div>
-            <button className="button ghost small-button" type="button" disabled={!syncRecords.length} onClick={() => void onClearSyncRecords()}>
+            <Button className="button ghost small-button" type="button" disabled={!syncRecords.length} onClick={() => void onClearSyncRecords()}>
               清空记录
-            </button>
+            </Button>
           </div>
 
           {syncRecords.length ? (
@@ -3658,12 +3577,12 @@ function SettingsPanel({
         </section>
 
         <div className="editor-footer">
-          <button className="button ghost" type="button" onClick={onClose}>
+          <Button className="button ghost" type="button" onClick={onClose}>
             取消
-          </button>
-          <button className="button primary" type="submit">
+          </Button>
+          <Button className="button primary" type="submit">
             保存设置
-          </button>
+          </Button>
         </div>
       </form>
     </div>
@@ -3703,16 +3622,16 @@ function CloudAuthPanel({ cloudEnabled, onClose, onSubmit }: CloudAuthPanelProps
 
   return (
     <div className="modal-shell" role="dialog" aria-modal="true" aria-labelledby="cloud-auth-title">
-      <button className="modal-backdrop" type="button" aria-label="关闭登录" onClick={onClose} />
+      <Button className="modal-backdrop" type="button" aria-label="关闭登录" onClick={onClose} />
       <form className="editor-panel auth-panel" onSubmit={submit}>
         <div className="editor-header">
           <div>
             <span className="eyebrow">Cloud Sync</span>
             <h2 id="cloud-auth-title">{mode === 'signin' ? '登录账户' : '注册账户'}</h2>
           </div>
-          <button className="icon-button" type="button" aria-label="关闭登录" onClick={onClose}>
+          <Button className="icon-button" type="button" aria-label="关闭登录" onClick={onClose}>
             <X size={18} />
-          </button>
+          </Button>
         </div>
 
         {!cloudEnabled && (
@@ -3723,12 +3642,12 @@ function CloudAuthPanel({ cloudEnabled, onClose, onSubmit }: CloudAuthPanelProps
         )}
 
         <div className="auth-mode-switch" role="tablist" aria-label="账户操作">
-          <button className={mode === 'signin' ? 'active' : ''} type="button" onClick={() => setMode('signin')}>
+          <Button className={mode === 'signin' ? 'active' : ''} type="button" onClick={() => setMode('signin')}>
             登录
-          </button>
-          <button className={mode === 'signup' ? 'active' : ''} type="button" onClick={() => setMode('signup')}>
+          </Button>
+          <Button className={mode === 'signup' ? 'active' : ''} type="button" onClick={() => setMode('signup')}>
             注册
-          </button>
+          </Button>
         </div>
 
         <label className="field">
@@ -3761,12 +3680,12 @@ function CloudAuthPanel({ cloudEnabled, onClose, onSubmit }: CloudAuthPanelProps
         {error && <p className="form-error">{error}</p>}
 
         <div className="editor-footer">
-          <button className="button ghost" type="button" onClick={onClose}>
+          <Button className="button ghost" type="button" onClick={onClose}>
             取消
-          </button>
-          <button className="button primary" type="submit" disabled={!canSubmit}>
+          </Button>
+          <Button className="button primary" type="submit" disabled={!canSubmit}>
             {busy ? '处理中...' : mode === 'signin' ? '登录并同步' : '注册并同步'}
-          </button>
+          </Button>
         </div>
       </form>
     </div>
@@ -3780,6 +3699,8 @@ type PromptListProps = {
   query: string;
   selectedPrompt: PromptItem | null;
   total: number;
+  libraryMode: LibraryMode;
+  renderDocument: (item: PromptItem) => ReactNode;
   onNew: () => void;
   onCopy: (id: string, content: string) => Promise<void>;
   onDelete: (id: string) => void;
@@ -3795,6 +3716,8 @@ function PromptList({
   query,
   selectedPrompt,
   total,
+  libraryMode,
+  renderDocument,
   onNew,
   onCopy,
   onDelete,
@@ -3802,25 +3725,30 @@ function PromptList({
   onToggleFavorite,
   onUpdateContent,
 }: PromptListProps) {
+  const isDocuments = libraryMode === 'documents';
+  const itemLabel = isDocuments ? '文档' : '提示词';
+  const newLabel = isDocuments ? '添加文档' : '新建提示词';
+  const NewIcon = isDocuments ? FilePlus : Plus;
+
   if (!prompts.length) {
     const emptyMessage =
       activeLabel === '最近使用'
-        ? '复制或使用过的提示词会出现在这里。'
+        ? `复制或使用过的${itemLabel}会出现在这里。`
         : total
           ? '当前筛选没有匹配结果，可以换个关键词或分类。'
-          : '先保存第一条提示词，之后就能搜索、收藏和快速复用。';
+          : isDocuments
+            ? 'Word、PDF、记事本、Markdown 都能放进来，之后一键复制文件发给别人。'
+            : '先保存第一条提示词，之后就能搜索、收藏和快速复用。';
 
     return (
       <section className="empty-state">
-        <div className="empty-icon">
-          <BookOpen size={22} />
-        </div>
-        <h2>这里还没有提示词</h2>
+        <div className="empty-icon">{isDocuments ? <FileText size={22} /> : <BookOpen size={22} />}</div>
+        <h2>这里还没有{itemLabel}</h2>
         <p>{emptyMessage}</p>
-        <button className="button primary" type="button" onClick={onNew}>
-          <Plus size={16} />
-          新建提示词
-        </button>
+        <Button className="button primary" type="button" onClick={onNew}>
+          <NewIcon size={16} />
+          {newLabel}
+        </Button>
       </section>
     );
   }
@@ -3834,21 +3762,24 @@ function PromptList({
     <section className="prompt-list-section prompt-document-section">
       <div className={`document-workbar ${isGlobalSearch ? 'is-searching' : ''}`}>
         <div>
-          <p className="eyebrow">{isGlobalSearch ? 'Global Search' : 'Prompt Library'}</p>
+          <p className="eyebrow">{isGlobalSearch ? 'Global Search' : isDocuments ? 'Document Library' : 'Prompt Library'}</p>
           <h1>{isGlobalSearch ? <>全局搜索：{normalizedQuery}</> : activeLabel}</h1>
           <span className="search-context">
             {isGlobalSearch
-              ? '搜索全部提示词，按相关度排序。左侧分类只保留位置上下文。'
-              : `${promptsToRender.length} 条提示词`}
+              ? `搜索全部${itemLabel}，按相关度排序。左侧分类只保留位置上下文。`
+              : `${promptsToRender.length} 条${itemLabel}`}
           </span>
         </div>
-        <button className="button primary document-new-button" type="button" onClick={onNew}>
-          <Plus size={16} />
-          新建提示词
-        </button>
+        <Button className="button primary document-new-button" type="button" onClick={onNew}>
+          <NewIcon size={16} />
+          {newLabel}
+        </Button>
       </div>
       <div className="document-flow">
-        {promptsToRender.map((prompt) => (
+        {promptsToRender.map((prompt) =>
+          isDocumentItem(prompt) ? (
+            renderDocument(prompt)
+          ) : (
           <FullPromptCard
             key={prompt.id}
             prompt={prompt}
@@ -3858,9 +3789,181 @@ function PromptList({
             onToggleFavorite={onToggleFavorite}
             onUpdateContent={onUpdateContent}
           />
-        ))}
+          ),
+        )}
       </div>
     </section>
+  );
+}
+
+function MarkdownView({ text }: { text: string }) {
+  return (
+    <div className="markdown-body">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkBreaks]}
+        components={{ a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}
+      >
+        {text}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
+type DocumentViewProps = {
+  item: PromptItem;
+  onCopyFile: (item: PromptItem) => Promise<void>;
+  onCopyText: (id: string, content: string) => Promise<void>;
+  onDelete: (id: string) => void;
+  onEnsureLocal: (file: DocumentFile) => Promise<void>;
+  onToggleFavorite: (id: string) => void;
+};
+
+// 文档卡片：主要动作是把文件发出去（复制文件、拖出去），其次是复制文字、打开、另存为。
+function DocumentView({ item, onCopyFile, onCopyText, onDelete, onEnsureLocal, onToggleFavorite }: DocumentViewProps) {
+  const file = item.file;
+  const api = window.promptAssistantDesktop?.documents;
+  const [status, setStatus] = useState<'checking' | 'ready' | 'missing'>('checking');
+  const [problem, setProblem] = useState('');
+  const [text, setText] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const isText = file ? isTextDocument(file.name) : false;
+
+  useEffect(() => {
+    if (!file) return;
+    let canceled = false;
+    setStatus('checking');
+
+    void onEnsureLocal(file)
+      .then(async () => {
+        const loadedText = isText && api ? await api.readText(file.sha256) : null;
+        if (canceled) return;
+        setText(loadedText);
+        setStatus('ready');
+      })
+      .catch((error) => {
+        if (canceled) return;
+        setProblem(error instanceof Error ? error.message : '文件不可用');
+        setStatus('missing');
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [file?.sha256, attempt]);
+
+  if (!file) return null;
+
+  const ready = status === 'ready' && Boolean(api);
+  const runFileAction = async (action: () => Promise<unknown>, failMessage: string) => {
+    try {
+      await action();
+    } catch (error) {
+      pushToast(error instanceof Error ? error.message : failMessage);
+    }
+  };
+
+  return (
+    <article className="full-prompt-card document-card">
+      <header className="full-prompt-header">
+        <div
+          className={`full-prompt-title document-title ${ready ? 'is-draggable' : ''}`}
+          draggable={ready}
+          title={ready ? '拖到微信、QQ、邮件或文件夹里即可发送' : undefined}
+          onDragStart={(event) => {
+            event.preventDefault();
+            api?.startDrag(file.sha256, file.name);
+          }}
+        >
+          <FileText size={18} aria-hidden="true" />
+          <div>
+            <h2>{item.title}</h2>
+            <span className="document-meta">
+              {file.name} · {formatFileSize(file.size)} · {formatDate(file.addedAt)}
+            </span>
+          </div>
+        </div>
+        <div className="preview-actions">
+          <Button className="button primary compact" type="button" disabled={!ready} onClick={() => void onCopyFile(item)}>
+            <Copy size={16} />
+            复制文件
+          </Button>
+          {isText && (
+            <Button
+              className="button ghost compact"
+              type="button"
+              disabled={!ready || text === null}
+              onClick={() => void onCopyText(item.id, text ?? '')}
+            >
+              <FileText size={16} />
+              复制内容
+            </Button>
+          )}
+          <Button
+            className="button ghost compact"
+            type="button"
+            disabled={!ready}
+            onClick={() => void runFileAction(() => api!.open(file.sha256, file.name), '打开失败')}
+          >
+            <ExternalLink size={16} />
+            打开
+          </Button>
+          <Button
+            className="icon-button"
+            type="button"
+            title="另存为"
+            disabled={!ready}
+            onClick={() =>
+              void runFileAction(async () => {
+                if (await api!.saveAs(file.sha256, file.name)) pushToast('已另存');
+              }, '另存失败')
+            }
+          >
+            <Download size={16} />
+          </Button>
+          <Button
+            className="icon-button"
+            type="button"
+            title="在文件夹中显示"
+            disabled={!ready}
+            onClick={() => void runFileAction(() => api!.showInFolder(file.sha256, file.name), '打开文件夹失败')}
+          >
+            <FolderOpen size={16} />
+          </Button>
+          <Button
+            className={`icon-button ${item.favorite ? 'is-active' : ''}`}
+            type="button"
+            title={item.favorite ? '取消收藏' : '收藏'}
+            onClick={() => onToggleFavorite(item.id)}
+          >
+            <Heart size={16} />
+          </Button>
+          <Button className="icon-button danger-icon" type="button" title="删除" onClick={() => onDelete(item.id)}>
+            <Trash2 size={16} />
+          </Button>
+        </div>
+      </header>
+
+      <div className="full-prompt-content document-content">
+        {!api ? (
+          <p className="document-status">文档需要在桌面版里使用。</p>
+        ) : status === 'checking' ? (
+          <p className="document-status">正在准备文件…</p>
+        ) : status === 'missing' ? (
+          <p className="document-status is-error">
+            {problem}
+            <Button className="button ghost compact" type="button" onClick={() => setAttempt((value) => value + 1)}>
+              重试
+            </Button>
+          </p>
+        ) : text !== null && isMarkdownDocument(file.name) ? (
+          <MarkdownView text={text} />
+        ) : text !== null ? (
+          <pre>{text}</pre>
+        ) : (
+          <p className="document-status">这个格式不能在这里预览。点“复制文件”或拖动上面的标题就能发给别人，点“打开”用系统软件查看。</p>
+        )}
+      </div>
+    </article>
   );
 }
 
@@ -3892,10 +3995,10 @@ function DeletedRecordsView({ records, onClearAll, onRemove, onRestore }: Delete
           <h1>删除记录</h1>
           <span>{records.length} 条可恢复记录</span>
         </div>
-        <button className="button ghost danger deleted-clear-button" type="button" onClick={onClearAll}>
+        <Button className="button ghost danger deleted-clear-button" type="button" onClick={onClearAll}>
           <Trash2 size={16} />
           清空全部记录
-        </button>
+        </Button>
       </div>
 
       <div className="deleted-record-list">
@@ -3921,14 +4024,14 @@ function DeletedRecordsView({ records, onClearAll, onRemove, onRestore }: Delete
               </div>
             </div>
             <div className="deleted-record-actions">
-              <button className="button primary" type="button" onClick={() => onRestore(record.id)}>
+              <Button className="button primary" type="button" onClick={() => onRestore(record.id)}>
                 <RotateCcw size={16} />
                 恢复
-              </button>
-              <button className="button ghost danger" type="button" onClick={() => onRemove(record.id)}>
+              </Button>
+              <Button className="button ghost danger" type="button" onClick={() => onRemove(record.id)}>
                 <Trash2 size={16} />
                 移除记录
-              </button>
+              </Button>
             </div>
           </article>
         ))}
@@ -3987,35 +4090,35 @@ function FullPromptCard({ prompt, onCopy, onDelete, onDuplicate, onToggleFavorit
           <h2>{prompt.title}</h2>
         </div>
         <div className="preview-actions">
-          <button className="button ghost compact top-edit-button" type="button" onClick={startContentEdit}>
+          <Button className="button ghost compact top-edit-button" type="button" onClick={startContentEdit}>
             <Pencil size={16} />
             编辑
-          </button>
-          <button className="button primary compact top-copy-button" type="button" onClick={() => onCopy(prompt.id, prompt.content)}>
+          </Button>
+          <Button className="button primary compact top-copy-button" type="button" onClick={() => onCopy(prompt.id, prompt.content)}>
             <Copy size={16} />
             复制提示词
-          </button>
-          <button
+          </Button>
+          <Button
             className={`icon-button ${prompt.favorite ? 'is-active' : ''}`}
             type="button"
             title={prompt.favorite ? '取消收藏' : '收藏'}
             onClick={() => onToggleFavorite(prompt.id)}
           >
             <Heart size={16} />
-          </button>
-          <button className="icon-button" type="button" title="复制为副本" onClick={() => onDuplicate(prompt)}>
+          </Button>
+          <Button className="icon-button" type="button" title="复制为副本" onClick={() => onDuplicate(prompt)}>
             <Copy size={16} />
-          </button>
-          <button className="icon-button danger-icon" type="button" title="删除" onClick={() => onDelete(prompt.id)}>
+          </Button>
+          <Button className="icon-button danger-icon" type="button" title="删除" onClick={() => onDelete(prompt.id)}>
             <Trash2 size={16} />
-          </button>
+          </Button>
         </div>
       </header>
 
       <div className={`full-prompt-content ${isEditingContent ? 'is-editing' : ''}`}>
         {isEditingContent ? (
           <>
-            <textarea
+            <Textarea
               ref={contentEditorRef}
               className="inline-content-editor"
               value={draftContent}
@@ -4033,12 +4136,12 @@ function FullPromptCard({ prompt, onCopy, onDelete, onDuplicate, onToggleFavorit
               }}
             />
             <div className="inline-edit-actions">
-              <button className="button ghost" type="button" onClick={cancelContentEdit}>
+              <Button className="button ghost" type="button" onClick={cancelContentEdit}>
                 取消
-              </button>
-              <button className="button primary" type="button" onClick={saveContentEdit}>
+              </Button>
+              <Button className="button primary" type="button" onClick={saveContentEdit}>
                 保存修改
-              </button>
+              </Button>
             </div>
           </>
         ) : (
@@ -4074,30 +4177,30 @@ function PromptDetail({ prompt, onCopy, onDelete, onDuplicate, onEdit, onToggleF
   return (
     <section className="detail-view">
       <div className="detail-actions">
-        <button className="button primary" type="button" onClick={() => onCopy(prompt.id, filledContent)}>
+        <Button className="button primary" type="button" onClick={() => onCopy(prompt.id, filledContent)}>
           <Copy size={16} />
           复制提示词
-        </button>
-        <button
+        </Button>
+        <Button
           className={`button ghost ${prompt.favorite ? 'accent' : ''}`}
           type="button"
           onClick={() => onToggleFavorite(prompt.id)}
         >
           <Heart size={16} />
           {prompt.favorite ? '已收藏' : '收藏'}
-        </button>
-        <button className="button ghost" type="button" onClick={() => onEdit(prompt)}>
+        </Button>
+        <Button className="button ghost" type="button" onClick={() => onEdit(prompt)}>
           <Pencil size={16} />
           编辑
-        </button>
-        <button className="button ghost" type="button" onClick={() => onDuplicate(prompt)}>
+        </Button>
+        <Button className="button ghost" type="button" onClick={() => onDuplicate(prompt)}>
           <Copy size={16} />
           复制为副本
-        </button>
-        <button className="button ghost danger" type="button" onClick={() => onDelete(prompt.id)}>
+        </Button>
+        <Button className="button ghost danger" type="button" onClick={() => onDelete(prompt.id)}>
           <Trash2 size={16} />
           删除
-        </button>
+        </Button>
       </div>
 
       <div className="detail-meta">
@@ -4129,9 +4232,9 @@ function PromptDetail({ prompt, onCopy, onDelete, onDuplicate, onEdit, onToggleF
               <FileJson size={16} />
               变量填充
             </div>
-            <button className="button ghost compact" type="button" onClick={() => setValues({})}>
+            <Button className="button ghost compact" type="button" onClick={() => setValues({})}>
               清空
-            </button>
+            </Button>
           </div>
           <div className="variable-grid">
             {variables.map((variable) => (
@@ -4154,18 +4257,18 @@ function PromptDetail({ prompt, onCopy, onDelete, onDuplicate, onEdit, onToggleF
             <BookOpen size={16} />
             提示词正文
           </div>
-          <button className="button ghost compact" type="button" onClick={() => onEdit(prompt)}>
+          <Button className="button ghost compact" type="button" onClick={() => onEdit(prompt)}>
             编辑
-          </button>
+          </Button>
         </div>
         <pre>{filledContent}</pre>
       </div>
 
       <div className="copy-bar">
-        <button className="button primary" type="button" onClick={() => onCopy(prompt.id, filledContent)}>
+        <Button className="button primary" type="button" onClick={() => onCopy(prompt.id, filledContent)}>
           <Copy size={16} />
           复制提示词
-        </button>
+        </Button>
       </div>
     </section>
   );
@@ -4210,15 +4313,15 @@ function CategoryCreatorDialog({ categories, onClose, onCreate }: CategoryCreato
 
   return (
     <div className="modal-shell" role="dialog" aria-modal="true" aria-labelledby="category-create-title">
-      <button className="modal-backdrop" type="button" aria-label="关闭新增分类" onClick={onClose} />
+      <Button className="modal-backdrop" type="button" aria-label="关闭新增分类" onClick={onClose} />
       <form className="editor-panel category-editor-panel" onSubmit={handleSubmit}>
         <div className="editor-header">
           <div>
             <h2 id="category-create-title">新增分类</h2>
           </div>
-          <button className="icon-button" type="button" aria-label="关闭" onClick={onClose}>
+          <Button className="icon-button" type="button" aria-label="关闭" onClick={onClose}>
             <X size={16} />
-          </button>
+          </Button>
         </div>
 
         <label className="field">
@@ -4237,12 +4340,12 @@ function CategoryCreatorDialog({ categories, onClose, onCreate }: CategoryCreato
         {error && <p className="form-error">{error}</p>}
 
         <div className="editor-footer">
-          <button className="button ghost" type="button" onClick={onClose}>
+          <Button className="button ghost" type="button" onClick={onClose}>
             取消
-          </button>
-          <button className="button primary" type="submit" disabled={!canSave}>
+          </Button>
+          <Button className="button primary" type="submit" disabled={!canSave}>
             创建分类
-          </button>
+          </Button>
         </div>
       </form>
     </div>
@@ -4298,7 +4401,7 @@ function PromptEditor({ categories, initialDraft, mode, onClose, onSave }: Promp
 
   return (
     <div className="modal-shell" role="dialog" aria-modal="true" aria-label={mode === 'new' ? '新建提示词' : '编辑提示词'}>
-      <button className="modal-backdrop" type="button" aria-label="关闭编辑器" onClick={onClose} />
+      <Button className="modal-backdrop" type="button" aria-label="关闭编辑器" onClick={onClose} />
       <form
         className="editor-panel simple-editor-panel"
         onSubmit={(event) => {
@@ -4310,9 +4413,9 @@ function PromptEditor({ categories, initialDraft, mode, onClose, onSave }: Promp
           <div>
             <h2>{mode === 'new' ? '新建提示词' : '编辑提示词'}</h2>
           </div>
-          <button className="icon-button" type="button" aria-label="关闭" onClick={onClose}>
+          <Button className="icon-button" type="button" aria-label="关闭" onClick={onClose}>
             <X size={16} />
-          </button>
+          </Button>
         </div>
 
         <div className="editor-grid simple-editor-grid">
@@ -4330,7 +4433,7 @@ function PromptEditor({ categories, initialDraft, mode, onClose, onSave }: Promp
                 onFocus={() => setShowCategoryOptions(true)}
                 placeholder="选择或输入主文件夹"
               />
-              <button
+              <Button
                 className="combo-toggle"
                 type="button"
                 aria-label="展开主文件夹列表"
@@ -4338,12 +4441,12 @@ function PromptEditor({ categories, initialDraft, mode, onClose, onSave }: Promp
                 onClick={() => setShowCategoryOptions((isOpen) => !isOpen)}
               >
                 <ChevronDown size={16} />
-              </button>
+              </Button>
               {showCategoryOptions && (
                 <div className="combo-menu" role="listbox">
                   {categoryOptions.length ? (
                     categoryOptions.map((category) => (
-                      <button
+                      <Button
                         key={category}
                         className={category === draft.category ? 'active' : ''}
                         type="button"
@@ -4356,7 +4459,7 @@ function PromptEditor({ categories, initialDraft, mode, onClose, onSave }: Promp
                         }}
                       >
                         {category}
-                      </button>
+                      </Button>
                     ))
                   ) : (
                     <div className="combo-empty">保存后创建新文件夹</div>
@@ -4379,7 +4482,7 @@ function PromptEditor({ categories, initialDraft, mode, onClose, onSave }: Promp
 
         <label className="field content-field">
           <span>提示词内容</span>
-          <textarea
+          <Textarea
             value={draft.content}
             onChange={(event) => updateDraft('content', event.target.value)}
             placeholder="可以粘贴完整提示词，也可以直接输入"
@@ -4387,12 +4490,12 @@ function PromptEditor({ categories, initialDraft, mode, onClose, onSave }: Promp
         </label>
 
         <div className="editor-footer">
-          <button className="button ghost" type="button" onClick={onClose}>
+          <Button className="button ghost" type="button" onClick={onClose}>
             取消
-          </button>
-          <button className="button primary" type="submit" disabled={!canSave}>
+          </Button>
+          <Button className="button primary" type="submit" disabled={!canSave}>
             {mode === 'new' ? '创建提示词' : '保存修改'}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

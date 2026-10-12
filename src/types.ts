@@ -1,5 +1,15 @@
+export type DocumentFile = {
+  name: string;
+  size: number;
+  sha256: string;
+  addedAt: string;
+};
+
+// kind 为 'document' 的条目是文档库里的文件；不填就是提示词。
 export type PromptItem = {
   id: string;
+  kind?: 'document';
+  file?: DocumentFile;
   title: string;
   description?: string;
   content: string;

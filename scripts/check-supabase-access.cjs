@@ -128,6 +128,26 @@ const main = async () => {
       ? '[supabase-check] Authenticated upsert succeeded without changing stored snapshot content.'
       : '[supabase-check] Authenticated upsert succeeded by creating an empty snapshot for this test account.',
   );
+
+  // 客户端按 updated_at 做乐观锁：用当前值更新应命中 1 行，用过期值应命中 0 行。
+  const { data: current } = await client.from('prompt_libraries').select('updated_at').eq('user_id', userId).single();
+  const conditionalUpdate = (expected) =>
+    client
+      .from('prompt_libraries')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .eq('updated_at', expected)
+      .select('updated_at');
+
+  const fresh = await conditionalUpdate(current.updated_at);
+  const stale = await conditionalUpdate(current.updated_at);
+  if (fresh.error || stale.error) {
+    fail(`Conditional update failed: ${(fresh.error ?? stale.error).message}`);
+  } else if (fresh.data.length !== 1 || stale.data.length !== 0) {
+    fail(`Conditional update mismatch: fresh=${fresh.data.length} stale=${stale.data.length}, expected 1 and 0.`);
+  } else {
+    console.log('[supabase-check] Conditional update by updated_at works (fresh=1 row, stale=0 rows).');
+  }
 };
 
 main().catch((error) => {

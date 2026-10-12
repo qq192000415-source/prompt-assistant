@@ -1,10 +1,33 @@
-const { app, BrowserWindow, Menu, Tray, ipcMain, screen, shell, Notification } = require('electron');
+const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, screen, shell, Notification } = require('electron');
+const { execFile } = require('node:child_process');
+const attachmentStore = require('./attachmentStore.cjs');
+const { migrateLegacyUserData } = require('./userDataMigration.cjs');
 const { autoUpdater } = require('electron-updater');
 const fs = require('node:fs');
 const path = require('node:path');
 const { version: appVersion } = require('../package.json');
 
 const APP_VERSION_LABEL = `提示词助手${appVersion}`;
+
+// 数据目录固定为不带版本号的 prompt-assistant，升级不再换目录；首次启动从最近的旧版本目录搬数据。
+// PROMPT_ASSISTANT_USER_DATA 只给开发和测试用，避免测试数据写进真实目录。
+const userDataDir = process.env.PROMPT_ASSISTANT_USER_DATA || path.join(app.getPath('appData'), 'prompt-assistant');
+let userDataMigrationError = null;
+try {
+  migrateLegacyUserData(app.getPath('appData'), userDataDir);
+} catch (error) {
+  userDataMigrationError = error;
+}
+app.setPath('userData', userDataDir);
+app.whenReady().then(() => {
+  if (userDataMigrationError) {
+    dialog.showErrorBox(
+      '旧版本数据没有搬过来',
+      `从旧版本目录复制本机数据失败：${userDataMigrationError.message}
+旧数据仍在 %APPDATA% 下的“提示词助手X.Y.Z”目录里，没有被删除。`,
+    );
+  }
+});
 const APP_USER_MODEL_ID = 'com.promptassistant.desktop';
 
 function readPackagedUpdateUrl() {
@@ -132,6 +155,11 @@ function isAllowedNavigation(url) {
   }
 
   return url.startsWith('file://');
+}
+
+// 只把网页链接交给系统浏览器，file:、自定义协议等一律忽略。
+function openExternalWebUrl(url) {
+  if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
 }
 
 function isPortableBuild() {
@@ -625,7 +653,7 @@ function createWindow() {
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    openExternalWebUrl(url);
     return { action: 'deny' };
   });
 
@@ -633,7 +661,7 @@ function createWindow() {
     if (isAllowedNavigation(url)) return;
 
     event.preventDefault();
-    shell.openExternal(url);
+    openExternalWebUrl(url);
   });
 
   if (isDev && devServerUrl) {
@@ -646,6 +674,72 @@ function createWindow() {
 }
 
 ipcMain.handle('desktop:get-settings', () => readSettings());
+
+const documentsDir = () => path.join(app.getPath('userData'), 'attachments');
+
+// 把文件放进 Windows 剪贴板，粘贴到微信、QQ、邮件或资源管理器就是这个文件。
+// 路径走环境变量传给 PowerShell，不拼进命令字符串。
+function copyFileToClipboard(filePath) {
+  return new Promise((resolve, reject) => {
+    execFile(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', 'Set-Clipboard -LiteralPath $env:PA_CLIPBOARD_FILE'],
+      { env: { ...process.env, PA_CLIPBOARD_FILE: filePath }, windowsHide: true },
+      (error) => (error ? reject(new Error('复制文件到剪贴板失败')) : resolve()),
+    );
+  });
+}
+
+ipcMain.handle('documents:pick-and-add', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, { title: '添加文档', properties: ['openFile', 'multiSelections'] });
+  const added = [];
+  const errors = [];
+  for (const filePath of result.canceled ? [] : result.filePaths) {
+    try {
+      added.push(attachmentStore.addFile(documentsDir(), filePath));
+    } catch (error) {
+      errors.push({ name: path.basename(filePath), message: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return { added, errors };
+});
+
+ipcMain.handle('documents:has', (_event, sha) => attachmentStore.has(documentsDir(), sha));
+ipcMain.handle('documents:read-bytes', (_event, sha) => new Uint8Array(attachmentStore.readBytes(documentsDir(), sha)));
+ipcMain.handle('documents:write-bytes', (_event, sha, bytes) => attachmentStore.writeBytes(documentsDir(), sha, bytes));
+ipcMain.handle('documents:read-text', (_event, sha) => attachmentStore.readText(documentsDir(), sha));
+
+ipcMain.handle('documents:open', async (_event, sha, name) => {
+  const message = await shell.openPath(attachmentStore.materialize(documentsDir(), sha, name, { readOnly: true }));
+  if (message) throw new Error(message);
+});
+
+ipcMain.handle('documents:show-in-folder', (_event, sha, name) => {
+  shell.showItemInFolder(attachmentStore.materialize(documentsDir(), sha, name));
+});
+
+ipcMain.handle('documents:copy-file', (_event, sha, name) =>
+  copyFileToClipboard(attachmentStore.materialize(documentsDir(), sha, name)),
+);
+
+ipcMain.handle('documents:save-as', async (_event, sha, name) => {
+  const result = await dialog.showSaveDialog(mainWindow, { defaultPath: attachmentStore.safeFileName(name) });
+  if (result.canceled || !result.filePath) return false;
+  fs.writeFileSync(result.filePath, attachmentStore.readBytes(documentsDir(), sha));
+  return true;
+});
+
+// 拖拽必须在 dragstart 里同步发起，所以用 send 而不是 invoke。
+ipcMain.on('documents:start-drag', (event, sha, name) => {
+  try {
+    event.sender.startDrag({
+      file: attachmentStore.materialize(documentsDir(), sha, name),
+      icon: nativeImage.createFromPath(appIconPng).resize({ width: 32, height: 32 }),
+    });
+  } catch {
+    // 文件不在本机时无法拖出；界面在文件就绪前不允许拖动。
+  }
+});
 
 ipcMain.handle('desktop:update-settings', (_event, settings) => {
   const nextSettings = writeSettings(settings);

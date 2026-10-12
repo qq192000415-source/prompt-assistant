@@ -31,6 +31,8 @@ export type CloudSnapshot = {
   prompts: PromptItem[];
   categories: string[];
   subcategories: Record<string, string[]>;
+  documentCategories: string[];
+  documentSubcategories: Record<string, string[]>;
   deletedRecords: DeletedPromptRecord[];
   syncRecords: SyncRecord[];
   exportSettings: unknown;
@@ -183,8 +185,6 @@ export const getCloudConfig = (settings: CloudSettings = loadCloudSettings()): C
   };
 };
 
-export const cloudConfig = getCloudConfig();
-
 let supabaseClient: SupabaseClient | null = null;
 let supabaseClientKey = '';
 
@@ -225,10 +225,19 @@ const normalizeSubcategories = (value: unknown): Record<string, string[]> => {
   );
 };
 
+// 文档分类放在 export_settings.documentLibrary 里，不给表加列，旧库不用迁移也能同步。
+const readDocumentLibrary = (exportSettings: unknown) => {
+  const library = (exportSettings as { documentLibrary?: { categories?: unknown; subcategories?: unknown } } | null)
+    ?.documentLibrary;
+  return { categories: library?.categories, subcategories: library?.subcategories };
+};
+
 const rowToSnapshot = (row: PromptLibraryRow): CloudSnapshot => ({
   prompts: Array.isArray(row.prompts) ? (row.prompts as PromptItem[]) : [],
   categories: normalizeStringArray(row.categories),
   subcategories: normalizeSubcategories(row.subcategories),
+  documentCategories: normalizeStringArray(readDocumentLibrary(row.export_settings).categories),
+  documentSubcategories: normalizeSubcategories(readDocumentLibrary(row.export_settings).subcategories),
   deletedRecords: Array.isArray(row.deleted_records) ? (row.deleted_records as DeletedPromptRecord[]) : [],
   syncRecords: Array.isArray(row.sync_records) ? (row.sync_records as SyncRecord[]) : [],
   exportSettings: row.export_settings ?? {},
@@ -330,28 +339,88 @@ export const loadCloudSnapshot = async (
   return data ? rowToSnapshot(data as PromptLibraryRow) : null;
 };
 
+export const loadCloudUpdatedAt = async (userId: string, settings: CloudSettings = loadCloudSettings()) => {
+  const client = getSupabaseClient(settings);
+  const { data, error } = await client.from('prompt_libraries').select('updated_at').eq('user_id', userId).maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data?.updated_at as string | null | undefined) ?? null;
+};
+
+export class CloudConflictError extends Error {}
+
+// expectedUpdatedAt 是本机上次读到或写入的云端 updated_at；null 表示云端还没有这一行。
+// 云端已被其他设备改过时抛 CloudConflictError，调用方先合并再写。返回新的 updated_at。
 export const saveCloudSnapshot = async (
   userId: string,
   snapshot: CloudSnapshot,
+  expectedUpdatedAt: string | null,
   settings: CloudSettings = loadCloudSettings(),
-) => {
+): Promise<string> => {
   const config = getCloudConfig(settings);
   if (!config.enabled) throw new Error('请先配置 Supabase 云同步');
 
   const client = getSupabaseClient(settings);
-  const { error } = await client.from('prompt_libraries').upsert(
-    {
-      user_id: userId,
-      prompts: snapshot.prompts,
-      categories: snapshot.categories,
-      subcategories: snapshot.subcategories,
-      deleted_records: snapshot.deletedRecords,
-      sync_records: snapshot.syncRecords,
-      export_settings: snapshot.exportSettings,
-      updated_at: new Date().toISOString(),
+  const row = {
+    user_id: userId,
+    prompts: snapshot.prompts,
+    categories: snapshot.categories,
+    subcategories: snapshot.subcategories,
+    deleted_records: snapshot.deletedRecords,
+    sync_records: snapshot.syncRecords,
+    export_settings: {
+      ...(snapshot.exportSettings as object),
+      documentLibrary: { categories: snapshot.documentCategories, subcategories: snapshot.documentSubcategories },
     },
-    { onConflict: 'user_id' },
-  );
+    updated_at: new Date().toISOString(),
+  };
+  const table = client.from('prompt_libraries');
+  const { data, error } = await (expectedUpdatedAt === null
+    ? table.insert(row)
+    : table.update(row).eq('user_id', userId).eq('updated_at', expectedUpdatedAt)
+  ).select('updated_at');
 
+  if (error?.code === '23505' || (!error && !data?.length)) {
+    throw new CloudConflictError('云端数据已被其他设备更新');
+  }
   if (error) throw new Error(error.message);
+  return data[0].updated_at as string;
+};
+
+const DOCUMENT_BUCKET = 'prompt-attachments';
+
+const describeStorageError = (error: { message: string }) =>
+  /bucket not found/i.test(error.message)
+    ? '云端文件存储还没开启：请在 Supabase SQL Editor 执行最新的 supabase-schema.sql'
+    : error.message;
+
+// 文档文件按 <user_id>/<sha256> 存在私有 bucket 里，同内容只传一次。
+export const listCloudFileShas = async (userId: string, settings: CloudSettings = loadCloudSettings()) => {
+  const bucket = getSupabaseClient(settings).storage.from(DOCUMENT_BUCKET);
+  const shas = new Set<string>();
+  const pageSize = 1000;
+
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await bucket.list(userId, { limit: pageSize, offset });
+    if (error) throw new Error(describeStorageError(error));
+    data.forEach((item) => shas.add(item.name));
+    if (data.length < pageSize) return shas;
+  }
+};
+
+export const uploadCloudFile = async (
+  userId: string,
+  sha256: string,
+  bytes: Uint8Array,
+  settings: CloudSettings = loadCloudSettings(),
+) => {
+  const { error } = await getSupabaseClient(settings)
+    .storage.from(DOCUMENT_BUCKET)
+    .upload(`${userId}/${sha256}`, bytes, { contentType: 'application/octet-stream', upsert: false });
+  if (error && !/already exists|duplicate/i.test(error.message)) throw new Error(describeStorageError(error));
+};
+
+export const downloadCloudFile = async (userId: string, sha256: string, settings: CloudSettings = loadCloudSettings()) => {
+  const { data, error } = await getSupabaseClient(settings).storage.from(DOCUMENT_BUCKET).download(`${userId}/${sha256}`);
+  if (error) throw new Error(/not found|object/i.test(error.message) ? '云端也没有这个文件' : describeStorageError(error));
+  return new Uint8Array(await data.arrayBuffer());
 };

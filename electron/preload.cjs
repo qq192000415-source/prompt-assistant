@@ -15,6 +15,18 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     ipcRenderer.on('desktop-close-request', listener);
     return () => ipcRenderer.removeListener('desktop-close-request', listener);
   },
+  documents: {
+    pickAndAdd: () => ipcRenderer.invoke('documents:pick-and-add'),
+    has: (sha) => ipcRenderer.invoke('documents:has', sha),
+    readBytes: (sha) => ipcRenderer.invoke('documents:read-bytes', sha),
+    writeBytes: (sha, bytes) => ipcRenderer.invoke('documents:write-bytes', sha, bytes),
+    readText: (sha) => ipcRenderer.invoke('documents:read-text', sha),
+    open: (sha, name) => ipcRenderer.invoke('documents:open', sha, name),
+    showInFolder: (sha, name) => ipcRenderer.invoke('documents:show-in-folder', sha, name),
+    copyFile: (sha, name) => ipcRenderer.invoke('documents:copy-file', sha, name),
+    saveAs: (sha, name) => ipcRenderer.invoke('documents:save-as', sha, name),
+    startDrag: (sha, name) => ipcRenderer.send('documents:start-drag', sha, name),
+  },
   onUpdateStatus: (callback) => {
     const listener = (_event, status) => callback(status);
     ipcRenderer.on('desktop:update-status', listener);

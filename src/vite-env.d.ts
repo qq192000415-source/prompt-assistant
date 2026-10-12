@@ -55,6 +55,26 @@ type DesktopUpdateStatus = {
   updatedAt?: string;
 };
 
+type DesktopDocumentFile = {
+  name: string;
+  size: number;
+  sha256: string;
+  addedAt: string;
+};
+
+type DesktopDocumentsApi = {
+  pickAndAdd: () => Promise<{ added: DesktopDocumentFile[]; errors: Array<{ name: string; message: string }> }>;
+  has: (sha: string) => Promise<boolean>;
+  readBytes: (sha: string) => Promise<Uint8Array>;
+  writeBytes: (sha: string, bytes: Uint8Array) => Promise<void>;
+  readText: (sha: string) => Promise<string>;
+  open: (sha: string, name: string) => Promise<void>;
+  showInFolder: (sha: string, name: string) => Promise<void>;
+  copyFile: (sha: string, name: string) => Promise<void>;
+  saveAs: (sha: string, name: string) => Promise<boolean>;
+  startDrag: (sha: string, name: string) => void;
+};
+
 interface Window {
   promptAssistantDesktop?: {
     platform: string;
@@ -68,6 +88,7 @@ interface Window {
     installUpdate?: () => Promise<DesktopUpdateStatus>;
     onCloseRequest: (callback: () => void) => () => void;
     onUpdateStatus?: (callback: (status: DesktopUpdateStatus) => void) => () => void;
+    documents?: DesktopDocumentsApi;
   };
   promptAssistantFloating?: {
     showMain: () => Promise<void>;

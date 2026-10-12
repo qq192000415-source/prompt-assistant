@@ -53,7 +53,7 @@ npm run package:unpacked
 npm run package:all
 ```
 
-打包并自动发布到自有腾讯云服务器更新源：
+打包并自动发布到部署者自己的更新服务器（`.env` 的 `UPDATE_BASE_URL`）：
 
 ```bash
 npm run release:publish

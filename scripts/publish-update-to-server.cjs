@@ -73,18 +73,27 @@ const readReleaseManifest = () => {
     }))
     .sort((a, b) => b.size - a.size);
 
-  const installerName = manifestInstallerName || exeFiles[0]?.name;
+  let installerName = manifestInstallerName || exeFiles[0]?.name;
   if (!installerName) {
     throw new Error(`No installer exe found in ${releaseDir}`);
   }
 
-  const installerPath = path.join(releaseDir, installerName);
+  const declaredSize = manifestSizeMatch ? Number(manifestSizeMatch[1]) : null;
+  let installerPath = path.join(releaseDir, installerName);
   if (!fs.existsSync(installerPath)) {
-    throw new Error(`latest.yml points to missing installer: ${installerName}`);
+    const sizedMatches = exeFiles.filter((file) => declaredSize != null && file.size === declaredSize);
+    if (sizedMatches.length !== 1) {
+      throw new Error(`latest.yml points to missing installer: ${installerName}`);
+    }
+
+    const realName = sizedMatches[0].name;
+    fs.writeFileSync(latestPath, latestYaml.replaceAll(installerName, realName));
+    installerName = realName;
+    installerPath = path.join(releaseDir, installerName);
   }
 
   const installerSize = fs.statSync(installerPath).size;
-  const manifestSize = manifestSizeMatch ? Number(manifestSizeMatch[1]) : installerSize;
+  const manifestSize = declaredSize ?? installerSize;
   if (manifestSize !== installerSize) {
     throw new Error(
       `latest.yml size (${manifestSize}) does not match installer size (${installerSize}): ${installerName}`,
