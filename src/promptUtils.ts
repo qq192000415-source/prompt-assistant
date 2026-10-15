@@ -162,3 +162,17 @@ export const formatDate = (value?: string) => {
     minute: '2-digit',
   }).format(new Date(value));
 };
+
+// .md/.txt 的文字也存进条目正文，供全局搜索；预览和复制内容始终读文件本身。
+// ponytail: 正文最多存 20 万字，防止撑爆 localStorage；更大的文件只能按标题搜到。
+export const SEARCHABLE_TEXT_LIMIT = 200_000;
+
+const getFileExtension = (name: string) => name.toLowerCase().match(/\.([^.]+)$/)?.[1] ?? '';
+export const isMarkdownDocument = (name: string) => ['md', 'markdown'].includes(getFileExtension(name));
+export const isTextDocument = (name: string) => isMarkdownDocument(name) || getFileExtension(name) === 'txt';
+
+export const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+};

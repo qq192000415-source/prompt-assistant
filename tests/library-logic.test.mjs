@@ -4,10 +4,20 @@ import assert from 'node:assert/strict';
 // createId 读的是 window.crypto；Node 自带 crypto.randomUUID。
 globalThis.window ??= globalThis;
 
-const { appendPromptsToCategoryEnd, cleanCloudSnapshotRecords, cleanSyncRecords, dedupePrompts, mergeCloudSnapshot } = await import(
-  '../src/librarySync.ts'
-);
-const { parseCsvPrompts, parseImportedPrompts, parseTextPrompts } = await import('../src/promptStorage.ts');
+const {
+  appendPromptsToCategoryEnd,
+  cleanCloudSnapshotRecords,
+  cleanSyncRecords,
+  dedupePrompts,
+  deriveSubcategoryMap,
+  isSampleOnlySnapshot,
+  mergeCloudSnapshot,
+  reconcileWithCloud,
+  stampSnapshot,
+} = await import('../src/librarySync.ts');
+const { parseCsvPrompts, parseImportedByFormat, parseImportedPrompts, parseTextPrompts, serializePromptsAsCsv, serializePromptsAsText } =
+  await import('../src/promptStorage.ts');
+const { SAMPLE_PROMPTS } = await import('../src/data.ts');
 
 const ago = (minutes) => new Date(Date.now() - minutes * 60_000).toISOString();
 
@@ -208,4 +218,75 @@ test('删除文档文件夹不影响同名的提示词文件夹', () => {
 
   assert.deepEqual(cleaned.categories, ['工作']);
   assert.deepEqual(cleaned.documentCategories, []);
+});
+
+test('导出成 TXT、CSV 再导入，主文件夹、标题、正文不变', () => {
+  const items = [
+    prompt('a', { category: '写作', title: '带引号', content: '他说"你好"，然后,逗号\n\n空行之后的第二段' }),
+    prompt('b', { category: '编程', title: '第二条', content: '多行\n正文' }),
+  ];
+  const pick = (list) => list.map(({ category, title, content }) => ({ category, title, content }));
+
+  assert.deepEqual(pick(parseImportedByFormat(`﻿${serializePromptsAsCsv(items)}`, 'csv')), pick(items));
+  assert.deepEqual(pick(parseImportedByFormat(`﻿${serializePromptsAsText(items)}`, 'txt')), pick(items));
+});
+
+test('子分类表合并已存的和条目里出现的，去掉空白和重复', () => {
+  const map = deriveSubcategoryMap({ 写作: [' 润色 ', '润色', ''] }, [
+    prompt('a', { category: '写作', subcategory: '扩写' }),
+    prompt('b', { category: '编程', subcategory: '审查' }),
+    prompt('c', { category: '编程' }),
+  ]);
+
+  assert.deepEqual(map, { 写作: ['润色', '扩写'], 编程: ['审查'] });
+});
+
+test('只有示例数据才算示例快照；删过东西或有自己的条目都不算', () => {
+  assert.equal(isSampleOnlySnapshot(snapshot({ prompts: SAMPLE_PROMPTS })), true);
+  assert.equal(isSampleOnlySnapshot(snapshot({ prompts: [...SAMPLE_PROMPTS, prompt('mine')] })), false);
+  assert.equal(
+    isSampleOnlySnapshot(
+      snapshot({
+        prompts: SAMPLE_PROMPTS,
+        deletedRecords: [{ id: 'r', prompt: prompt('x'), deletedAt: ago(1), source: 'prompt', sourceName: 'x' }],
+      }),
+    ),
+    false,
+  );
+  assert.equal(isSampleOnlySnapshot(snapshot({ prompts: [] })), false);
+});
+
+test('登录同步：本机只有示例数据时直接用云端，不把示例合并上去', () => {
+  const cloud = snapshot({ prompts: [prompt('cloud')] });
+  const { snapshot: result, pullCloudOnly } = reconcileWithCloud(snapshot({ prompts: SAMPLE_PROMPTS }), cloud);
+
+  assert.equal(pullCloudOnly, true);
+  assert.deepEqual(result.prompts.map((item) => item.id), ['cloud']);
+});
+
+test('登录同步：本机有自己的条目时和云端合并；云端还没有数据时用本机', () => {
+  const local = snapshot({ prompts: [prompt('mine')] });
+  const merged = reconcileWithCloud(local, snapshot({ prompts: [prompt('cloud')] }));
+  assert.equal(merged.pullCloudOnly, false);
+  assert.deepEqual(merged.snapshot.prompts.map((item) => item.id).sort(), ['cloud', 'mine']);
+
+  const firstUpload = reconcileWithCloud(local, null);
+  assert.equal(firstUpload.pullCloudOnly, false);
+  assert.equal(firstUpload.snapshot, local);
+});
+
+test('写回云端前记一条同步记录放最前，并清掉过期记录和已删除的条目', () => {
+  const record = { id: 'now', action: 'auto', status: 'success', message: '', createdAt: ago(0) };
+  const stamped = stampSnapshot(
+    snapshot({
+      prompts: [prompt('keep'), prompt('gone')],
+      deletedRecords: [{ id: 'r', prompt: prompt('gone'), deletedAt: ago(1), source: 'prompt', sourceName: 'gone' }],
+      syncRecords: [{ id: 'old', action: 'auto', status: 'success', message: '', createdAt: ago(31 * 24 * 60) }],
+    }),
+    record,
+  );
+
+  assert.deepEqual(stamped.syncRecords.map((item) => item.id), ['now']);
+  assert.deepEqual(stamped.prompts.map((item) => item.id), ['keep']);
+  assert.ok(Date.parse(stamped.updatedAt) >= Date.now() - 1000);
 });

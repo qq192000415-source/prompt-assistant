@@ -335,3 +335,37 @@ export const parseCsvPrompts = (raw: string): PromptItem[] => {
   return prompts;
 };
 
+export type FileFormat = 'json' | 'txt' | 'csv';
+
+export const getFormatFromFileName = (fileName: string, fallback: FileFormat): FileFormat => {
+  const lowerName = fileName.toLowerCase();
+  if (lowerName.endsWith('.txt')) return 'txt';
+  if (lowerName.endsWith('.csv')) return 'csv';
+  if (lowerName.endsWith('.json')) return 'json';
+  return fallback;
+};
+
+export const parseImportedByFormat = (raw: string, format: FileFormat) => {
+  const cleanRaw = raw.replace(/^\uFEFF/, '');
+  if (format === 'txt') return parseTextPrompts(cleanRaw);
+  if (format === 'csv') return parseCsvPrompts(cleanRaw);
+  return parseImportedPrompts(cleanRaw);
+};
+
+const escapeCsvCell = (value: string) => `"${value.replace(/"/g, '""')}"`;
+
+export const serializePromptsAsText = (items: PromptItem[]) =>
+  items
+    .map((prompt) =>
+      [`主文件名：${prompt.category}`, `子文件名：${prompt.title}`, '提示词内容：', prompt.content.trim()].join('\n'),
+    )
+    .join('\n\n');
+
+export const serializePromptsAsCsv = (items: PromptItem[]) => {
+  const rows = [
+    ['主文件夹', '子文件名称', '提示词内容'],
+    ...items.map((prompt) => [prompt.category, prompt.title, prompt.content]),
+  ];
+
+  return rows.map((row) => row.map(escapeCsvCell).join(',')).join('\n');
+};

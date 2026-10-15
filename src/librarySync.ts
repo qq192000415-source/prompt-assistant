@@ -1,4 +1,6 @@
 import type { CloudSnapshot } from './cloudSync';
+import { SAMPLE_PROMPTS } from './data.ts';
+import { createId } from './promptUtils.ts';
 import type { DeletedPromptRecord, PromptItem, SyncRecord } from './types';
 
 const MAX_SYNC_RECORDS = 80;
@@ -397,3 +399,73 @@ export const cleanCloudSnapshotRecords = (snapshot: CloudSnapshot): CloudSnapsho
   };
 };
 
+const SAMPLE_PROMPT_IDS = new Set(SAMPLE_PROMPTS.map((prompt) => prompt.id));
+
+// 本机只有示例数据、也没删过东西时，登录后直接用云端数据，不把示例合并上去。
+export const isSampleOnlySnapshot = (snapshot: CloudSnapshot) =>
+  snapshot.prompts.length > 0 &&
+  snapshot.prompts.every((prompt) => SAMPLE_PROMPT_IDS.has(prompt.id)) &&
+  snapshot.deletedRecords.length === 0;
+
+// 登录或手动同步时把本机和云端合成一份：本机只有示例数据就直接用云端，云端还没有这一行就用本机。
+export const reconcileWithCloud = (localSnapshot: CloudSnapshot, cloudSnapshot: CloudSnapshot | null) => {
+  const pullCloudOnly = Boolean(cloudSnapshot && hasCloudSnapshotData(cloudSnapshot) && isSampleOnlySnapshot(localSnapshot));
+  const snapshot = cloudSnapshot ? (pullCloudOnly ? cloudSnapshot : mergeCloudSnapshot(localSnapshot, cloudSnapshot)) : localSnapshot;
+  return { snapshot, pullCloudOnly };
+};
+
+// 写回云端前：记一条同步记录、刷新 updatedAt、清掉过期记录和已删除的条目。
+export const stampSnapshot = (snapshot: CloudSnapshot, record: SyncRecord): CloudSnapshot =>
+  cleanCloudSnapshotRecords({
+    ...snapshot,
+    syncRecords: [record, ...(snapshot.syncRecords ?? [])],
+    updatedAt: new Date().toISOString(),
+  });
+
+export const createSyncRecord = (
+  action: SyncRecord['action'],
+  status: SyncRecord['status'],
+  message: string,
+): SyncRecord => ({
+  id: createId(),
+  action,
+  status,
+  message,
+  createdAt: new Date().toISOString(),
+});
+
+export const createDeletedRecord = (
+  prompt: PromptItem,
+  source: DeletedPromptRecord['source'],
+  sourceName: string,
+): DeletedPromptRecord => ({
+  id: createId(),
+  prompt,
+  source,
+  sourceName,
+  deletedAt: new Date().toISOString(),
+});
+
+export const uniqueCategories = (categories: string[]) =>
+  Array.from(new Set(categories.map((category) => category.trim()).filter(Boolean)));
+
+export const uniqueSubcategories = (subcategories: string[]) =>
+  Array.from(new Set(subcategories.map((subcategory) => subcategory.trim()).filter(Boolean)));
+
+export const deriveCategories = (storedCategories: string[], items: PromptItem[]) =>
+  uniqueCategories([...storedCategories, ...items.map((item) => item.category)]);
+
+export const deriveSubcategoryMap = (storedSubcategories: Record<string, string[]>, items: PromptItem[]) => {
+  const map: Record<string, string[]> = {};
+
+  for (const [category, subcategories] of Object.entries(storedSubcategories)) {
+    map[category] = uniqueSubcategories(subcategories);
+  }
+
+  for (const item of items) {
+    if (!item.subcategory) continue;
+    map[item.category] = uniqueSubcategories([...(map[item.category] ?? []), item.subcategory]);
+  }
+
+  return map;
+};

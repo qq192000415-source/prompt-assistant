@@ -1,12 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const readText = (...segments) => readFileSync(join(rootDir, ...segments), 'utf8');
 const readBytes = (...segments) => readFileSync(join(rootDir, ...segments));
+// 界面源码分在 App.tsx 和 src/components/ 下；按“整个界面里有没有”来断言，不绑定具体文件。
+const readUiSource = () =>
+  [
+    readText('src', 'App.tsx'),
+    ...readdirSync(join(rootDir, 'src', 'components'))
+      .filter((name) => name.endsWith('.tsx'))
+      .map((name) => readText('src', 'components', name)),
+  ].join('\n');
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 test('应用版本、窗口标题和打包文件名保持一致', () => {
@@ -67,7 +75,7 @@ test('desktop updater uses the deployer generic feed', () => {
   const packageJson = JSON.parse(readText('package.json'));
   const mainProcess = readText('electron', 'main.cjs');
   const preload = readText('electron', 'preload.cjs');
-  const appSource = readText('src', 'App.tsx');
+  const appSource = readUiSource();
   const styles = readText('src', 'styles.css');
   const viteEnv = readText('src', 'vite-env.d.ts');
 
@@ -108,7 +116,7 @@ test('desktop updater uses the deployer generic feed', () => {
 });
 
 test('cloud settings are Supabase-only', () => {
-  const appSource = readText('src', 'App.tsx');
+  const appSource = readUiSource();
   const cloudSync = readText('src', 'cloudSync.ts');
 
   assert.match(appSource, /cloud-settings-title/);
@@ -155,8 +163,9 @@ test('public source keeps deployer endpoints out of the repository', () => {
     'AGENTS.md',
     'PROJECT_CONTEXT.md',
     'WINDOWS_PACKAGE.md',
-    'src/cloudSync.ts',
-    'src/App.tsx',
+    ...readdirSync(join(rootDir, 'src'), { recursive: true })
+      .filter((name) => /\.(ts|tsx)$/.test(name))
+      .map((name) => `src/${name.replaceAll('\\', '/')}`),
     'electron/main.cjs',
     'electron/app-update-source.json',
     'scripts/publish-update-to-server.cjs',
@@ -176,7 +185,7 @@ test('public source keeps deployer endpoints out of the repository', () => {
 });
 
 test('设置页提供软件说明入口', () => {
-  const appSource = readText('src', 'App.tsx');
+  const appSource = readUiSource();
   const styles = readText('src', 'styles.css');
 
   assert.match(appSource, /软件说明/);
@@ -201,10 +210,10 @@ test('关闭确认弹窗选项不会被压成窄列', () => {
 });
 
 test('左侧栏只保留系统标题栏品牌，不再渲染重复品牌块', () => {
-  const appSource = readText('src', 'App.tsx');
+  const appSource = readUiSource();
   const styles = readText('src', 'styles.css');
 
-  assert.match(appSource, /import \{ APP_VERSION, APP_VERSION_LABEL \} from '\.\/appMeta';/);
+  assert.match(appSource, /import \{[^}]*APP_VERSION[^}]*\} from '\.\.?\/appMeta';/);
   assert.doesNotMatch(appSource, /className="brand-row"/);
   assert.doesNotMatch(appSource, /<Sparkles/);
   assert.doesNotMatch(styles, /\.brand-row/);
@@ -212,7 +221,7 @@ test('左侧栏只保留系统标题栏品牌，不再渲染重复品牌块', ()
 });
 
 test('侧栏新增分类按钮使用应用内弹窗创建分类', () => {
-  const appSource = readText('src', 'App.tsx');
+  const appSource = readUiSource();
   const styles = readText('src', 'styles.css');
 
   assert.match(appSource, /const \[isCategoryCreatorOpen, setIsCategoryCreatorOpen\] = useState\(false\);/);
@@ -232,7 +241,7 @@ test('侧栏新增分类按钮使用应用内弹窗创建分类', () => {
 });
 
 test('顶部菜单栏承载筛选、导入导出、设置和搜索，云端操作放在侧栏底部', () => {
-  const appSource = readText('src', 'App.tsx');
+  const appSource = readUiSource();
   const styles = readText('src', 'styles.css');
   const sidebarSource = appSource.match(/function Sidebar[\s\S]+?type CategoryNavItemProps/)?.[0] ?? '';
   const topMenuSource = appSource.match(/function TopMenuBar[\s\S]+?type TopViewMenuItemProps/)?.[0] ?? '';
@@ -296,7 +305,7 @@ test('顶部搜索有关键词时保持全局搜索，不受当前分类视图�
 });
 
 test('新增和导入的子文件追加到所属主文件夹末尾', () => {
-  const appSource = readText('src', 'App.tsx');
+  const appSource = readUiSource();
 
   assert.match(appSource, /setPrompts\(\(items\) => appendPromptsToCategoryEnd\(items, \[newPrompt\]\)\);/);
   assert.match(appSource, /setPrompts\(\(items\) => appendPromptsToCategoryEnd\(items, normalized\)\);/);
@@ -305,10 +314,10 @@ test('新增和导入的子文件追加到所属主文件夹末尾', () => {
 });
 
 test('左侧主文件夹和子文件点击不触发重命名', () => {
-  const appSource = readText('src', 'App.tsx');
+  const appSource = readUiSource();
   const categoryItemSource = appSource.match(/function CategoryNavItem[\s\S]+?type SubcategoryNavItemProps/)?.[0] ?? '';
   const subcategoryItemSource = appSource.match(/function SubcategoryNavItem[\s\S]+?type PromptTreeItemProps/)?.[0] ?? '';
-  const promptTreeItemSource = appSource.match(/function PromptTreeItem[\s\S]+?type TopMenuBarProps/)?.[0] ?? '';
+  const promptTreeItemSource = readText('src', 'components', 'Sidebar.tsx').match(/function PromptTreeItem[\s\S]+$/)?.[0] ?? '';
 
   assert.doesNotMatch(categoryItemSource, /onDoubleClick/);
   assert.doesNotMatch(subcategoryItemSource, /onDoubleClick/);
@@ -318,7 +327,7 @@ test('左侧主文件夹和子文件点击不触发重命名', () => {
 });
 
 test('提示词顶部动作区提供直接复制提示词按钮', () => {
-  const appSource = readText('src', 'App.tsx');
+  const appSource = readUiSource();
   const styles = readText('src', 'styles.css');
   const fullCardSource = appSource.match(/function FullPromptCard[\s\S]+?type PromptDetailProps/)?.[0] ?? '';
 
