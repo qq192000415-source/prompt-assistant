@@ -217,7 +217,9 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 
 ### Log Entries
 
-- 2026-10-15：版本 `1.3.30`，删除无用代码，功能不变。删掉：侧栏 `SubcategoryNavItem`（从 1.3.10 起就没被渲染过），`App.tsx` 里只传给它的 `renameSubcategory`、`deleteSubcategory`、`subcategoryMap`，对应的 `.subcategory-item`、`.subcategory-tree`、`.subcategory-dot` 样式，`appMeta.ts` 的 `APP_NAME`、`APP_VERSION_LABEL`，依赖 `@radix-ui/react-dialog`、`@radix-ui/react-label`。子分类数据本身（存储、同步、搜索、按子分类的视图）都没动。保留 VPS 设置兼容和旧数据导入脚本，原因见 Task List。
+- 2026-10-15：`AGENTS.md` 新增「结构约定」，作为长期规则。内容来自用户给的《开发要求》（模块化、核心与外壳分开、配置与代码分开），没有照抄原文，而是写成本项目可检查的具体边界：纯函数放哪、每类外部依赖的唯一出入口、`App.tsx` 和 `src/components/` 的分工、何时单独成文件、删除功能要删干净、什么放 `.env`。只改文档，不需要递增版本和发布；公开仓库下次发版时一起同步。
+
+- 2026-10-15：版本 `1.3.30`，删除无用代码，功能不变。删掉：侧栏 `SubcategoryNavItem`（从 1.3.10 起就没被渲染过），`App.tsx` 里只传给它的 `renameSubcategory`、`deleteSubcategory`、`subcategoryMap`，对应的 `.subcategory-item`、`.subcategory-tree`、`.subcategory-dot` 样式，`appMeta.ts` 的 `APP_NAME`、`APP_VERSION_LABEL`，依赖 `@radix-ui/react-dialog`、`@radix-ui/react-label`。子分类数据本身（存储、同步、搜索、按子分类的视图）都没动。保留 VPS 设置兼容和旧数据导入脚本，原因见 Task List。`release:publish` 生成了三类产物，上传后公网校验通过。打了 tag `stable-提示词助手1.3.30`。公开仓库同步到 `main`（提交 `1e4b16f`），推送前扫描过，没有 IP、邮箱、更新域名、密钥。
 - 2026-10-15：版本 `1.3.29`，结构整理，功能和界面不变。`App.tsx` 从 4692 行降到约 1450 行。本机状态读写移到 `src/localState.ts`，桌面设置归一移到 `src/desktopSettings.ts`。分类派生、示例快照判断、同步记录工厂移到 `librarySync.ts`，导出序列化移到 `promptStorage.ts`。云同步时机（登录合并、防抖保存、冲突合并、焦点拉取、文档补传）移到 `src/useCloudSync.ts`，其中的合并决策抽成纯函数 `reconcileWithCloud`、`stampSnapshot`。界面子组件拆到 `src/components/`。源码正则测试改为检查全部界面源码，公开源码扫描覆盖 `src` 下所有 .ts/.tsx。在分支 `refactor/split-app` 上分三步提交后合回 `master`。`release:publish` 生成了安装版、便携版、`win-unpacked`，上传安装包、blockmap、`latest.yml` 后公网校验通过。打了 tag `stable-提示词助手1.3.29`。公开仓库按快照流程同步到 `main`（提交 `02b2e59`），推送前扫描过，没有 IP、邮箱、更新域名、密钥。
 - 2026-10-12：版本 `1.3.28`。配套指令区新增“复制指令+内容”（.md/.txt）和“复制指令+文件”（其他格式，两步）。
 - 2026-10-12：版本 `1.3.27`。文档新增「配套指令」：文件信息下方可以添加、编辑、复制一段给 AI 的指令。
