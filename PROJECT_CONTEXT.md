@@ -4,7 +4,7 @@ Last updated: 2026-10-15
 
 Project root: 仓库根目录
 
-Current source version: `1.3.29`
+Current source version: `1.3.30`
 
 Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 
@@ -14,7 +14,7 @@ Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 
 - 当前主项目目录：仓库根目录
 - 当前分支：`master`
-- 当前源码版本：`1.3.29`
+- 当前源码版本：`1.3.30`
 - 云同步只使用 Supabase Auth + `public.prompt_libraries`，不再使用自建/VPS 同步服务。
 - 本机数据目录固定为 `%APPDATA%\prompt-assistant`（1.3.26 起）。旧版本按版本号分目录（`提示词助手X.Y.Z`），首次启动自动从最近使用的旧目录搬数据，旧目录保留。
 - 安装版自动更新源由部署者写入本机 `.env` 的 `UPDATE_BASE_URL`。仓库不保存真实服务器地址。
@@ -136,7 +136,7 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 
 ### Current Progress
 
-当前源码版本为 `1.3.29`。左栏可在「提示词 | 文档」间切换，文档库原样保存文件。界面升级到 shadcn/ui 设计令牌，保留双栏工作流，并支持本机浅色/深色外观。安装包更新源改为本项目自己的子域名，地址只写在本机 `.env`，不和其他项目共用主机名。
+当前源码版本为 `1.3.30`。左栏可在「提示词 | 文档」间切换，文档库原样保存文件。界面升级到 shadcn/ui 设计令牌，保留双栏工作流，并支持本机浅色/深色外观。安装包更新源改为本项目自己的子域名，地址只写在本机 `.env`，不和其他项目共用主机名。
 
 - 云同步：Supabase Auth + `prompt_libraries`，地址来自 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY`
 - 安装包更新：部署者自己的 HTTPS 目录，地址来自 `UPDATE_BASE_URL`
@@ -156,6 +156,7 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 
 ### Latest Verification
 
+- 2026-10-15：`1.3.30` 测试 53 项通过，`npx tsc -b` 通过，开 `--noUnusedLocals --noUnusedParameters` 也没有报错，`npm run build` 通过。浏览器开发版实测：给提示词加子分类后，侧栏分类树、分类视图、行操作菜单都正常，控制台没有报错。
 - 2026-10-15：`1.3.29` 结构重构。测试 53 项通过（新增 10 项行为测试），`npx tsc -b` 和全部 `.cjs` 的 `node --check` 通过，`npm run build` 通过。故意改坏 CSV 转义、删除记录过期过滤、“只有示例数据时只拉云端”这三处后，对应测试都会失败。浏览器开发版实测：新建提示词、删除主文件夹走确认弹窗、在删除记录里恢复、全局搜索、切到文档库、设置、登录面板、新建分类弹窗都正常，界面截图和改动前一致。Electron 开发版用临时数据目录（`PROMPT_ASSISTANT_USER_DATA`）实测：通过桌面桥写入一个 .md 文档后，文档库能显示 Markdown 预览和文件操作按钮；设置页能读到主进程的桌面设置。没有真实账号，所以没实测云同步登录、自动保存和冲突合并，只用单元测试覆盖了合并决策。
 - 2026-10-12：`1.3.28` 测试 43 项通过，`npx tsc -b` 通过。Electron 实测：剪贴板同时放文件和文字时，Chromium 的 paste 事件只有 `Files`，文字丢失，所以放弃这个做法。.md 点“复制指令+内容”后，paste 事件拿到指令 + 分隔线 + 全文。.docx 第一步剪贴板是“指令 + 文件路径”，按钮变成“② 复制文件”，第二步剪贴板是 `需求说明.docx`。
 - 2026-10-12：`1.3.27` 测试 43 项通过，`npx tsc -b` 通过。Electron 开发版实测：文档上点“添加配套指令”，写两行后按 Ctrl+S 保存，正常显示、写入 localStorage 的 `description`；复制指令拿到原文；搜索指令里的文字能搜到这个文档。
@@ -208,15 +209,16 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 | Done | 同步/去重/导入改成可测 | 把 `App.tsx` 顶部纯函数移到独立模块，用真实输入写行为测试 |
 | Done | 结构整理第 1–3 步 | 纯函数移出 App、云同步时机移到 `useCloudSync`、子组件拆到 `src/components/`（1.3.29） |
 | Todo P2 | 云同步登录实测 | 1.3.29 重构了云同步的触发代码；需要用真实账号登录一次，确认登录合并、改动后自动保存、两台设备互改能合并 |
-| Todo P3 | 删掉未使用的 `SubcategoryNavItem` | `src/components/Sidebar.tsx` 里定义了但没有任何地方渲染，重构前就是这样 |
-| Todo | 遗留代码去留 | `cloudSync.ts` 里的 `vps` 设置兼容分支、`scripts/import-vps-store-to-supabase.cjs` 离线导入预案，需要用户决定是否删除 |
+| Done | 删除无用代码 | 1.3.30：删掉从 1.3.10 起就没被渲染过的子分类重命名/删除界面及其处理函数和样式、`appMeta` 里没人用的两个常量、没被引用的依赖 `@radix-ui/react-dialog` 和 `@radix-ui/react-label` |
+| Keep | 遗留代码保留 | `cloudSync.ts` 的 `vps` 设置兼容：老版本本地存了 `provider: vps` 时，靠它映射回 Supabase，删了这些用户会变成“未配置云端”。`scripts/import-vps-store-to-supabase.cjs`：拿到旧 `store.json` 时用来恢复数据，不进安装包 |
 | Todo P2 | 去掉明文记住密码 | `prompt-library.cloudRememberedLogin.v1` 存明文密码；Supabase 已持久化会话，只记邮箱即可 |
 | Done | 外链协议白名单 | `electron/main.cjs` 的 `openExternal` 只放行 `http:`、`https:` |
 | Todo P3 | schema 去掉 anon select 授权 | RLS 已拦截，授权本身无用 |
 
 ### Log Entries
 
-- 2026-10-15：版本 `1.3.29`，结构整理，功能和界面不变。`App.tsx` 从 4692 行降到约 1450 行。本机状态读写移到 `src/localState.ts`，桌面设置归一移到 `src/desktopSettings.ts`。分类派生、示例快照判断、同步记录工厂移到 `librarySync.ts`，导出序列化移到 `promptStorage.ts`。云同步时机（登录合并、防抖保存、冲突合并、焦点拉取、文档补传）移到 `src/useCloudSync.ts`，其中的合并决策抽成纯函数 `reconcileWithCloud`、`stampSnapshot`。界面子组件拆到 `src/components/`。源码正则测试改为检查全部界面源码，公开源码扫描覆盖 `src` 下所有 .ts/.tsx。在分支 `refactor/split-app` 上分三步提交后合回 `master`。
+- 2026-10-15：版本 `1.3.30`，删除无用代码，功能不变。删掉：侧栏 `SubcategoryNavItem`（从 1.3.10 起就没被渲染过），`App.tsx` 里只传给它的 `renameSubcategory`、`deleteSubcategory`、`subcategoryMap`，对应的 `.subcategory-item`、`.subcategory-tree`、`.subcategory-dot` 样式，`appMeta.ts` 的 `APP_NAME`、`APP_VERSION_LABEL`，依赖 `@radix-ui/react-dialog`、`@radix-ui/react-label`。子分类数据本身（存储、同步、搜索、按子分类的视图）都没动。保留 VPS 设置兼容和旧数据导入脚本，原因见 Task List。
+- 2026-10-15：版本 `1.3.29`，结构整理，功能和界面不变。`App.tsx` 从 4692 行降到约 1450 行。本机状态读写移到 `src/localState.ts`，桌面设置归一移到 `src/desktopSettings.ts`。分类派生、示例快照判断、同步记录工厂移到 `librarySync.ts`，导出序列化移到 `promptStorage.ts`。云同步时机（登录合并、防抖保存、冲突合并、焦点拉取、文档补传）移到 `src/useCloudSync.ts`，其中的合并决策抽成纯函数 `reconcileWithCloud`、`stampSnapshot`。界面子组件拆到 `src/components/`。源码正则测试改为检查全部界面源码，公开源码扫描覆盖 `src` 下所有 .ts/.tsx。在分支 `refactor/split-app` 上分三步提交后合回 `master`。`release:publish` 生成了安装版、便携版、`win-unpacked`，上传安装包、blockmap、`latest.yml` 后公网校验通过。打了 tag `stable-提示词助手1.3.29`。公开仓库按快照流程同步到 `main`（提交 `02b2e59`），推送前扫描过，没有 IP、邮箱、更新域名、密钥。
 - 2026-10-12：版本 `1.3.28`。配套指令区新增“复制指令+内容”（.md/.txt）和“复制指令+文件”（其他格式，两步）。
 - 2026-10-12：版本 `1.3.27`。文档新增「配套指令」：文件信息下方可以添加、编辑、复制一段给 AI 的指令。
 - 2026-10-12：按快照流程把源码同步到 GitHub `main`（提交 `67d5c60`，内容与本地 1.3.26 一致）。推送前扫描过，没有 IP、邮箱、更新域名、密钥。

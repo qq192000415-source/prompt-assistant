@@ -61,7 +61,6 @@ import {
   filterPrompts,
   getViewLabel,
   isTextDocument,
-  makeSubcategoryView,
   parseSubcategoryView,
   parseTags,
   SEARCHABLE_TEXT_LIMIT,
@@ -168,7 +167,6 @@ function App() {
     ]);
   const storedCategories = isDocumentMode ? documentCategories : promptCategories;
   const setStoredCategories = isDocumentMode ? setDocumentCategories : setPromptCategories;
-  const storedSubcategories = isDocumentMode ? documentSubcategories : promptSubcategories;
   const setStoredSubcategories = isDocumentMode ? setDocumentSubcategories : setPromptSubcategories;
   const [activeView, setActiveView] = useState<ViewKey>('all');
   const [displayMode, setDisplayMode] = useState<DisplayMode>('collection');
@@ -312,7 +310,6 @@ function App() {
   }, []);
 
   const categories = useMemo(() => deriveCategories(storedCategories, prompts), [storedCategories, prompts]);
-  const subcategoryMap = useMemo(() => deriveSubcategoryMap(storedSubcategories, prompts), [storedSubcategories, prompts]);
 
   const visiblePrompts = useMemo(() => filterPrompts(prompts, activeView, query), [prompts, activeView, query]);
   // 搜索在当前库里进行；另一个库也有匹配时给出提示，一键切过去看。
@@ -601,70 +598,6 @@ function App() {
           setMode('list');
         }
         showToast(promptCount ? '主文件夹和提示词已删除' : '分类已删除');
-      },
-    });
-  };
-
-  const renameSubcategory = (category: string, oldName: string, nextName: string) => {
-    const normalizedName = nextName.trim();
-    if (!normalizedName || normalizedName === oldName) return true;
-
-    if ((subcategoryMap[category] ?? []).includes(normalizedName)) {
-      showToast('这个子分类已经存在');
-      return false;
-    }
-
-    const now = new Date().toISOString();
-    markLibraryChanged();
-    setStoredSubcategories((items) => {
-      const current = items[category] ?? [];
-      return {
-        ...items,
-        [category]: uniqueSubcategories(current.map((item) => (item === oldName ? normalizedName : item))),
-      };
-    });
-    setPrompts((items) =>
-      items.map((item) =>
-        item.category === category && item.subcategory === oldName
-          ? { ...item, subcategory: normalizedName, updatedAt: now }
-          : item,
-      ),
-    );
-    if (activeView === makeSubcategoryView(category, oldName)) {
-      setActiveView(makeSubcategoryView(category, normalizedName));
-    }
-    showToast('子分类已重命名');
-    return true;
-  };
-
-  const deleteSubcategory = (category: string, subcategory: string) => {
-    const promptCount = prompts.filter((prompt) => prompt.category === category && prompt.subcategory === subcategory).length;
-    const message = promptCount
-      ? `确认删除“${subcategory}”？${promptCount} 条提示词会移动到“${category}”。`
-      : `确认删除“${subcategory}”？`;
-
-    askConfirm({
-      title: '删除子分类',
-      message,
-      confirmLabel: '确认删除',
-      onConfirm: () => {
-        const now = new Date().toISOString();
-        markLibraryChanged();
-        setStoredSubcategories((items) => ({
-          ...items,
-          [category]: uniqueSubcategories((items[category] ?? []).filter((item) => item !== subcategory)),
-        }));
-        setPrompts((items) =>
-          items.map((item) =>
-            item.category === category && item.subcategory === subcategory
-              ? { ...item, subcategory: undefined, updatedAt: now }
-              : item,
-          ),
-        );
-        if (activeView === makeSubcategoryView(category, subcategory)) {
-          setActiveView(`category:${category}`);
-        }
-        showToast('子分类已删除');
       },
     });
   };
@@ -1217,7 +1150,6 @@ function App() {
         cloudEmail={cloud.cloudEmail}
         cloudEnabled={cloud.cloudEnabled}
         cloudStatus={cloud.cloudStatus}
-        subcategoryMap={subcategoryMap}
         onAddCategory={openCategoryCreator}
         onAddSubcategory={isDocumentMode ? (category) => void addDocuments(category) : openNewEditorInCategory}
         onChangeView={changeView}
@@ -1227,14 +1159,12 @@ function App() {
         onChangeLibraryMode={changeLibraryMode}
         onDeleteCategory={deleteCategory}
         onDeletePrompt={deletePrompt}
-        onDeleteSubcategory={deleteSubcategory}
         onManualSync={manualCloudSync}
         onMoveCategory={moveCategory}
         onMovePrompt={movePrompt}
         onOpenAuth={() => setIsAuthOpen(true)}
         onRenameCategory={renameCategory}
         onRenamePrompt={renamePrompt}
-        onRenameSubcategory={renameSubcategory}
         onSelectPrompt={selectPromptFromSidebar}
         onSignOut={cloud.signOut}
         onStartResize={startSidebarResize}

@@ -63,7 +63,6 @@ type SidebarProps = {
   cloudStatus: string;
   isGlobalSearchActive: boolean;
   libraryMode: LibraryMode;
-  subcategoryMap: Record<string, string[]>;
   onChangeLibraryMode: (mode: LibraryMode) => void;
   onAddCategory: () => void;
   onAddSubcategory: (category: string) => void;
@@ -72,14 +71,12 @@ type SidebarProps = {
   onCreatePrompt: () => void;
   onDeleteCategory: (category: string) => void;
   onDeletePrompt: (id: string) => void;
-  onDeleteSubcategory: (category: string, subcategory: string) => void;
   onManualSync: () => void | Promise<void>;
   onMoveCategory: (category: string, direction: MoveDirection) => void;
   onMovePrompt: (id: string, direction: MoveDirection) => void;
   onOpenAuth: () => void;
   onRenameCategory: (category: string, nextName: string) => boolean;
   onRenamePrompt: (id: string, nextTitle: string) => boolean;
-  onRenameSubcategory: (category: string, subcategory: string, nextName: string) => boolean;
   onSelectPrompt: (prompt: PromptItem) => void;
   onSignOut: () => void;
   onStartResize: (event: ReactPointerEvent<HTMLButtonElement>) => void;
@@ -97,7 +94,6 @@ export function Sidebar({
   cloudStatus,
   isGlobalSearchActive,
   libraryMode,
-  subcategoryMap,
   onChangeLibraryMode,
   onAddCategory,
   onAddSubcategory,
@@ -106,14 +102,12 @@ export function Sidebar({
   onCreatePrompt,
   onDeleteCategory,
   onDeletePrompt,
-  onDeleteSubcategory,
   onManualSync,
   onMoveCategory,
   onMovePrompt,
   onOpenAuth,
   onRenameCategory,
   onRenamePrompt,
-  onRenameSubcategory,
   onSelectPrompt,
   onSignOut,
   onStartResize,
@@ -487,98 +481,6 @@ function CategoryNavItem({
           </div>,
           document.body,
         )}
-      </div>
-    </div>
-  );
-}
-
-type SubcategoryNavItemProps = {
-  active: boolean;
-  count: number;
-  name: string;
-  onDelete: () => void;
-  onOpen: () => void;
-  onRename: (nextName: string) => boolean;
-};
-
-function SubcategoryNavItem({ active, count, name, onDelete, onOpen, onRename }: SubcategoryNavItemProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [draftName, setDraftName] = useState(name);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!isEditing) {
-      setDraftName(name);
-    }
-  }, [name, isEditing]);
-
-  useEffect(() => {
-    if (isEditing) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }
-  }, [isEditing]);
-
-  const commitRename = () => {
-    const success = onRename(draftName);
-    if (success) {
-      setIsEditing(false);
-    } else {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }
-  };
-
-  const cancelRename = () => {
-    setDraftName(name);
-    setIsEditing(false);
-  };
-
-  return (
-    <div className={`category-item subcategory-item ${active ? 'active' : ''}`}>
-      {isEditing ? (
-        <form
-          className="category-edit-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            commitRename();
-          }}
-        >
-          <span className="nav-icon subcategory-dot" />
-          <input
-            ref={inputRef}
-            value={draftName}
-            onBlur={commitRename}
-            onChange={(event) => setDraftName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') {
-                event.preventDefault();
-                cancelRename();
-              }
-            }}
-          />
-          <span className="nav-meta">{count}</span>
-        </form>
-      ) : (
-        <Button className="category-open" type="button" onClick={onOpen}>
-          <span className="nav-icon subcategory-dot" />
-          <span className="nav-label">{name}</span>
-          <span className="nav-meta">{count}</span>
-        </Button>
-      )}
-      <div className="category-actions">
-        <Button
-          className="mini-action"
-          type="button"
-          aria-label={`重命名${name}`}
-          title="重命名"
-          onClick={() => setIsEditing(true)}
-        >
-          <Pencil size={13} />
-        </Button>
-        <Button className="mini-action" type="button" aria-label={`删除${name}`} title="删除" onClick={onDelete}>
-          <Trash2 size={13} />
-        </Button>
       </div>
     </div>
   );

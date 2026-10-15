@@ -18,7 +18,7 @@ const readUiSource = () =>
 test('sidebar row action menu keeps category list scroll bounded', () => {
   const appSource = readUiSource();
   const styles = readText('src', 'styles.css');
-  const categoryItemSource = appSource.match(/function CategoryNavItem[\s\S]+?type SubcategoryNavItemProps/)?.[0] ?? '';
+  const categoryItemSource = appSource.match(/function CategoryNavItem[\s\S]+?type PromptTreeItemProps/)?.[0] ?? '';
   const promptTreeItemSource = readText('src', 'components', 'Sidebar.tsx').match(/function PromptTreeItem[\s\S]+$/)?.[0] ?? '';
 
   assert.doesNotMatch(styles, /\.categories:has\(\.row-action-menu\)/);

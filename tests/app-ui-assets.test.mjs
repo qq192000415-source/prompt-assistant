@@ -315,12 +315,10 @@ test('新增和导入的子文件追加到所属主文件夹末尾', () => {
 
 test('左侧主文件夹和子文件点击不触发重命名', () => {
   const appSource = readUiSource();
-  const categoryItemSource = appSource.match(/function CategoryNavItem[\s\S]+?type SubcategoryNavItemProps/)?.[0] ?? '';
-  const subcategoryItemSource = appSource.match(/function SubcategoryNavItem[\s\S]+?type PromptTreeItemProps/)?.[0] ?? '';
+  const categoryItemSource = appSource.match(/function CategoryNavItem[\s\S]+?type PromptTreeItemProps/)?.[0] ?? '';
   const promptTreeItemSource = readText('src', 'components', 'Sidebar.tsx').match(/function PromptTreeItem[\s\S]+$/)?.[0] ?? '';
 
   assert.doesNotMatch(categoryItemSource, /onDoubleClick/);
-  assert.doesNotMatch(subcategoryItemSource, /onDoubleClick/);
   assert.doesNotMatch(promptTreeItemSource, /onDoubleClick/);
   assert.match(categoryItemSource, /className="row-action-menu-item"[\s\S]+?setIsEditing\(true\);[\s\S]+?重命名/);
   assert.match(promptTreeItemSource, /className="row-action-menu-item"[\s\S]+?startRename\(\);[\s\S]+?重命名/);
