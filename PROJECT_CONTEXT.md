@@ -4,7 +4,7 @@ Last updated: 2026-10-17
 
 Project root: 仓库根目录
 
-Current source version: `1.3.31`
+Current source version: `1.3.32`
 
 Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 
@@ -14,7 +14,7 @@ Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 
 - 当前主项目目录：仓库根目录
 - 当前分支：`master`
-- 当前源码版本：`1.3.31`
+- 当前源码版本：`1.3.32`
 - 云同步只使用 Supabase Auth + `public.prompt_libraries`，不再使用自建/VPS 同步服务。
 - 本机数据目录固定为 `%APPDATA%\prompt-assistant`（1.3.26 起）。旧版本按版本号分目录（`提示词助手X.Y.Z`），首次启动自动从最近使用的旧目录搬数据，旧目录保留。
 - 安装版自动更新源由部署者写入本机 `.env` 的 `UPDATE_BASE_URL`。仓库不保存真实服务器地址。
@@ -52,6 +52,7 @@ Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 - 指令和文件一起给 AI：.md/.txt 一次复制“指令 + 文件全文”；其他格式分两步，先复制“指令 + 文件路径”（终端 AI 够用），按钮变成“② 复制文件”再复制文件。原因：剪贴板同时放文件和文字时，Chromium 系软件（网页 AI、Claude/ChatGPT 桌面版、Cursor、VS Code）粘贴只拿到文件，文字会丢，2026-10-12 实测确认。
 - 搜索在当前库内全局匹配，另一个库也有结果时显示提示，一键切换。
 - 公开仓库只放不带历史的快照：本地 `master` 有完整旧历史，不能直接推。同步流程：`git checkout public-source` → `git read-tree -u --reset master` → 扫描 IP/邮箱/域名/密钥 → 提交 → `git push origin public-source:main` → 切回 `master`。
+- 快捷方式名固定为 `提示词助手`，不带版本号（窗口标题、exe、安装包仍带）。原因：带版本号时每次升级换一个快捷方式名，旧快捷方式指向已删除的 exe，Windows 拿它给任务栏按钮找图标，就显示白色空图标。主进程启动时（仅打包版）还会清掉开始菜单里 `提示词助手*.lnk` 中目标 exe 已不存在的，处理已经留在用户电脑上的旧快捷方式。
 - 安装包更新文件放在部署者自己的 HTTPS 目录，默认远程路径是 `/prompt-assistant-updates/win/`。
 - 禁止写入或提交 Supabase secret key、service_role key、服务器密码等秘密信息。
 - 修改会被打包的源码或配置后，必须递增可见应用版本和 package 版本，并运行测试、语法检查、完整打包和发布验证。
@@ -137,7 +138,7 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 
 ### Current Progress
 
-当前源码版本为 `1.3.31`。左栏可在「提示词 | 文档」间切换，文档库原样保存文件。界面升级到 shadcn/ui 设计令牌，保留双栏工作流，并支持本机浅色/深色外观。安装包更新源改为本项目自己的子域名，地址只写在本机 `.env`，不和其他项目共用主机名。
+当前源码版本为 `1.3.32`。左栏可在「提示词 | 文档」间切换，文档库原样保存文件。界面升级到 shadcn/ui 设计令牌，保留双栏工作流，并支持本机浅色/深色外观。安装包更新源改为本项目自己的子域名，地址只写在本机 `.env`，不和其他项目共用主机名。
 
 - 云同步：Supabase Auth + `prompt_libraries`，地址来自 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY`
 - 安装包更新：部署者自己的 HTTPS 目录，地址来自 `UPDATE_BASE_URL`
@@ -157,6 +158,7 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 
 ### Latest Verification
 
+- 2026-10-17：`1.3.32` 修复任务栏图标变白。原因是开始菜单里残留了 1.3.26/27/28/30 的快捷方式，指向的 exe 已被升级删除；本机这 4 个已手动删除。测试 54 项通过，`npx tsc -b` 和全部 `.cjs` 的 `node --check` 通过。用 Electron 单独跑了一遍清理判断（不删除，只打印）：1.3.31 的有效快捷方式判为保留，人为造的指向不存在 exe 的快捷方式判为删除。`release:publish` 公网校验通过。没有实测从 1.3.31 自动更新到 1.3.32 后快捷方式的实际变化。
 - 2026-10-17：`1.3.31` 新增 .md/.txt 文档在软件里直接编辑。测试 54 项通过（新增“编辑后另存一份”1 项），`npx tsc -b` 和全部 `.cjs` 的 `node --check` 通过。Electron 开发版用临时数据目录实测：点“编辑”出现编辑框，改一行后保存，预览立刻更新，条目的 sha256 和大小换成新文件，搜索用的 content 同步更新，CRLF 换行保留；Esc 能取消。`release:publish` 生成三类产物，公网校验安装包、blockmap、`latest.yml` 通过。没有实测登录状态下新文件补传到云端（没有测试账号），走的是添加文档时同一个 `pushDocumentFiles`。
 - 2026-10-15：`1.3.30` 测试 53 项通过，`npx tsc -b` 通过，开 `--noUnusedLocals --noUnusedParameters` 也没有报错，`npm run build` 通过。浏览器开发版实测：给提示词加子分类后，侧栏分类树、分类视图、行操作菜单都正常，控制台没有报错。
 - 2026-10-15：`1.3.29` 结构重构。测试 53 项通过（新增 10 项行为测试），`npx tsc -b` 和全部 `.cjs` 的 `node --check` 通过，`npm run build` 通过。故意改坏 CSV 转义、删除记录过期过滤、“只有示例数据时只拉云端”这三处后，对应测试都会失败。浏览器开发版实测：新建提示词、删除主文件夹走确认弹窗、在删除记录里恢复、全局搜索、切到文档库、设置、登录面板、新建分类弹窗都正常，界面截图和改动前一致。Electron 开发版用临时数据目录（`PROMPT_ASSISTANT_USER_DATA`）实测：通过桌面桥写入一个 .md 文档后，文档库能显示 Markdown 预览和文件操作按钮；设置页能读到主进程的桌面设置。没有真实账号，所以没实测云同步登录、自动保存和冲突合并，只用单元测试覆盖了合并决策。

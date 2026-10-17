@@ -25,7 +25,7 @@ npm.cmd run release:publish                   # 打三类包 + 上传更新源 +
 
 改了会被打包的代码（`src/`、`electron/`、`index.html`、`package.json`）就要发新版：
 
-1. 版本号改 9 处：`package.json` 的 version、productName、build.productName、artifactName、portable.artifactName、nsis.shortcutName；`package-lock.json` 第 3、9 行；`index.html` 的 title。`tests/app-ui-assets.test.mjs` 会校验这些一致。
+1. 版本号改 8 处：`package.json` 的 version、productName、build.productName、artifactName、portable.artifactName；`package-lock.json` 第 3、9 行；`index.html` 的 title。`tests/app-ui-assets.test.mjs` 会校验这些一致。`nsis.shortcutName` 固定为 `提示词助手`，不带版本号：带版本号时每次升级换一个快捷方式名，旧的失效快捷方式会让任务栏图标变白。
 2. 跑 `npm.cmd test`、`npx.cmd tsc -b`，以及所有 `.cjs` 的 `node --check`，然后 `npm.cmd run release:publish`。
 3. 在发布提交上打 annotated tag `stable-提示词助手X.Y.Z`。tag 只留本地。
 4. 同步公开仓库：本地 `master` 有含旧服务器信息的完整历史，**绝不能直接推**。流程是 `git checkout public-source` → `git read-tree -u --reset master` → 扫描 IP、邮箱、域名、密钥 → 提交 → `git push origin public-source:main` → 切回 `master`。不要对 origin 用 `git fetch --prune-tags`，远端没有 tag，会把本地 stable tag 全删掉。

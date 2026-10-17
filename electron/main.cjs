@@ -834,7 +834,37 @@ ipcMain.handle('floating:end-drag', () => {
   floatingDrag = null;
 });
 
+// 旧版本的快捷方式名带版本号，升级后可能留下指向已删除 exe 的快捷方式。
+// Windows 会拿它给任务栏按钮找图标，找不到 exe 就显示白色空图标，所以启动时清掉这些失效的。
+function removeDeadStartMenuShortcuts() {
+  const folders = [
+    path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs'),
+    path.join(process.env.ProgramData || 'C:\\ProgramData', 'Microsoft', 'Windows', 'Start Menu', 'Programs'),
+  ];
+  for (const folder of folders) {
+    let names = [];
+    try {
+      names = fs.readdirSync(folder).filter((name) => /^提示词助手.*\.lnk$/i.test(name));
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      const link = path.join(folder, name);
+      try {
+        if (!fs.existsSync(shell.readShortcutLink(link).target)) {
+          fs.unlinkSync(link);
+        }
+      } catch (error) {
+        console.warn(`清理失效快捷方式失败：${link}`, error);
+      }
+    }
+  }
+}
+
 app.whenReady().then(() => {
+  if (process.platform === 'win32' && app.isPackaged) {
+    removeDeadStartMenuShortcuts();
+  }
   createTray();
   createWindow();
   createFloatingWindow();

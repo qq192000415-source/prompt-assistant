@@ -25,7 +25,8 @@ test('应用版本、窗口标题和打包文件名保持一致', () => {
   assert.equal(packageJson.build.productName, `提示词助手${version}`);
   assert.equal(packageJson.build.artifactName, `提示词助手安装版${version}.\${ext}`);
   assert.equal(packageJson.build.portable.artifactName, `提示词助手便携版${version}.\${ext}`);
-  assert.equal(packageJson.build.nsis.shortcutName, `提示词助手${version}`);
+  // 快捷方式名不带版本号：升级时覆盖同一个快捷方式，不留下指向旧 exe 的失效快捷方式（会让任务栏图标变白）。
+  assert.equal(packageJson.build.nsis.shortcutName, '提示词助手');
   assert.equal(JSON.parse(readText('package-lock.json')).version, version);
 
   assert.match(readText('src', 'appMeta.ts'), /packageInfo\.version/);
