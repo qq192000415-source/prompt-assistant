@@ -708,6 +708,7 @@ ipcMain.handle('documents:has', (_event, sha) => attachmentStore.has(documentsDi
 ipcMain.handle('documents:read-bytes', (_event, sha) => new Uint8Array(attachmentStore.readBytes(documentsDir(), sha)));
 ipcMain.handle('documents:write-bytes', (_event, sha, bytes) => attachmentStore.writeBytes(documentsDir(), sha, bytes));
 ipcMain.handle('documents:read-text', (_event, sha) => attachmentStore.readText(documentsDir(), sha));
+ipcMain.handle('documents:save-text', (_event, text) => attachmentStore.addText(documentsDir(), text));
 
 ipcMain.handle('documents:open', async (_event, sha, name) => {
   const message = await shell.openPath(attachmentStore.materialize(documentsDir(), sha, name, { readOnly: true }));

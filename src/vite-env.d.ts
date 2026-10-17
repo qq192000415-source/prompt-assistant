@@ -68,6 +68,7 @@ type DesktopDocumentsApi = {
   readBytes: (sha: string) => Promise<Uint8Array>;
   writeBytes: (sha: string, bytes: Uint8Array) => Promise<void>;
   readText: (sha: string) => Promise<string>;
+  saveText: (text: string) => Promise<{ sha256: string; size: number }>;
   open: (sha: string, name: string) => Promise<void>;
   showInFolder: (sha: string, name: string) => Promise<void>;
   copyFile: (sha: string, name: string) => Promise<void>;

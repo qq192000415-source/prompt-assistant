@@ -31,17 +31,29 @@ const safeFileName = (name) => {
   return base && base !== '.' && base !== '..' ? base : 'file';
 };
 
-const addFile = (dir, srcPath) => {
-  const name = path.basename(srcPath);
-  assertSize(fs.statSync(srcPath).size, name);
-  const bytes = fs.readFileSync(srcPath);
+// 按内容存一份，返回 sha256；同内容已存在就不重复写。
+const storeBytes = (dir, bytes) => {
   const sha256 = sha256Of(bytes);
   fs.mkdirSync(dir, { recursive: true });
   const target = storedPath(dir, sha256);
   if (!fs.existsSync(target)) {
     fs.writeFileSync(target, bytes);
   }
-  return { name, size: bytes.length, sha256, addedAt: new Date().toISOString() };
+  return sha256;
+};
+
+const addFile = (dir, srcPath) => {
+  const name = path.basename(srcPath);
+  assertSize(fs.statSync(srcPath).size, name);
+  const bytes = fs.readFileSync(srcPath);
+  return { name, size: bytes.length, sha256: storeBytes(dir, bytes), addedAt: new Date().toISOString() };
+};
+
+// 在软件里改了文本文档：新内容另存一份（旧版本文件不动），返回新的 sha256 和大小。
+const addText = (dir, text) => {
+  const bytes = Buffer.from(String(text), 'utf8');
+  assertSize(bytes.length, '文档');
+  return { size: bytes.length, sha256: storeBytes(dir, bytes) };
 };
 
 const has = (dir, sha) => fs.existsSync(storedPath(dir, sha));
@@ -80,6 +92,7 @@ const materialize = (dir, sha, name, { readOnly = false, tempRoot = os.tmpdir() 
 module.exports = {
   MAX_FILE_BYTES,
   addFile,
+  addText,
   has,
   materialize,
   readBytes,

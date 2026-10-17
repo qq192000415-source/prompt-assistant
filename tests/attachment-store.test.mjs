@@ -80,3 +80,16 @@ test('副本文件名里的路径分隔符和非法字符被替换', () => {
   assert.equal(store.safeFileName('a:b?.md'), 'a_b_.md');
   assert.equal(store.safeFileName('..'), 'file');
 });
+
+test('编辑后的文本另存一份：旧版本保留，新 sha256 和大小对应新内容', () =>
+  withTempDir((root) => {
+    const dir = join(root, 'store');
+    writeFileSync(join(root, 'a.md'), '旧内容');
+    const old = store.addFile(dir, join(root, 'a.md'));
+
+    const saved = store.addText(dir, '新内容，多几个字');
+
+    assert.deepEqual(saved, { size: Buffer.byteLength('新内容，多几个字'), sha256: sha('新内容，多几个字') });
+    assert.equal(store.readText(dir, saved.sha256), '新内容，多几个字');
+    assert.equal(store.readText(dir, old.sha256), '旧内容');
+  }));

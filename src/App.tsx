@@ -953,6 +953,29 @@ function App() {
     void cloud.pushDocumentFiles(fresh.flatMap((item) => (item.file ? [item.file] : [])));
   };
 
+  // 在软件里改文本文档：新内容按 sha256 另存一份，条目指向新文件，再补传到云端。
+  const updateDocumentText = async (item: PromptItem, text: string) => {
+    if (!documentsApi || !item.file) return false;
+
+    try {
+      const file = { ...item.file, ...(await documentsApi.saveText(text)) };
+      markLibraryChanged();
+      setPrompts((items) =>
+        items.map((entry) =>
+          entry.id === item.id
+            ? { ...entry, file, content: text.slice(0, SEARCHABLE_TEXT_LIMIT), updatedAt: new Date().toISOString() }
+            : entry,
+        ),
+      );
+      showToast('文档已保存');
+      void cloud.pushDocumentFiles([file]);
+      return true;
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '保存失败');
+      return false;
+    }
+  };
+
   const copyDocumentFile = async (item: PromptItem) => {
     if (!documentsApi || !item.file) return;
 
@@ -1217,6 +1240,7 @@ function App() {
             onDelete={deletePrompt}
             onEnsureLocal={cloud.ensureDocumentLocal}
             onSaveInstruction={updateDocumentInstruction}
+            onSaveText={updateDocumentText}
             onToggleFavorite={toggleFavorite}
           />
         ) : mode === 'detail' && selectedPrompt ? (
@@ -1246,6 +1270,7 @@ function App() {
                 onDelete={deletePrompt}
                 onEnsureLocal={cloud.ensureDocumentLocal}
                 onSaveInstruction={updateDocumentInstruction}
+                onSaveText={updateDocumentText}
                 onToggleFavorite={toggleFavorite}
               />
             )}

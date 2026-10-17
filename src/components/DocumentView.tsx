@@ -182,6 +182,7 @@ type DocumentViewProps = {
   onDelete: (id: string) => void;
   onEnsureLocal: (file: DocumentFile) => Promise<void>;
   onSaveInstruction: (id: string, instruction: string) => void;
+  onSaveText: (item: PromptItem, text: string) => Promise<boolean>;
   onToggleFavorite: (id: string) => void;
 };
 
@@ -193,6 +194,7 @@ export function DocumentView({
   onDelete,
   onEnsureLocal,
   onSaveInstruction,
+  onSaveText,
   onToggleFavorite,
 }: DocumentViewProps) {
   const file = item.file;
@@ -201,6 +203,7 @@ export function DocumentView({
   const [problem, setProblem] = useState('');
   const [text, setText] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [draft, setDraft] = useState<string | null>(null);
   const isText = file ? isTextDocument(file.name) : false;
 
   useEffect(() => {
@@ -229,6 +232,16 @@ export function DocumentView({
   if (!file) return null;
 
   const ready = status === 'ready' && Boolean(api);
+  const canEdit = ready && text !== null;
+  const startEdit = () => {
+    if (canEdit) setDraft(text.replace(/\r\n/g, '\n'));
+  };
+  // 输入框里换行统一是 \n；原文件用 \r\n 的，保存时换回去，不改动文件的换行风格。
+  const saveEdit = async () => {
+    if (draft === null || text === null) return;
+    const next = text.includes('\r\n') ? draft.replace(/\n/g, '\r\n') : draft;
+    if (next === text || (await onSaveText(item, next))) setDraft(null);
+  };
   const runFileAction = async (action: () => Promise<unknown>, failMessage: string) => {
     try {
       await action();
@@ -271,6 +284,12 @@ export function DocumentView({
             >
               <FileText size={16} />
               复制内容
+            </Button>
+          )}
+          {isText && (
+            <Button className="button ghost compact" type="button" disabled={!canEdit || draft !== null} onClick={startEdit}>
+              <Pencil size={16} />
+              编辑
             </Button>
           )}
           <Button
@@ -329,8 +348,35 @@ export function DocumentView({
         onSave={(content) => onSaveInstruction(item.id, content)}
       />
 
-      <div className="full-prompt-content document-content">
-        {!api ? (
+      <div className={`full-prompt-content document-content ${draft !== null ? 'is-editing' : ''}`}>
+        {draft !== null ? (
+          <>
+            <Textarea
+              autoFocus
+              className="inline-content-editor"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.preventDefault();
+                  setDraft(null);
+                }
+                if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+                  event.preventDefault();
+                  void saveEdit();
+                }
+              }}
+            />
+            <div className="inline-edit-actions">
+              <Button className="button ghost" type="button" onClick={() => setDraft(null)}>
+                取消
+              </Button>
+              <Button className="button primary" type="button" onClick={() => void saveEdit()}>
+                保存修改
+              </Button>
+            </div>
+          </>
+        ) : !api ? (
           <p className="document-status">文档需要在桌面版里使用。</p>
         ) : status === 'checking' ? (
           <p className="document-status">正在准备文件…</p>
@@ -342,9 +388,13 @@ export function DocumentView({
             </Button>
           </p>
         ) : text !== null && isMarkdownDocument(file.name) ? (
-          <MarkdownView text={text} />
+          <div onDoubleClick={startEdit} title="双击编辑">
+            <MarkdownView text={text} />
+          </div>
         ) : text !== null ? (
-          <pre>{text}</pre>
+          <pre onDoubleClick={startEdit} title="双击编辑">
+            {text}
+          </pre>
         ) : (
           <p className="document-status">这个格式不能在这里预览。点“复制文件”或拖动上面的标题就能发给别人，点“打开”用系统软件查看。</p>
         )}

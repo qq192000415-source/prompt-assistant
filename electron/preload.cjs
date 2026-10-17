@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     readBytes: (sha) => ipcRenderer.invoke('documents:read-bytes', sha),
     writeBytes: (sha, bytes) => ipcRenderer.invoke('documents:write-bytes', sha, bytes),
     readText: (sha) => ipcRenderer.invoke('documents:read-text', sha),
+    saveText: (text) => ipcRenderer.invoke('documents:save-text', text),
     open: (sha, name) => ipcRenderer.invoke('documents:open', sha, name),
     showInFolder: (sha, name) => ipcRenderer.invoke('documents:show-in-folder', sha, name),
     copyFile: (sha, name) => ipcRenderer.invoke('documents:copy-file', sha, name),
