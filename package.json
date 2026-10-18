@@ -1,17 +1,17 @@
 {
   "name": "prompt-library",
   "private": true,
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "提示词管理、分类与云同步桌面工具",
   "author": "提示词助手",
-  "productName": "提示词助手1.4.1",
+  "productName": "提示词助手1.4.2",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build && npm run build:electron",
     "build:electron": "vite build -c vite.electron.config.ts",
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --test tests/*.test.mjs tests/*.test.ts",
     "desktop:dev": "npm run build:electron && set VITE_DEV_SERVER_URL=http://127.0.0.1:5174&& electron .",
     "clean:release": "node scripts/clean-release.cjs",
     "package:win": "set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/&& set ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/&& npm run clean:release && npm run build && node scripts/write-update-source.cjs && electron-builder --win portable --x64 --publish never && node scripts/clean-release.cjs --keep",
@@ -25,8 +25,8 @@
   },
   "build": {
     "appId": "com.promptassistant.desktop",
-    "productName": "提示词助手1.4.1",
-    "artifactName": "提示词助手安装版1.4.1.${ext}",
+    "productName": "提示词助手1.4.2",
+    "artifactName": "提示词助手安装版1.4.2.${ext}",
     "directories": {
       "output": "release"
     },
@@ -46,7 +46,7 @@
       ]
     },
     "portable": {
-      "artifactName": "提示词助手便携版1.4.1.${ext}"
+      "artifactName": "提示词助手便携版1.4.2.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -67,6 +67,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "electron-updater": "^6.8.3",
+    "jszip": "3.10.1",
     "lucide-react": "^0.561.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",

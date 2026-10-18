@@ -22,6 +22,8 @@ export type MaterialItem = {
   category: string;
   tags: string[];
   favorite: boolean;
+  // 从分享链接导入时记下原链接，用于去重和查看来源；本机导入为空串。
+  sourceUrl: string;
   media: MaterialMedia;
   createdAt: string;
   updatedAt: string;
@@ -103,6 +105,7 @@ function normalizeItem(raw: unknown): MaterialItem | null {
     category: text(item.category).trim(),
     tags: uniqueTags(Array.isArray(item.tags) ? item.tags.filter((tag): tag is string => typeof tag === 'string') : []),
     favorite: item.favorite === true,
+    sourceUrl: text(item.sourceUrl).trim(),
     media,
     createdAt,
     updatedAt: Number.isNaN(Date.parse(text(item.updatedAt))) ? createdAt : text(item.updatedAt),

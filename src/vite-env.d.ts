@@ -104,10 +104,16 @@ type DesktopMaterialsApi = {
   compressVideos: (ids: string[], options: MaterialVideoCompressOptions) => Promise<MaterialCompressResult>;
   exportItems: (ids: string[], defaultDir: string) => Promise<MaterialExportResult | null>;
   cancelBatch: () => Promise<void>;
+  importWord: (category: string) => Promise<MaterialImportResult | null>;
+  importShare: () => Promise<MaterialImportResult | null>;
+  exportShare: (ids: string[], defaultDir: string) => Promise<MaterialExportResult | null>;
+  getProxy: () => Promise<MaterialProxySettings>;
+  saveProxy: (settings: MaterialProxySettings) => Promise<{ settings: MaterialProxySettings; results: Array<{ name: string; ok: boolean; detail: string }> }>;
   onProgress: (callback: (progress: MaterialBatchProgress) => void) => () => void;
 };
 
-type MaterialBatchProgress = { task: string; done: number; total: number; current: string };
+type MaterialProxySettings = { mode: 'system' | 'direct' | 'custom'; url: string };
+type MaterialBatchProgress ={ task: string; done: number; total: number; current: string };
 type MaterialImageCompressOptions = { quality: number; maxSide: number; format: 'keep' | 'jpeg' };
 type MaterialVideoCompressOptions = { resolution: 'original' | '1080p' | '720p' | '480p'; crf: number; codec: 'h264' | 'h265' };
 type MaterialBatchFailure = { name: string; message: string };

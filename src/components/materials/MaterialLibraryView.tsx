@@ -1,5 +1,22 @@
-import { useEffect, useMemo, useState, type DragEvent } from 'react';
-import { Check, ClipboardPaste, Copy, Film, ImageOff, ListChecks, RefreshCw, Search, Server, Star, Upload, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import {
+  Check,
+  ChevronDown,
+  ClipboardPaste,
+  Copy,
+  FileText,
+  Film,
+  Image as ImageIcon,
+  ImageOff,
+  ListChecks,
+  Package,
+  RefreshCw,
+  Search,
+  Server,
+  Star,
+  Upload,
+  X,
+} from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { LibrarySwitch } from '../LibrarySwitch';
@@ -68,17 +85,17 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
   // 在某个分类下导入的素材直接归到这个分类。
   const importCategory = activeCategory === ALL_CATEGORIES || activeCategory === UNCATEGORIZED ? '' : activeCategory;
 
-  // 在素材库里按 Ctrl+V：复制的是文件就按文件导入，是截图就导入剪贴板图片。输入框里的粘贴不拦。
+  // 在素材库里按 Ctrl+V：复制的是文件就按文件导入；截图、分享链接、提示词文字交给主进程识别。输入框里的粘贴不拦。
   useEffect(() => {
     if (!ready) return undefined;
     const onPaste = (event: ClipboardEvent) => {
       const target = event.target as HTMLElement | null;
-      if (target?.closest('input, textarea, [contenteditable="true"]') || openItemId || settingsOpen) return;
+      if (target?.closest('input, textarea, [contenteditable="true"]') || openItemId || settingsOpen || controller.busy) return;
       const paths = [...(event.clipboardData?.files ?? [])].map(controller.pathForFile).filter(Boolean);
       if (paths.length) {
         event.preventDefault();
         void controller.importPaths(paths, importCategory);
-      } else if (event.clipboardData?.types.some((type) => type.startsWith('image/'))) {
+      } else if (event.clipboardData?.types.some((type) => type.startsWith('image/') || type === 'text/plain')) {
         event.preventDefault();
         void controller.importClipboard(importCategory);
       }
@@ -153,14 +170,22 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
                 {selecting ? '完成' : '批量管理'}
               </Button>
             )}
-            <Button className="button ghost" type="button" disabled={Boolean(busy)} onClick={() => void controller.importClipboard(importCategory)}>
+            <Button
+              className="button ghost"
+              type="button"
+              disabled={Boolean(busy)}
+              title="粘贴截图、复制的文件、分享链接或提示词（也可以直接按 Ctrl+V）"
+              onClick={() => void controller.importClipboard(importCategory)}
+            >
               <ClipboardPaste size={16} />
               粘贴
             </Button>
-            <Button className="button primary" type="button" disabled={Boolean(busy)} onClick={() => void controller.pickAndImport(importCategory)}>
-              <Upload size={16} />
-              导入
-            </Button>
+            <ImportMenu
+              disabled={batchBusy}
+              onPickFiles={() => void controller.pickAndImport(importCategory)}
+              onPickWord={() => void controller.importWord(importCategory)}
+              onPickShare={() => void controller.importShare()}
+            />
           </>
         )}
         {status !== 'unavailable' && status !== 'unconfigured' && (
@@ -220,6 +245,15 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
                 onClick={() => void controller.exportItems(selectedItems.map((item) => item.id))}
               >
                 导出
+              </Button>
+              <Button
+                className="button ghost compact"
+                type="button"
+                disabled={batchBusy || selectedItems.length === 0}
+                title="打包成 ZIP，带提示词和分类，可以发给别人导入（素言也能导入）"
+                onClick={() => void controller.exportShare(selectedItems.map((item) => item.id))}
+              >
+                导出分享包
               </Button>
               <Button className="button ghost danger compact" type="button" disabled={batchBusy || selectedItems.length === 0} onClick={() => setConfirmingBatchDelete(true)}>
                 删除
@@ -289,7 +323,7 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
       {ready && library.items.length === 0 && (
         <div className="materials-state">
           <strong>还没有素材</strong>
-          <span>导入图片或视频，也可以直接把文件拖进来，或者按 Ctrl+V 粘贴截图。</span>
+          <span>导入图片、视频、Word 图文或分享包；也可以把文件拖进来，或者按 Ctrl+V 粘贴截图和即梦、X 等网站的分享链接。</span>
           <div className="materials-state-actions">
             <Button className="button primary compact" type="button" disabled={Boolean(busy)} onClick={() => void controller.pickAndImport(importCategory)}>
               <Upload size={14} />
@@ -355,6 +389,8 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
         <NasSettingsDialog
           config={controller.config}
           busy={Boolean(busy)}
+          getProxy={controller.getProxy}
+          saveProxy={controller.saveProxy}
           onSubmit={controller.saveConfig}
           onClose={() => setSettingsOpen(false)}
         />
@@ -386,6 +422,60 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
 
       {controller.progress && <BatchProgressPanel progress={controller.progress} onCancel={controller.cancelBatch} />}
     </main>
+  );
+}
+
+type ImportMenuProps = { disabled: boolean; onPickFiles: () => void; onPickWord: () => void; onPickShare: () => void };
+
+function ImportMenu({ disabled, onPickFiles, onPickWord, onPickShare }: ImportMenuProps) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  const choose = (action: () => void) => () => {
+    setOpen(false);
+    action();
+  };
+
+  return (
+    <div className="top-menu-item" ref={menuRef}>
+      <Button className="button primary" type="button" disabled={disabled} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+        <Upload size={16} />
+        导入
+        <ChevronDown size={14} aria-hidden="true" />
+      </Button>
+      {open && (
+        <div className="top-dropdown-menu materials-import-menu" role="menu">
+          <button className="top-dropdown-item" type="button" role="menuitem" onClick={choose(onPickFiles)}>
+            <ImageIcon size={15} />
+            <span>图片和视频</span>
+          </button>
+          <button className="top-dropdown-item" type="button" role="menuitem" onClick={choose(onPickWord)}>
+            <FileText size={15} />
+            <span>Word 图文（.docx）</span>
+          </button>
+          <button className="top-dropdown-item" type="button" role="menuitem" onClick={choose(onPickShare)}>
+            <Package size={15} />
+            <span>分享包（.zip）</span>
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

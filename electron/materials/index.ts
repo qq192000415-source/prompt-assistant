@@ -1,11 +1,7 @@
 // 素材库主进程入口：nas-media:// 媒体协议、导入、IPC。编译成 electron/materials.cjs，由 main.cjs 引用。
-import crypto from 'node:crypto';
-import fs from 'node:fs';
 import path from 'node:path';
-import { Readable } from 'node:stream';
 import { clipboard, dialog, nativeImage, protocol, type BrowserWindow, type IpcMain } from 'electron';
 import {
-  addItems,
   deleteItems,
   mediaPath,
   patchItem,
@@ -14,22 +10,21 @@ import {
   type MaterialMedia,
   type MaterialPatch,
 } from '../../src/materials/library.ts';
-import { getMediaFileExtension, isImageMediaFile, isVideoMediaFile, mimeTypeOf } from '../../src/materials/mediaFileTypes.ts';
+import { mimeTypeOf } from '../../src/materials/mediaFileTypes.ts';
 import { compressImages, compressVideos, type ImageCompressOptions } from './batch.ts';
 import { exportItems } from './export.ts';
-import { cancelBatch, type BatchProgress } from './tasks.ts';
+import { cancelBatch, reason, type BatchProgress, type Failure } from './tasks.ts';
+import { importFromClipboard } from './linkImport.ts';
+import { exportSharePackageTo, importSharePackageFile, importWordFiles } from './importers.ts';
+import { applyProxySettings, readProxySettings, saveProxySettings, testProxy } from './proxy.ts';
+import { commitImport, uploadFile } from './uploads.ts';
 import { getPublicConfig, loadConfig, saveConfig } from './config.ts';
 import { FFMPEG_COMPONENT, ffmpegPath, installFfmpeg, isFfmpegInstalled, type VideoCompressOptions } from './ffmpeg.ts';
 import { mutateLibrary, readLibrary } from './libraryStore.ts';
 import * as webdav from './webdav.ts';
-import type { DavConfig } from './webdav.ts';
 
 const SCHEME = 'nas-media';
-const MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024;
-const THUMB_WIDTH = 480;
 const MEDIA_PATH_PATTERN = /^(media\/[0-9a-f]{64}\.[a-z0-9]{1,5}|thumbs\/[0-9a-f]{64}\.jpg)$/;
-
-type ImportError = { name: string; message: string };
 
 // 必须在 app ready 之前调用。
 export function registerScheme() {
@@ -66,103 +61,15 @@ function handleMediaRequest(userDataDir: string) {
   };
 }
 
-async function hashFile(filePath: string): Promise<string> {
-  const hash = crypto.createHash('sha256');
-  for await (const chunk of fs.createReadStream(filePath)) hash.update(chunk as Buffer);
-  return hash.digest('hex');
-}
-
-// ponytail: 缩略图一律存 JPEG，透明 PNG 的透明处会变黑；需要时改成按原格式保存缩略图。
-function makeThumbnail(image: Electron.NativeImage): Buffer | null {
-  if (image.isEmpty()) return null;
-  const { width } = image.getSize();
-  return (width > THUMB_WIDTH ? image.resize({ width: THUMB_WIDTH, quality: 'good' }) : image).toJPEG(82);
-}
-
-function newItem(media: MaterialMedia, title: string, category: string, now: string): MaterialItem {
-  return {
-    id: crypto.randomUUID(),
-    title,
-    prompt: '',
-    negativePrompt: '',
-    category,
-    tags: [],
-    favorite: false,
-    media,
-    createdAt: now,
-    updatedAt: now,
-  };
-}
-
-// 原图和缩略图先传到 NAS（同一文件已存在就跳过），再加锁把记录写进 library.json。
-async function uploadFile(config: DavConfig, filePath: string, category: string): Promise<MaterialItem> {
-  const name = path.basename(filePath);
-  const stat = fs.statSync(filePath);
-  if (!stat.isFile()) throw new Error('不是文件');
-  if (!isImageMediaFile(name) && !isVideoMediaFile(name)) throw new Error('不是图片或视频');
-  if (stat.size > MAX_FILE_BYTES) throw new Error('超过 2GB');
-
-  const sha256 = await hashFile(filePath);
-  const ext = getMediaFileExtension(name);
-  const kind = isVideoMediaFile(name) ? 'video' : 'image';
-  const target = mediaPath({ sha256, ext });
-  if (!(await webdav.exists(config, target))) {
-    const stream = Readable.toWeb(fs.createReadStream(filePath)) as unknown as webdav.DavBody;
-    await webdav.put(config, target, stream, { 'Content-Type': mimeTypeOf(name), 'Content-Length': String(stat.size) });
-  }
-
-  let width: number | null = null;
-  let height: number | null = null;
-  let hasThumb = false;
-  if (kind === 'image') {
-    const image = nativeImage.createFromPath(filePath);
-    const thumb = makeThumbnail(image);
-    if (thumb) {
-      ({ width, height } = image.getSize());
-      await webdav.put(config, thumbPath({ sha256 }), new Uint8Array(thumb), { 'Content-Type': 'image/jpeg' });
-      hasThumb = true;
-    }
-  }
-
-  const media: MaterialMedia = { sha256, ext, kind, name, size: stat.size, width, height, hasThumb };
-  return newItem(media, name.slice(0, name.length - ext.length), category, new Date().toISOString());
-}
-
-async function uploadPng(config: DavConfig, image: Electron.NativeImage, category: string): Promise<MaterialItem> {
-  const png = image.toPNG();
-  const sha256 = crypto.createHash('sha256').update(png).digest('hex');
-  const ext = '.png';
-  if (!(await webdav.exists(config, mediaPath({ sha256, ext })))) {
-    await webdav.put(config, mediaPath({ sha256, ext }), new Uint8Array(png), { 'Content-Type': 'image/png' });
-  }
-  const thumb = makeThumbnail(image);
-  if (thumb) await webdav.put(config, thumbPath({ sha256 }), new Uint8Array(thumb), { 'Content-Type': 'image/jpeg' });
-  const { width, height } = image.getSize();
-  const now = new Date().toISOString();
-  const media: MaterialMedia = { sha256, ext, kind: 'image', name: `粘贴的图片${ext}`, size: png.length, width, height, hasThumb: Boolean(thumb) };
-  return newItem(media, '粘贴的图片', category, now);
-}
-
-async function commitImport(config: DavConfig, items: MaterialItem[], errors: ImportError[]) {
-  if (items.length === 0) {
-    return { ...(await readLibrary(config)), added: 0, skipped: 0, errors };
-  }
-  const { library, dropped, result } = await mutateLibrary(config, (current) => {
-    const outcome = addItems(current, items, new Date().toISOString());
-    return { library: outcome.library, result: outcome };
-  });
-  return { library, dropped, added: result.added.length, skipped: result.skipped.length, errors };
-}
-
 async function importPaths(userDataDir: string, filePaths: string[], category: string) {
   const config = loadConfig(userDataDir);
   const items: MaterialItem[] = [];
-  const errors: ImportError[] = [];
+  const errors: Failure[] = [];
   for (const filePath of filePaths) {
     try {
       items.push(await uploadFile(config, filePath, category));
     } catch (error) {
-      errors.push({ name: path.basename(filePath), message: error instanceof Error ? error.message : String(error) });
+      errors.push({ name: path.basename(filePath), message: reason(error) });
     }
   }
   return commitImport(config, items, errors);
@@ -206,12 +113,7 @@ export function register({ ipcMain, userDataDir, updateBaseUrl, getWindow }: Reg
   ipcMain.handle('materials:import-paths', (_event, filePaths, category) =>
     importPaths(userDataDir, asStringArray(filePaths), asCategory(category)),
   );
-  ipcMain.handle('materials:import-clipboard', async (_event, category) => {
-    const image = clipboard.readImage();
-    if (image.isEmpty()) throw new Error('剪贴板里没有图片');
-    const config = loadConfig(userDataDir);
-    return commitImport(config, [await uploadPng(config, image, asCategory(category))], []);
-  });
+  ipcMain.handle('materials:import-clipboard', (_event, category) => importFromClipboard(loadConfig(userDataDir), asCategory(category)));
 
   ipcMain.handle('materials:update', async (_event, itemId, patch: MaterialPatch) => {
     const config = loadConfig(userDataDir);
@@ -275,4 +177,37 @@ export function register({ ipcMain, userDataDir, updateBaseUrl, getWindow }: Reg
     return exportItems(loadConfig(userDataDir), asStringArray(ids), result.filePaths[0], progressTo(event));
   });
   ipcMain.handle('materials:cancel-batch', () => cancelBatch());
+
+  const pickFiles = async (options: Electron.OpenDialogOptions) => {
+    const window = getWindow();
+    const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
+    return result.canceled ? [] : result.filePaths;
+  };
+
+  ipcMain.handle('materials:import-word', async (event, category) => {
+    const files = await pickFiles({ title: '导入 Word 图文', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Word 文档', extensions: ['docx'] }] });
+    if (!files.length) return null;
+    return importWordFiles(loadConfig(userDataDir), files, asCategory(category), progressTo(event));
+  });
+  ipcMain.handle('materials:import-share', async (event) => {
+    const [file] = await pickFiles({ title: '导入分享包', properties: ['openFile'], filters: [{ name: '分享包', extensions: ['zip'] }] });
+    if (!file) return null;
+    return importSharePackageFile(loadConfig(userDataDir), file, progressTo(event));
+  });
+  ipcMain.handle('materials:export-share', async (event, ids, defaultDir) => {
+    const window = getWindow();
+    const stamp = new Date().toLocaleString('sv-SE').replace(/[: ]/g, '-');
+    const options: Electron.SaveDialogOptions = {
+      title: '导出分享包',
+      defaultPath: path.join(typeof defaultDir === 'string' ? defaultDir : '', `提示词助手-素材-${stamp}.zip`),
+      filters: [{ name: '分享包', extensions: ['zip'] }],
+    };
+    const result = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options);
+    if (result.canceled || !result.filePath) return null;
+    return exportSharePackageTo(loadConfig(userDataDir), asStringArray(ids), result.filePath, progressTo(event));
+  });
+
+  void applyProxySettings(readProxySettings(userDataDir)).catch((error) => console.warn('应用抓取代理设置失败', error));
+  ipcMain.handle('materials:get-proxy', () => readProxySettings(userDataDir));
+  ipcMain.handle('materials:save-proxy', async (_event, input) => ({ settings: await saveProxySettings(userDataDir, input), results: await testProxy() }));
 }

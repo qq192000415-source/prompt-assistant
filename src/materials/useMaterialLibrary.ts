@@ -163,6 +163,17 @@ export function useMaterialLibrary(notify: (message: string) => void) {
       notify(compressSummary('视频', result));
       return true;
     },
+    importWord: async (category: string) => finishImport(await runBatch('导入 Word', () => api!.importWord(category))),
+    importShare: async () => finishImport(await runBatch('导入分享包', () => api!.importShare())),
+    exportShare: async (ids: string[]) => {
+      const result = await runBatch('导出分享包', () => api!.exportShare(ids, loadMaterialsExportDir()));
+      if (!result) return false;
+      saveMaterialsExportDir(result.dir.replace(/[\\/][^\\/]*$/, ''));
+      notify(result.canceled ? '已取消导出分享包' : `分享包已导出：${result.dir}，包含 ${result.exported} 个文件${failureText(result.failures)}`);
+      return true;
+    },
+    getProxy: () => api!.getProxy(),
+    saveProxy: (settings: MaterialProxySettings) => run('正在测试网络…', () => api!.saveProxy(settings)),
     exportItems: async (ids: string[]) => {
       const result = await runBatch('导出', () => api!.exportItems(ids, loadMaterialsExportDir()));
       if (!result) return false;

@@ -3828,3 +3828,58 @@ h2 {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* 素材库导入菜单：按钮在右侧，菜单向左展开 */
+.materials-import-menu {
+  right: 0;
+  left: auto;
+}
+
+.material-detail-source {
+  justify-self: start;
+  color: var(--accent);
+  font-size: 12px;
+  text-underline-offset: 2px;
+}
+
+.settings-subheading {
+  margin: 4px 0 0;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-subheading:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.proxy-results {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.proxy-results li {
+  display: flex;
+  gap: 8px;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.proxy-results li.is-ok {
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+}
+
+.proxy-results li.is-fail {
+  background: var(--danger-weak);
+}
+
+.proxy-results span {
+  color: var(--muted);
+}

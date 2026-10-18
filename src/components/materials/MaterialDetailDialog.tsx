@@ -27,6 +27,14 @@ const normalizedDraft = (draft: Draft) =>
     uniqueTags(splitTags(draft.tags)),
   ]);
 
+const hostOf = (url: string) => {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+};
+
 const formatSize = (bytes: number) =>
   bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
@@ -126,6 +134,12 @@ export function MaterialDetailDialog({ group, itemId, onSelectItem, categories, 
                 {[current.media.name, dimensions, formatSize(current.media.size)].filter(Boolean).join(' · ')}
                 {group.items.length > 1 ? ` · 同组 ${group.items.length} 张` : ''}
               </span>
+              {current.sourceUrl && (
+                // 主窗口会把新窗口链接交给系统浏览器打开（只放行 http/https）。
+                <a className="material-detail-source" href={current.sourceUrl} target="_blank" rel="noreferrer">
+                  来源：{hostOf(current.sourceUrl)}
+                </a>
+              )}
             </div>
             <Button className="icon-button" type="button" aria-label="关闭" onClick={onClose}>
               <X size={18} />

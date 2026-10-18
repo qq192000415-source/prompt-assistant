@@ -17,6 +17,17 @@
 - `src/materials/library.ts`：同组效果图的分组规则、组内排序、提示词文本规整、标签去重
 - `electron/materials/ffmpeg.ts`：视频编码器选择（显卡编码优先、软件编码兜底）、FFmpeg 参数、时长和进度解析
 - `electron/materials/batch.ts`：批量压缩的流程（逐个处理、变小才替换、失败逐条报告）
+- `electron/materials/suyan/`：原样移植，只改了导入路径
+  - `promptImportParser.ts`：各站点分享链接和提示词文本的解析器
+  - `shareSourceFetchers.ts`：抓取层，`net.fetch` 换成了抓取专用会话
+  - `jimengHiddenFetch.ts`：即梦隐藏窗口抓取
+  - `generationModels.ts`、`promptTitle.ts`
+  - `wordDocumentImport.ts`：Word 图文的解析和配对
+  - `placeholderImage.ts`：占位图生成
+- `electron/jimengCapture.cjs`：即梦抓取用的 preload
+- `electron/materials/linkImport.ts`、`wordImport.ts`：剪贴板、链接、Word 导入流程
+- `electron/materials/sharePackage.ts`：分享包格式（`data.json` + `images/`，和素言互通）
+- `tests/suyan-*.test.ts`：SuYan 自带的解析器单元测试，原样搬来，通过 `tests/helpers/vitest-shim.mjs` 在 `node --test` 下运行
 
 ```text
 MIT License

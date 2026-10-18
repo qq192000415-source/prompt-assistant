@@ -4,7 +4,7 @@ Last updated: 2026-10-17
 
 Project root: 仓库根目录
 
-Current source version: `1.4.1`
+Current source version: `1.4.2`
 
 Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 
@@ -14,7 +14,7 @@ Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 
 - 当前主项目目录：仓库根目录
 - 当前分支：`master`
-- 当前源码版本：`1.4.1`
+- 当前源码版本：`1.4.2`
 - 云同步只使用 Supabase Auth + `public.prompt_libraries`，不再使用自建/VPS 同步服务。
 - 本机数据目录固定为 `%APPDATA%\prompt-assistant`（1.3.26 起）。旧版本按版本号分目录（`提示词助手X.Y.Z`），首次启动自动从最近使用的旧目录搬数据，旧目录保留。
 - 安装版自动更新源由部署者写入本机 `.env` 的 `UPDATE_BASE_URL`。仓库不保存真实服务器地址。
@@ -138,7 +138,7 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 
 ### Current Progress
 
-当前源码版本为 `1.4.1`。左栏可在「提示词 | 文档 | 素材」间切换：文档库原样保存文件，素材库（图片、视频）只存在用户自己的 NAS 上。界面升级到 shadcn/ui 设计令牌，保留双栏工作流，并支持本机浅色/深色外观。安装包更新源改为本项目自己的子域名，地址只写在本机 `.env`，不和其他项目共用主机名。
+当前源码版本为 `1.4.2`。左栏可在「提示词 | 文档 | 素材」间切换：文档库原样保存文件，素材库（图片、视频）只存在用户自己的 NAS 上。界面升级到 shadcn/ui 设计令牌，保留双栏工作流，并支持本机浅色/深色外观。安装包更新源改为本项目自己的子域名，地址只写在本机 `.env`，不和其他项目共用主机名。
 
 - 云同步：Supabase Auth + `prompt_libraries`，地址来自 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY`
 - 安装包更新：部署者自己的 HTTPS 目录，地址来自 `UPDATE_BASE_URL`
@@ -157,6 +157,18 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 - 界面升级为 shadcn/ui + Tailwind 设计令牌：中性表面、发丝边框、单一蓝色强调色、浅色/深色外观，以及菜单、弹窗和提示的短过渡。业务逻辑未改。
 
 ### Latest Verification
+
+- 2026-10-18：版本 `1.4.2` 发布素材库 M3。`release:publish` 生成三类产物，公网校验通过；安装包里有 jszip、`jimengCapture.cjs`、`materials.cjs`；打包版启动后，新增的导入导出和代理接口都在。以下是开发版的验证：
+  - 自动检查：测试 156 项通过（原有 75 项，SuYan 原有的解析器测试 77 项，新增分享包和 Word 4 项）；`npx tsc -b` 通过；全部 `.cjs` 的 `node --check` 通过。
+  - 开发版连真实 NAS 和真实网站实测：
+    - 粘贴 aiart.pics 链接：导入视频作品，标题、提示词、标签、来源都对；再粘贴同一链接时跳过。
+    - 粘贴即梦链接：隐藏窗口截到了提示词。视频起初下载失败（403），原因是 `vlabvod.com` 要求即梦的 Referer，SuYan 的规则里没有这个域名；补上后 1.2MB 的视频正常入库。
+    - Word：两张图分别配上了各自的提示词。
+    - 素言格式的分享包：导入后分类、标签、反向提示词、原始创建时间都保留；用和已有素材相同的图片时按内容去重跳过。
+    - 导出分享包：5 个条目都带原文件，没有残留临时文件。
+    - 代理：自定义地址格式不对时会提示；直连和跟随系统两种模式下，三个站点都能连上。
+    - 测试数据已从 NAS 清空。
+  - 实测方式：系统文件对话框用 Win32 消息只发给对话框自己的控件（`WM_SETTEXT` + `BM_CLICK`），不再用全局按键。
 
 - 2026-10-18：版本 `1.4.1` 发布素材库 M2。
   - `release:publish` 生成三类产物，公网校验通过。发版清理后，更新源 `components/` 下的 FFmpeg 仍然可以访问（HTTP 200）。
@@ -248,13 +260,22 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 | Done（1.4.0） | 素材库 M1：NAS 存储与核心浏览 | 复用 SuYan（MIT）。WebDAV 存储层（加锁读改写）、`nas-media://` 协议、导入（选择/拖放/粘贴）、方案 B 卡片网格、分类标签页、搜索、详情编辑、同组效果图、精选、删除、复制图片 |
 | Done（1.4.1） | 素材库 M2 | 批量管理（按组多选）、图片压缩（nativeImage）、视频压缩（FFmpeg 按需从 `UPDATE_BASE_URL/components/` 下载并校验 SHA256，显卡编码优先）、导出到文件夹带素材清单、进度面板、取消、批量删除。去重不单独做：导入和加锁写入时已按 SHA256 去重，库里不会有完全相同的文件 |
 | Todo P3 | 图片压缩输出 WebP | nativeImage 不能编码 WebP；已有 FFmpeg（带 libwebp）时可以用它 |
-| Todo | 素材库 M3（1.4.2） | Word 图文导入、分享 ZIP 导入导出、网络分享链接抓取（即梦、X、aiart.pics、opennana 等）和代理设置 |
+| Done（1.4.2） | 素材库 M3 | Word 图文导入、分享包导入导出（和素言格式互通）、剪贴板分享链接抓取（SuYan 支持的全部站点）、PNG 里嵌的提示词、抓取专用代理设置。素材库第一阶段完成 |
+| Todo P3 | 链接抓取「只存链接」模式 | SuYan 可以只记链接、之后再下载；我们只做了直接下载 |
 | Todo | 第二阶段：AI 助手 | 复用 SuYan 的 Ollama/OpenAI 兼容客户端：提示词优化、翻译、分类标签识别、图像反推 |
 | Todo | 第三阶段：创作画布 | 复用 SuYan 的画布生图 |
 | Todo P3 | 素材缩略图透明底 | 缩略图一律存 JPEG，透明 PNG 的透明处会变黑 |
 
 ### Log Entries
 
+- 2026-10-18：版本 `1.4.2`，素材库 M3：Word、分享包、分享链接抓取，素材库第一阶段完成。
+  - SuYan 的解析器（约 6000 行）、抓取层、即梦隐藏窗口、Word 解析、占位图都原样搬到 `electron/materials/suyan/`，SuYan 自带的 77 项测试也一起搬来并全部通过。
+  - 新增依赖 `jszip` 3.10.1，和 SuYan 用的版本相同。
+  - 和 SuYan 不同的两处：
+    - 代理只作用于抓取专用会话，不改整个软件的网络。
+    - 即梦视频域名 `vlabvod.com` 补了 Referer，修好了上游这条规则漏掉的情况。
+
+- 2026-10-18：1.4.1 已打 tag `stable-提示词助手1.4.1`（master 提交 `0b4e49b`）。公开仓库同步到 `main`（提交 58637a4），推送前扫描过，没有 IP、邮箱、更新域名、NAS 地址、密钥。
 - 2026-10-18：版本 `1.4.1`，素材库 M2：批量管理、图片和视频压缩、导出。
   - FFmpeg 选了 gyan.dev 8.1.2 essentials（GPL v3）：带 libx264/libx265 和 NVENC/QSV/AMF 显卡编码。它不进安装包，按需从更新源下载，协议说明见 `THIRD_PARTY_NOTICES.md`。
   - 视频压缩的编码器选择、参数和进度解析移植自 SuYan。

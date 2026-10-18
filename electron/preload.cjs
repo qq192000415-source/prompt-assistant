@@ -46,6 +46,11 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     compressVideos: (ids, options) => ipcRenderer.invoke('materials:compress-videos', ids, options),
     exportItems: (ids, defaultDir) => ipcRenderer.invoke('materials:export', ids, defaultDir),
     cancelBatch: () => ipcRenderer.invoke('materials:cancel-batch'),
+    importWord: (category) => ipcRenderer.invoke('materials:import-word', category),
+    importShare: () => ipcRenderer.invoke('materials:import-share'),
+    exportShare: (ids, defaultDir) => ipcRenderer.invoke('materials:export-share', ids, defaultDir),
+    getProxy: () => ipcRenderer.invoke('materials:get-proxy'),
+    saveProxy: (settings) => ipcRenderer.invoke('materials:save-proxy', settings),
     onProgress: (callback) => {
       const listener = (_event, progress) => callback(progress);
       ipcRenderer.on('materials:progress', listener);

@@ -168,7 +168,9 @@ test('public source keeps deployer endpoints out of the repository', () => {
       .filter((name) => /\.(ts|tsx)$/.test(name))
       .map((name) => `src/${name.replaceAll('\\', '/')}`),
     'electron/main.cjs',
-    ...readdirSync(join(rootDir, 'electron', 'materials')).map((name) => `electron/materials/${name}`),
+    ...readdirSync(join(rootDir, 'electron', 'materials'), { recursive: true })
+      .filter((name) => /\.ts$/.test(name))
+      .map((name) => `electron/materials/${name.replaceAll('\\', '/')}`),
     'electron/app-update-source.json',
     'scripts/publish-update-to-server.cjs',
     'scripts/write-update-source.cjs',
@@ -179,7 +181,8 @@ test('public source keeps deployer endpoints out of the repository', () => {
     assert.doesNotMatch(text, /@qq\.com/, file);
     assert.doesNotMatch(text, /sslip\.io/, file);
     assert.doesNotMatch(text, /\.pem/, file);
-    const unexpectedIps = (text.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g) ?? []).filter((ip) => ip !== '127.0.0.1');
+    // 浏览器 User-Agent 里的版本号（如 Chrome/130.0.0.0）长得像 IP，不算。
+    const unexpectedIps = (text.replace(/Chrome\/[\d.]+/g, '').match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g) ?? []).filter((ip) => ip !== '127.0.0.1');
     assert.deepEqual(unexpectedIps, [], file);
   }
 

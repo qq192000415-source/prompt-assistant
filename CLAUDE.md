@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Windows 环境，npm 脚本里用的是 `set X=...&&` 这种 cmd 语法。在 PowerShell 或 Git Bash 里用 `npm.cmd`。
 
 ```bash
-npm.cmd test                                  # node --test tests/*.test.mjs
+npm.cmd test                                  # node --test tests/*.test.mjs tests/*.test.ts（.ts 是从 SuYan 原样搬来的 vitest 测试）
 node --test tests/library-logic.test.mjs      # 跑单个测试文件
 node --test --test-name-pattern="云端合并" tests/library-logic.test.mjs   # 跑单个用例
 npx.cmd tsc -b                                # 类型检查，没有 lint
@@ -66,7 +66,10 @@ npm.cmd run release:publish                   # 打三类包 + 上传更新源 +
 - 渲染进程通过 `nas-media://media/...` 和 `nas-media://thumbs/...` 显示媒体，主进程带上账户去 NAS 取，透传 Range（视频能拖进度条），并返回 `Cache-Control: no-store`。
 - 批量任务（`batch.ts` 压缩、`export.ts` 导出）同一时间只跑一个（`tasks.ts` 的 `exclusive`），可取消，进度通过 `materials:progress` 事件推给界面。压缩是先下载、本机处理、把新文件传回 NAS，再用 `replaceMedia` 加锁换记录：只换「还指向旧文件」的条目，没人再用的旧文件随后删掉。
 - 视频压缩用的 FFmpeg 不进安装包：第一次用时从 `UPDATE_BASE_URL/components/` 下载到 `<userData>/components/`，校验 `ffmpeg.ts` 里写死的大小和 SHA256。换 FFmpeg 版本时运行 `node scripts/publish-ffmpeg-component.cjs <解压目录>` 上传，再把它打印的值写回 `FFMPEG_COMPONENT`。放子目录是因为 `publish-update-to-server.cjs` 发版时会删掉更新目录根下的旧 `.exe`。
-- 测试：`tests/materials-library.test.mjs`（纯逻辑），`tests/materials-nas.test.mjs`（用本地模拟的 WebDAV 测加锁读改写、导出），`tests/materials-ffmpeg.test.mjs`（FFmpeg 参数、进度解析、下载校验）。`batch.ts`、`index.ts`、`config.ts` 依赖 Electron，不能在 Node 里直接加载，其余模块都可以。
+- 导入入口：本机文件和 PNG 元数据（`uploads.ts`）；剪贴板截图、分享链接、提示词文字（`linkImport.ts`）；Word 图文（`wordImport.ts`）；分享包（`sharePackage.ts`，和素言格式互通）。所有导入最后都走 `commitImport` 加锁写入，按 sha256 去重。
+- `electron/materials/suyan/` 是原样移植的 SuYan 文件，只改导入路径，不要在里面写我们自己的逻辑。要改行为就在外面的适配文件里改，比如即梦视频的 Referer 就补在 `linkImport.ts`。这样以后跟进 SuYan 的站点适配时可以直接对比上游。
+- 抓取分享链接走独立的 Electron 会话（`linkSession.ts`），代理设置（`proxy.ts`）只作用于它，不影响 Supabase、更新检查和 NAS。
+- 测试：`tests/materials-library.test.mjs`（纯逻辑），`tests/materials-import.test.mjs`（分享包读写、Word），`tests/suyan-*.test.ts`（SuYan 原有的解析器测试），`tests/materials-nas.test.mjs`（用本地模拟的 WebDAV 测加锁读改写、导出），`tests/materials-ffmpeg.test.mjs`（FFmpeg 参数、进度解析、下载校验）。`batch.ts`、`index.ts`、`config.ts` 依赖 Electron，不能在 Node 里直接加载，其余模块都可以。
 
 **数据目录。** `productName` 带版本号，Electron 默认会每个版本换一个 userData 目录。`electron/main.cjs` 启动时固定为 `%APPDATA%\prompt-assistant`，首次启动由 `electron/userDataMigration.cjs` 从最近使用的旧目录 `提示词助手X.Y.Z` 拷贝数据。
 
