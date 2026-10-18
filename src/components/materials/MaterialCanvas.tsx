@@ -225,7 +225,10 @@ export function MaterialCanvas({ controller, settingsOpen, onOpenSettings }: Mat
             )}
           </span>
           {!draft.negativePromptHidden && (
-            <textarea aria-label="负向提示词" value={draft.negativePrompt} maxLength={maxCanvasPromptLength} rows={3} onChange={(event) => canvas.setDraft({ negativePrompt: event.target.value })} placeholder="不想出现的内容" />
+            // 放进 .field 才有和其它输入框一样的边框和字号。
+            <div className="field">
+              <textarea aria-label="负向提示词" value={draft.negativePrompt} maxLength={maxCanvasPromptLength} rows={3} onChange={(event) => canvas.setDraft({ negativePrompt: event.target.value })} placeholder="不想出现的内容" />
+            </div>
           )}
         </div>
 

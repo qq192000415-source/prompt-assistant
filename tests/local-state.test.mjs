@@ -54,6 +54,8 @@ test('本机设置读坏了或越界时退回默认值', () => {
   assert.equal(loadLibraryMode(), 'prompts');
   store.set('prompt-library.libraryMode.v1', 'materials');
   assert.equal(loadLibraryMode(), 'materials');
+  store.set('prompt-library.libraryMode.v1', 'canvas');
+  assert.equal(loadLibraryMode(), 'canvas');
 });
 
 test('桌面设置：透明度夹在 0.25–1，非法关闭行为沿用原值，坐标缺失时保留原坐标', () => {

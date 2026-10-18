@@ -1,10 +1,11 @@
-import { BookOpen, FileText, Images } from 'lucide-react';
+import { BookOpen, FileText, Images, Palette } from 'lucide-react';
 import type { LibraryMode } from '../localState';
 
 const options: Array<{ mode: LibraryMode; label: string; icon: typeof BookOpen }> = [
   { mode: 'prompts', label: '提示词', icon: BookOpen },
   { mode: 'documents', label: '文档', icon: FileText },
   { mode: 'materials', label: '素材', icon: Images },
+  { mode: 'canvas', label: '画布', icon: Palette },
 ];
 
 type LibrarySwitchProps = {

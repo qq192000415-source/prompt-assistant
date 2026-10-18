@@ -2818,8 +2818,9 @@ h2 {
 
 /* 提示词 / 文档 库切换 */
 .library-switch {
+  container-type: inline-size;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 2px;
   padding: 3px;
   border: 1px solid var(--border);
@@ -2840,8 +2841,16 @@ h2 {
   font: inherit;
   font-size: 13px;
   font-weight: 560;
+  white-space: nowrap;
   cursor: pointer;
   transition: background-color 120ms ease, color 120ms ease;
+}
+
+/* 四个选项挤不下图标时（窄侧栏）只留文字 */
+@container (max-width: 280px) {
+  .library-switch-option svg {
+    display: none;
+  }
 }
 
 .library-switch-option:hover {
@@ -3136,7 +3145,7 @@ h2 {
 }
 
 .materials-switch {
-  width: 228px;
+  width: 300px;
 }
 
 .materials-title {
@@ -3928,11 +3937,6 @@ h2 {
 }
 
 /* 创作画布：左边参数，右边结果；生成时克制的扫描线和关键词，结果由模糊到清晰显影 */
-.materials-view-switch {
-  width: 132px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
 .canvas-layout {
   display: grid;
   width: min(100%, 1440px);

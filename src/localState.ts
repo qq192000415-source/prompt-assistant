@@ -13,7 +13,7 @@ const MATERIALS_CANVAS_DRAFT_KEY = 'prompt-library.materialsCanvasDraft.v1';
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 420;
 
-export type LibraryMode = 'prompts' | 'documents' | 'materials';
+export type LibraryMode = 'prompts' | 'documents' | 'materials' | 'canvas';
 
 export type RememberedCloudLogin = {
   email: string;
@@ -134,7 +134,7 @@ export const saveSyncRecords = (records: SyncRecord[]) => {
 export const loadLibraryMode = (): LibraryMode => {
   try {
     const saved = window.localStorage.getItem(LIBRARY_MODE_KEY);
-    return saved === 'documents' || saved === 'materials' ? saved : 'prompts';
+    return saved === 'documents' || saved === 'materials' || saved === 'canvas' ? saved : 'prompts';
   } catch {
     return 'prompts';
   }

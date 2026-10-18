@@ -150,6 +150,8 @@ function App() {
   const [allItems, setAllItems] = useState<PromptItem[]>(() => dedupePrompts(loadPrompts()));
   const [libraryMode, setLibraryMode] = useState<LibraryMode>(loadLibraryMode);
   const isDocumentMode = libraryMode === 'documents';
+  // 素材库和创作画布共用素材库视图（画布生成的图存进素材库，参考图也从素材库来）。
+  const isMaterialsMode = libraryMode === 'materials' || libraryMode === 'canvas';
   const [deletedRecords, setDeletedRecords] = useState<DeletedPromptRecord[]>(() => loadDeletedRecords());
   const [syncRecords, setSyncRecords] = useState<SyncRecord[]>(() => loadSyncRecords());
   const [promptCategories, setPromptCategories] = useState<string[]>(() => loadCategories());
@@ -1154,11 +1156,11 @@ function App() {
         importFormat={importFormat}
         promptCount={prompts.length}
         query={query}
-        showSearch={libraryMode !== 'materials'}
+        showSearch={!isMaterialsMode}
         searchLabel={isDocumentMode ? '文档' : '提示词'}
         recentCount={prompts.filter((prompt) => prompt.lastUsedAt).length}
         onChangeView={
-          libraryMode === 'materials'
+          isMaterialsMode
             ? (view) => {
                 changeLibraryMode('prompts');
                 changeView(view);
@@ -1176,7 +1178,7 @@ function App() {
         onToggleTheme={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
       />
 
-      {libraryMode === 'materials' ? (
+      {isMaterialsMode ? (
         <MaterialLibraryView libraryMode={libraryMode} onChangeLibraryMode={changeLibraryMode} notify={showToast} />
       ) : (
       <>

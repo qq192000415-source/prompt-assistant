@@ -59,8 +59,7 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [batchDialog, setBatchDialog] = useState<'images' | 'videos' | null>(null);
   const [confirmingBatchDelete, setConfirmingBatchDelete] = useState(false);
-  const [view, setView] = useState<'library' | 'canvas'>('library');
-  const onCanvas = view === 'canvas';
+  const onCanvas = libraryMode === 'canvas';
 
   const groups = useMemo(() => groupMaterials(library.items), [library.items]);
   const counts = useMemo(() => categoryCounts(groups), [groups]);
@@ -126,7 +125,9 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
   };
 
   const summary = ready
-    ? `${groups.length} 组 · ${library.items.length} 个文件，存放在 NAS`
+    ? onCanvas
+      ? '用 AI 生图，满意的存进素材库'
+      : `${groups.length} 组 · ${library.items.length} 个文件，存放在 NAS`
     : status === 'unconfigured'
       ? '还没有连接 NAS'
       : status === 'unavailable'
@@ -149,18 +150,9 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
       <header className="materials-header">
         <LibrarySwitch className="materials-switch" libraryMode={libraryMode} onChange={onChangeLibraryMode} />
         <div className="materials-title">
-          <h1>素材库</h1>
+          <h1>{onCanvas ? '创作画布' : '素材库'}</h1>
           <span>{busy || summary}</span>
         </div>
-        {ready && (
-          <div className="library-switch materials-view-switch" role="tablist" aria-label="素材或画布">
-            {(['library', 'canvas'] as const).map((mode) => (
-              <button key={mode} type="button" role="tab" aria-selected={view === mode} className={`library-switch-option ${view === mode ? 'is-active' : ''}`} onClick={() => setView(mode)}>
-                {mode === 'library' ? '素材' : '画布'}
-              </button>
-            ))}
-          </div>
-        )}
         {ready && !onCanvas && (
           <>
             <label className="materials-search">
@@ -419,7 +411,7 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
             const reference = item.media.kind === 'image' || item.media.hasThumb ? await controller.canvasReference(item.id) : null;
             canvas.sendFromItem(item, reference ? { fileName: '', title: reference.title, dataUrl: reference.dataUrl } : null);
             setOpenItemId(null);
-            setView('canvas');
+            onChangeLibraryMode('canvas');
           }}
           onClose={() => setOpenItemId(null)}
         />

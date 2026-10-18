@@ -14,7 +14,7 @@ Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 
 - 当前主项目目录：仓库根目录
 - 当前分支：`master`
-- 当前源码版本：`1.6.0`
+- 当前源码版本：`1.6.1`
 - 云同步只使用 Supabase Auth + `public.prompt_libraries`，不再使用自建/VPS 同步服务。
 - 本机数据目录固定为 `%APPDATA%\prompt-assistant`（1.3.26 起）。旧版本按版本号分目录（`提示词助手X.Y.Z`），首次启动自动从最近使用的旧目录搬数据，旧目录保留。
 - 安装版自动更新源由部署者写入本机 `.env` 的 `UPDATE_BASE_URL`。仓库不保存真实服务器地址。
@@ -138,7 +138,7 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 
 ### Current Progress
 
-当前源码版本为 `1.6.0`。左栏可在「提示词 | 文档 | 素材」间切换：文档库原样保存文件，素材库（图片、视频）只存在用户自己的 NAS 上。界面升级到 shadcn/ui 设计令牌，保留双栏工作流，并支持本机浅色/深色外观。安装包更新源改为本项目自己的子域名，地址只写在本机 `.env`，不和其他项目共用主机名。
+当前源码版本为 `1.6.1`。左栏可在「提示词 | 文档 | 素材 | 画布」间切换：文档库原样保存文件，素材库（图片、视频）只存在用户自己的 NAS 上。界面升级到 shadcn/ui 设计令牌，保留双栏工作流，并支持本机浅色/深色外观。安装包更新源改为本项目自己的子域名，地址只写在本机 `.env`，不和其他项目共用主机名。
 
 - 云同步：Supabase Auth + `prompt_libraries`，地址来自 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY`
 - 安装包更新：部署者自己的 HTTPS 目录，地址来自 `UPDATE_BASE_URL`
@@ -157,6 +157,8 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 - 界面升级为 shadcn/ui + Tailwind 设计令牌：中性表面、发丝边框、单一蓝色强调色、浅色/深色外观，以及菜单、弹窗和提示的短过渡。业务逻辑未改。
 
 ### Latest Verification
+
+- 2026-10-18：版本 `1.6.1`。`release:publish` 生成三类产物，公网校验通过。打包版用临时数据目录启动：标题 1.6.1，左侧切换是「提示词 | 文档 | 素材 | 画布」，点画布进入「创作画布」并记住库模式 `canvas`。自动检查：测试 316 项通过；`npx tsc -b` 通过；全部 `.cjs` 的 `node --check` 通过。
 
 - 2026-10-18：版本 `1.6.0` 发布素材库创作画布。`release:publish` 生成三类产物，公网校验通过；更新源 `components/` 下的 FFmpeg 仍可访问（HTTP 200）。打包版用临时数据目录启动：标题 1.6.0，5 个画布接口都在，AI 设置有生图位置、规则里显示「生图」；没设生图模型时提示明确，非图片数据被拒绝。开发版的实测见 Log Entries。自动检查：测试 316 项通过；`npx tsc -b` 通过；全部 `.cjs` 的 `node --check` 通过。
 
@@ -275,6 +277,8 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 
 ### Log Entries
 
+- 2026-10-18：版本 `1.6.1`，按主人反馈把画布从素材库右上角挪到左侧库切换，做成第四项「画布」（库模式 `canvas`，和素材库共用 `MaterialLibraryView`，详情页「发到画布」切到这一项）；侧栏窄时四项只显示文字（容器查询）。顺手修了 1.6.0 画布里负向提示词输入框没套 `.field`、没有边框且字号偏大的问题。「发到画布」切换这一步因 NAS 为空没实点，只改了一行。
+- 2026-10-18：1.6.0 已打 tag `stable-提示词助手1.6.0`（master 提交 `f8f898f`）。公开仓库同步到 `main`（提交 `7379909`），推送前扫描过，没有 IP、邮箱、更新域名、NAS 地址、API Key（命中的只有测试里的检查规则和那个脚本文件名里的版本号）。
 - 2026-10-18：版本 `1.6.0`，素材库创作画布。三个阶段（素材库、AI 助手、创作画布）全部完成。
   - 需求按主人确认：只用 OpenAI 兼容的生图接口（不做豆包网页）；放在素材库里（我的建议，主人让我定）；生成结果挑满意的再存进 NAS；要生成历史、生图动效、Agnes 图生视频（没有 Agnes Key，照样做，只用模拟服务测）。
   - SuYan 的 `remoteAiClient.ts` 改为整份搬（含生图、生视频），`sharp` 换成 `shim.ts` 里约 80 行的替身（文件头读尺寸和透明通道，nativeImage 算透明度、转 JPEG）。画布参数逻辑 `canvasGeneration.ts`、`canvasTypes.ts` 搬到 `src/materials/suyan/`。SuYan 原有测试又搬来 aiImageGeneration、canvasRemoteIntegration、canvasGeneration 和之前没搬的 remoteAiClient 用例：给 vitest 替身补了 vi.fn、stubGlobal、resolves/rejects 等，只剩依赖模块模拟、假时钟、nativeImage 的 6 个用例没搬（文件开头列了名字）。测试共 316 项通过。
