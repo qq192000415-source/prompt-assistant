@@ -1,9 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
 
 const { mutateLibrary, readLibrary } = await import('../electron/materials/libraryStore.ts');
 const { davUrl, normalizeBaseUrl } = await import('../electron/materials/webdav.ts');
+const { exportItems } = await import('../electron/materials/export.ts');
+const { exclusive } = await import('../electron/materials/tasks.ts');
 
 // 照 fnOS 实测行为写的 WebDAV：认 Basic 账户和 LOCK（别人持锁时 423，带 If 令牌才能写），完全忽略 If-Match。
 function startFakeNas() {
@@ -128,6 +133,46 @@ test('改动函数出错时不写入，并解锁', async () => {
   } finally {
     nas.server.close();
   }
+});
+
+test('导出：文件按标题命名，已有同名文件不覆盖，坏文件逐条报告，附带素材清单', async () => {
+  const nas = await startFakeNas();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-export-test-'));
+  try {
+    const items = [
+      { ...item('1'), title: '晨雾', prompt: 'fog' },
+      { ...item('2'), title: '晨雾', prompt: 'fog 2' },
+      { ...item('3'), title: '丢失的文件' },
+    ];
+    nas.files.set('/团队文件-素材/library.json', Buffer.from(JSON.stringify({ items })));
+    nas.files.set(`/团队文件-素材/media/${sha('1')}.png`, Buffer.from('one'));
+    nas.files.set(`/团队文件-素材/media/${sha('2')}.png`, Buffer.from('two'));
+    fs.writeFileSync(path.join(dir, '晨雾.png'), 'existing');
+
+    const progress = [];
+    const result = await exportItems(nas.config, ['1', '2', '3'], dir, (entry) => progress.push(entry.done));
+    assert.equal(result.exported, 2);
+    assert.deepEqual(result.failures.map((failure) => failure.name), ['3.png']);
+    assert.equal(fs.readFileSync(path.join(dir, '晨雾.png'), 'utf8'), 'existing');
+    assert.equal(fs.readFileSync(path.join(dir, '晨雾 (2).png'), 'utf8'), 'one');
+    assert.equal(fs.readFileSync(path.join(dir, '晨雾 (3).png'), 'utf8'), 'two');
+    assert.equal(fs.existsSync(path.join(dir, '丢失的文件.png')), false);
+    const manifest = JSON.parse(fs.readFileSync(path.join(dir, '素材清单.json'), 'utf8'));
+    assert.deepEqual(manifest.map((entry) => [entry.file, entry.prompt]), [['晨雾 (2).png', 'fog'], ['晨雾 (3).png', 'fog 2']]);
+    assert.deepEqual(progress, [0, 1, 2, 3]);
+  } finally {
+    nas.server.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('同一时间只能跑一个批量任务', async () => {
+  let release;
+  const first = exclusive(() => new Promise((resolve) => (release = resolve)));
+  await assert.rejects(exclusive(async () => 'second'), /已有一个批量任务/);
+  release('done');
+  assert.equal(await first, 'done');
+  assert.equal(await exclusive(async () => 'after'), 'after');
 });
 
 test('密码不对时给出明确提示', async () => {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type DragEvent } from 'react';
-import { ClipboardPaste, Copy, Film, ImageOff, RefreshCw, Search, Server, Star, Upload, X } from 'lucide-react';
+import { Check, ClipboardPaste, Copy, Film, ImageOff, ListChecks, RefreshCw, Search, Server, Star, Upload, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { LibrarySwitch } from '../LibrarySwitch';
@@ -15,6 +15,7 @@ import {
   type MaterialMedia,
 } from '../../materials/library';
 import { useMaterialLibrary } from '../../materials/useMaterialLibrary';
+import { BatchProgressPanel, CompressImagesDialog, CompressVideosDialog } from './BatchDialogs';
 import { MaterialDetailDialog } from './MaterialDetailDialog';
 import { NasSettingsDialog, NasSettingsForm } from './NasSettings';
 
@@ -35,6 +36,10 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  const [batchDialog, setBatchDialog] = useState<'images' | 'videos' | null>(null);
+  const [confirmingBatchDelete, setConfirmingBatchDelete] = useState(false);
 
   const groups = useMemo(() => groupMaterials(library.items), [library.items]);
   const counts = useMemo(() => categoryCounts(groups), [groups]);
@@ -42,6 +47,24 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
   const visibleGroups = useMemo(() => filterGroups(groups, { query, category: activeCategory }), [groups, query, activeCategory]);
   const openGroup = openItemId ? groups.find((group) => group.items.some((item) => item.id === openItemId)) : undefined;
   const ready = status === 'ready';
+  // 选中按组算：一组效果图一起压缩、导出、删除。删掉或改动后不存在的组自动不算。
+  const selectedGroups = groups.filter((group) => selected.has(group.id));
+  const selectedItems = selectedGroups.flatMap((group) => group.items);
+  const selectedImageIds = selectedItems.filter((item) => item.media.kind === 'image').map((item) => item.id);
+  const selectedVideoIds = selectedItems.filter((item) => item.media.kind === 'video').map((item) => item.id);
+  const toggleSelected = (groupId: string) =>
+    setSelected((previous) => {
+      const next = new Set(previous);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  const exitSelecting = () => {
+    setSelecting(false);
+    setSelected(new Set());
+    setConfirmingBatchDelete(false);
+  };
+  const batchBusy = Boolean(busy) || Boolean(controller.progress);
   // 在某个分类下导入的素材直接归到这个分类。
   const importCategory = activeCategory === ALL_CATEGORIES || activeCategory === UNCATEGORIZED ? '' : activeCategory;
 
@@ -119,6 +142,17 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
                 </Button>
               )}
             </label>
+            {library.items.length > 0 && (
+              <Button
+                className={`button ghost ${selecting ? 'accent' : ''}`}
+                type="button"
+                aria-pressed={selecting}
+                onClick={() => (selecting ? exitSelecting() : setSelecting(true))}
+              >
+                <ListChecks size={16} />
+                {selecting ? '完成' : '批量管理'}
+              </Button>
+            )}
             <Button className="button ghost" type="button" disabled={Boolean(busy)} onClick={() => void controller.importClipboard(importCategory)}>
               <ClipboardPaste size={16} />
               粘贴
@@ -135,6 +169,65 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
           </Button>
         )}
       </header>
+
+      {ready && selecting && (
+        <div className="materials-batch-bar" role="toolbar" aria-label="批量操作">
+          <span className="materials-batch-count">
+            已选 {selectedGroups.length} 组 · {selectedItems.length} 个文件
+          </span>
+          <Button
+            className="button ghost compact"
+            type="button"
+            onClick={() => setSelected(new Set([...selected, ...visibleGroups.map((group) => group.id)]))}
+          >
+            全选当前 {visibleGroups.length} 组
+          </Button>
+          {selectedGroups.length > 0 && (
+            <Button className="button ghost compact" type="button" onClick={() => setSelected(new Set())}>
+              清空
+            </Button>
+          )}
+          <span className="materials-batch-spacer" />
+          {confirmingBatchDelete ? (
+            <>
+              <span className="materials-batch-warning">从 NAS 删除这 {selectedItems.length} 个文件和记录？</span>
+              <Button className="button ghost compact" type="button" onClick={() => setConfirmingBatchDelete(false)}>
+                取消
+              </Button>
+              <Button
+                className="button solid-danger compact"
+                type="button"
+                disabled={batchBusy}
+                onClick={async () => {
+                  if (await controller.remove(selectedItems.map((item) => item.id))) exitSelecting();
+                }}
+              >
+                删除
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button className="button ghost compact" type="button" disabled={batchBusy || selectedImageIds.length === 0} onClick={() => setBatchDialog('images')}>
+                压缩图片{selectedImageIds.length ? ` ${selectedImageIds.length}` : ''}
+              </Button>
+              <Button className="button ghost compact" type="button" disabled={batchBusy || selectedVideoIds.length === 0} onClick={() => setBatchDialog('videos')}>
+                压缩视频{selectedVideoIds.length ? ` ${selectedVideoIds.length}` : ''}
+              </Button>
+              <Button
+                className="button ghost compact"
+                type="button"
+                disabled={batchBusy || selectedItems.length === 0}
+                onClick={() => void controller.exportItems(selectedItems.map((item) => item.id))}
+              >
+                导出
+              </Button>
+              <Button className="button ghost danger compact" type="button" disabled={batchBusy || selectedItems.length === 0} onClick={() => setConfirmingBatchDelete(true)}>
+                删除
+              </Button>
+            </>
+          )}
+        </div>
+      )}
 
       {ready && library.items.length > 0 && (
         <div className="materials-tabs" role="tablist" aria-label="分类">
@@ -231,7 +324,8 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
             <MaterialCard
               key={group.id}
               group={group}
-              onOpen={() => setOpenItemId(group.primary.id)}
+              selected={selecting ? selected.has(group.id) : null}
+              onOpen={() => (selecting ? toggleSelected(group.id) : setOpenItemId(group.primary.id))}
               onCopyPrompt={() => void copyPrompt(group.primary.prompt)}
               onToggleFavorite={() => void controller.update(group.primary.id, { favorite: !group.primary.favorite })}
             />
@@ -265,6 +359,32 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
           onClose={() => setSettingsOpen(false)}
         />
       )}
+
+      {batchDialog === 'images' && (
+        <CompressImagesDialog
+          count={selectedImageIds.length}
+          onClose={() => setBatchDialog(null)}
+          onConfirm={(options) => {
+            setBatchDialog(null);
+            void controller.compressImages(selectedImageIds, options);
+          }}
+        />
+      )}
+
+      {batchDialog === 'videos' && (
+        <CompressVideosDialog
+          count={selectedVideoIds.length}
+          ffmpegStatus={controller.ffmpegStatus}
+          onInstallFfmpeg={controller.installFfmpeg}
+          onClose={() => setBatchDialog(null)}
+          onConfirm={(options) => {
+            setBatchDialog(null);
+            void controller.compressVideos(selectedVideoIds, options);
+          }}
+        />
+      )}
+
+      {controller.progress && <BatchProgressPanel progress={controller.progress} onCancel={controller.cancelBatch} />}
     </main>
   );
 }
@@ -288,18 +408,32 @@ function MaterialPreview({ media, className }: { media: MaterialMedia; className
 
 type MaterialCardProps = {
   group: MaterialGroup;
+  // null 表示不在批量管理里；true/false 是否选中。
+  selected: boolean | null;
   onOpen: () => void;
   onCopyPrompt: () => void;
   onToggleFavorite: () => void;
 };
 
-function MaterialCard({ group, onOpen, onCopyPrompt, onToggleFavorite }: MaterialCardProps) {
+function MaterialCard({ group, selected, onOpen, onCopyPrompt, onToggleFavorite }: MaterialCardProps) {
   const item = group.primary;
   const title = item.title || item.media.name;
+  const selecting = selected !== null;
   return (
-    <article className="material-card">
-      <button className="material-card-open" type="button" onClick={onOpen} aria-label={`查看 ${title}`}>
+    <article className={`material-card ${selected ? 'is-selected' : ''}`}>
+      <button
+        className="material-card-open"
+        type="button"
+        onClick={onOpen}
+        aria-label={selecting ? `${selected ? '取消选择' : '选择'} ${title}` : `查看 ${title}`}
+        aria-pressed={selecting ? selected : undefined}
+      >
         <MaterialPreview media={item.media} className="material-card-media" />
+        {selecting && (
+          <span className={`material-card-check ${selected ? 'is-on' : ''}`} aria-hidden="true">
+            {selected && <Check size={14} strokeWidth={3} />}
+          </span>
+        )}
         {item.media.kind === 'video' && (
           <span className="material-card-badge is-left">
             <Film size={12} aria-hidden="true" />

@@ -64,7 +64,9 @@ npm.cmd run release:publish                   # 打三类包 + 上传更新源 +
 - 主进程代码是 TS，写在 `electron/materials/`，由 `vite.electron.config.ts` 打成被 Git 忽略的 `electron/materials.cjs`，`main.cjs` 直接 require。纯逻辑（归一、增删改、同组分组、筛选）在 `src/materials/library.ts`，主进程和界面共用。
 - fnOS 的 WebDAV 不认 `If-Match`，所以写 `library.json` 一律走 `libraryStore.ts` 的 `mutateLibrary`：加锁（30 秒自动过期）→ 读最新的 → 改 → 带锁令牌写回 → 解锁。别处不要直接 PUT `library.json`。
 - 渲染进程通过 `nas-media://media/...` 和 `nas-media://thumbs/...` 显示媒体，主进程带上账户去 NAS 取，透传 Range（视频能拖进度条），并返回 `Cache-Control: no-store`。
-- 测试：`tests/materials-library.test.mjs`（纯逻辑），`tests/materials-nas.test.mjs`（用本地模拟的 WebDAV 测加锁读改写）。
+- 批量任务（`batch.ts` 压缩、`export.ts` 导出）同一时间只跑一个（`tasks.ts` 的 `exclusive`），可取消，进度通过 `materials:progress` 事件推给界面。压缩是先下载、本机处理、把新文件传回 NAS，再用 `replaceMedia` 加锁换记录：只换「还指向旧文件」的条目，没人再用的旧文件随后删掉。
+- 视频压缩用的 FFmpeg 不进安装包：第一次用时从 `UPDATE_BASE_URL/components/` 下载到 `<userData>/components/`，校验 `ffmpeg.ts` 里写死的大小和 SHA256。换 FFmpeg 版本时运行 `node scripts/publish-ffmpeg-component.cjs <解压目录>` 上传，再把它打印的值写回 `FFMPEG_COMPONENT`。放子目录是因为 `publish-update-to-server.cjs` 发版时会删掉更新目录根下的旧 `.exe`。
+- 测试：`tests/materials-library.test.mjs`（纯逻辑），`tests/materials-nas.test.mjs`（用本地模拟的 WebDAV 测加锁读改写、导出），`tests/materials-ffmpeg.test.mjs`（FFmpeg 参数、进度解析、下载校验）。`batch.ts`、`index.ts`、`config.ts` 依赖 Electron，不能在 Node 里直接加载，其余模块都可以。
 
 **数据目录。** `productName` 带版本号，Electron 默认会每个版本换一个 userData 目录。`electron/main.cjs` 启动时固定为 `%APPDATA%\prompt-assistant`，首次启动由 `electron/userDataMigration.cjs` 从最近使用的旧目录 `提示词助手X.Y.Z` 拷贝数据。
 

@@ -98,7 +98,28 @@ type DesktopMaterialsApi = {
   remove: (ids: string[]) => Promise<MaterialLoadResult & { warnings: string[] }>;
   copyImage: (media: { sha256: string; ext: string }) => Promise<void>;
   pathForFile: (file: File) => string;
+  ffmpegStatus: () => Promise<{ installed: boolean; downloadBytes: number }>;
+  installFfmpeg: () => Promise<void>;
+  compressImages: (ids: string[], options: MaterialImageCompressOptions) => Promise<MaterialCompressResult>;
+  compressVideos: (ids: string[], options: MaterialVideoCompressOptions) => Promise<MaterialCompressResult>;
+  exportItems: (ids: string[], defaultDir: string) => Promise<MaterialExportResult | null>;
+  cancelBatch: () => Promise<void>;
+  onProgress: (callback: (progress: MaterialBatchProgress) => void) => () => void;
 };
+
+type MaterialBatchProgress = { task: string; done: number; total: number; current: string };
+type MaterialImageCompressOptions = { quality: number; maxSide: number; format: 'keep' | 'jpeg' };
+type MaterialVideoCompressOptions = { resolution: 'original' | '1080p' | '720p' | '480p'; crf: number; codec: 'h264' | 'h265' };
+type MaterialBatchFailure = { name: string; message: string };
+type MaterialCompressResult = MaterialLoadResult & {
+  processed: number;
+  notSmaller: number;
+  savedBytes: number;
+  canceled: boolean;
+  skippedUnsupported: number;
+  failures: MaterialBatchFailure[];
+};
+type MaterialExportResult = { exported: number; failures: MaterialBatchFailure[]; canceled: boolean; dir: string };
 
 interface Window {
   promptAssistantDesktop?: {

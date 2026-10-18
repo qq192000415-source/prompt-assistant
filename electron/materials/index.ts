@@ -15,7 +15,11 @@ import {
   type MaterialPatch,
 } from '../../src/materials/library.ts';
 import { getMediaFileExtension, isImageMediaFile, isVideoMediaFile, mimeTypeOf } from '../../src/materials/mediaFileTypes.ts';
+import { compressImages, compressVideos, type ImageCompressOptions } from './batch.ts';
+import { exportItems } from './export.ts';
+import { cancelBatch, type BatchProgress } from './tasks.ts';
 import { getPublicConfig, loadConfig, saveConfig } from './config.ts';
+import { FFMPEG_COMPONENT, ffmpegPath, installFfmpeg, isFfmpegInstalled, type VideoCompressOptions } from './ffmpeg.ts';
 import { mutateLibrary, readLibrary } from './libraryStore.ts';
 import * as webdav from './webdav.ts';
 import type { DavConfig } from './webdav.ts';
@@ -167,7 +171,15 @@ async function importPaths(userDataDir: string, filePaths: string[], category: s
 const asStringArray = (value: unknown) => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []);
 const asCategory = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
 
-export function register({ ipcMain, userDataDir, getWindow }: { ipcMain: IpcMain; userDataDir: string; getWindow: () => BrowserWindow | null }) {
+type RegisterOptions = {
+  ipcMain: IpcMain;
+  userDataDir: string;
+  // 更新源地址，FFmpeg 组件从它的 components/ 目录下载；没配置时为空串。
+  updateBaseUrl: string;
+  getWindow: () => BrowserWindow | null;
+};
+
+export function register({ ipcMain, userDataDir, updateBaseUrl, getWindow }: RegisterOptions) {
   protocol.handle(SCHEME, handleMediaRequest(userDataDir));
 
   ipcMain.handle('materials:get-config', () => getPublicConfig(userDataDir));
@@ -233,4 +245,34 @@ export function register({ ipcMain, userDataDir, getWindow }: { ipcMain: IpcMain
     if (image.isEmpty()) throw new Error('这种图片格式不能放进剪贴板');
     clipboard.writeImage(image);
   });
+
+  // 批量任务的进度推给发起请求的窗口。
+  const progressTo = (event: Electron.IpcMainInvokeEvent) => (progress: BatchProgress) => {
+    if (!event.sender.isDestroyed()) event.sender.send('materials:progress', progress);
+  };
+
+  ipcMain.handle('materials:ffmpeg-status', () => ({ installed: isFfmpegInstalled(userDataDir), downloadBytes: FFMPEG_COMPONENT.size }));
+  ipcMain.handle('materials:install-ffmpeg', async (event) => {
+    const report = progressTo(event);
+    await installFfmpeg(userDataDir, updateBaseUrl, (done, total) => report({ task: '下载 FFmpeg', done, total, current: '' }));
+  });
+  ipcMain.handle('materials:compress-images', (event, ids, options: ImageCompressOptions) =>
+    compressImages(loadConfig(userDataDir), asStringArray(ids), options, progressTo(event)),
+  );
+  ipcMain.handle('materials:compress-videos', (event, ids, options: VideoCompressOptions) => {
+    if (!isFfmpegInstalled(userDataDir)) throw new Error('还没有下载 FFmpeg');
+    return compressVideos(loadConfig(userDataDir), asStringArray(ids), options, ffmpegPath(userDataDir), progressTo(event));
+  });
+  ipcMain.handle('materials:export', async (event, ids, defaultDir) => {
+    const window = getWindow();
+    const options: Electron.OpenDialogOptions = {
+      title: '导出到文件夹',
+      properties: ['openDirectory', 'createDirectory'],
+      ...(typeof defaultDir === 'string' && defaultDir ? { defaultPath: defaultDir } : {}),
+    };
+    const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
+    if (result.canceled || !result.filePaths[0]) return null;
+    return exportItems(loadConfig(userDataDir), asStringArray(ids), result.filePaths[0], progressTo(event));
+  });
+  ipcMain.handle('materials:cancel-batch', () => cancelBatch());
 }

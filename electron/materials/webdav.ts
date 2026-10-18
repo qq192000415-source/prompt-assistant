@@ -1,4 +1,7 @@
 // 最小 WebDAV 客户端：素材库只用到 PROPFIND/GET/PUT/MKCOL/DELETE/LOCK/UNLOCK，用 Node 自带 fetch 实现，不加依赖。
+import fs from 'node:fs';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 
 export type DavConfig = {
   baseUrl: string;
@@ -101,6 +104,12 @@ export async function readText(config: DavConfig, relativePath: string): Promise
 export async function readBytes(config: DavConfig, relativePath: string): Promise<Buffer> {
   const response = await dav(config, 'GET', relativePath);
   return Buffer.from(await response.arrayBuffer());
+}
+
+// 大文件（视频、导出）直接流到磁盘，不整个读进内存。
+export async function downloadToFile(config: DavConfig, relativePath: string, target: string): Promise<void> {
+  const response = await dav(config, 'GET', relativePath);
+  await pipeline(Readable.fromWeb(response.body as import('node:stream/web').ReadableStream), fs.createWriteStream(target));
 }
 
 export async function put(config: DavConfig, relativePath: string, body: DavBody, headers: Record<string, string> = {}) {

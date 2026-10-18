@@ -40,6 +40,17 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     remove: (ids) => ipcRenderer.invoke('materials:delete', ids),
     copyImage: (media) => ipcRenderer.invoke('materials:copy-image', media),
     pathForFile: (file) => webUtils.getPathForFile(file),
+    ffmpegStatus: () => ipcRenderer.invoke('materials:ffmpeg-status'),
+    installFfmpeg: () => ipcRenderer.invoke('materials:install-ffmpeg'),
+    compressImages: (ids, options) => ipcRenderer.invoke('materials:compress-images', ids, options),
+    compressVideos: (ids, options) => ipcRenderer.invoke('materials:compress-videos', ids, options),
+    exportItems: (ids, defaultDir) => ipcRenderer.invoke('materials:export', ids, defaultDir),
+    cancelBatch: () => ipcRenderer.invoke('materials:cancel-batch'),
+    onProgress: (callback) => {
+      const listener = (_event, progress) => callback(progress);
+      ipcRenderer.on('materials:progress', listener);
+      return () => ipcRenderer.removeListener('materials:progress', listener);
+    },
   },
   onUpdateStatus: (callback) => {
     const listener = (_event, status) => callback(status);

@@ -8,10 +8,12 @@ const {
   categoryCounts,
   deleteItems,
   emptyLibrary,
+  exportFileNames,
   filterGroups,
   groupMaterials,
   normalizeLibrary,
   patchItem,
+  replaceMedia,
 } = await import('../src/materials/library.ts');
 const { isVideoMediaFile, mimeTypeOf } = await import('../src/materials/mediaFileTypes.ts');
 
@@ -111,6 +113,39 @@ test('筛选和分类计数按组算', () => {
   assert.deepEqual(filterGroups(groups, { query: '暖色', category: ALL_CATEGORIES }).map((group) => group.primary.id), ['3']);
   assert.deepEqual(filterGroups(groups, { query: '', category: UNCATEGORIZED }).map((group) => group.primary.id), ['4']);
   assert.deepEqual(filterGroups(groups, { query: '2.PNG', category: '场景' }).map((group) => group.primary.id), ['1']);
+});
+
+test('压缩替换：只换还指向旧文件的条目，报告没人再用的旧文件', () => {
+  const shared = item('1').media;
+  const library = libraryOf(item('1'), item('2', { media: shared }), item('3'), item('4'));
+  const small = (n) => ({ ...item(n).media, size: 0 });
+  const { library: next, applied, skipped, orphaned } = replaceMedia(
+    library,
+    [
+      { itemId: '1', from: shared, to: small('91') },
+      { itemId: '3', from: item('3').media, to: small('93') },
+      // 压缩期间这条在另一台电脑上已换成别的文件：不能覆盖
+      { itemId: '4', from: item('99').media, to: small('94') },
+      { itemId: 'gone', from: item('5').media, to: small('95') },
+    ],
+    at(9),
+  );
+  assert.deepEqual(next.items.map((entry) => entry.media.sha256), [sha('91'), sha('1'), sha('93'), sha('4')]);
+  assert.deepEqual(applied.map((entry) => entry.itemId), ['1', '3']);
+  assert.deepEqual(skipped.map((entry) => entry.itemId), ['4', 'gone']);
+  // 第 1 张的旧文件还被第 2 张用着，不能删
+  assert.deepEqual(orphaned.map((media) => media.sha256), [sha('3')]);
+  assert.equal(next.items[0].updatedAt, at(9));
+});
+
+test('导出文件名：去掉非法字符，重名加序号', () => {
+  const names = exportFileNames([
+    item('1', { title: '晨雾/温室?' }),
+    item('2', { title: '晨雾/温室?' }),
+    item('3', { title: '', media: { ...item('3').media, name: 'photo.png' } }),
+    item('4', { title: 'clip. ', media: { ...item('4').media, ext: '.mp4' } }),
+  ]);
+  assert.deepEqual(names, ['晨雾_温室_.png', '晨雾_温室_ (2).png', 'photo.png', 'clip.mp4']);
 });
 
 test('媒体类型按扩展名判断', () => {

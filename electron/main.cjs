@@ -868,7 +868,7 @@ app.whenReady().then(() => {
   if (process.platform === 'win32' && app.isPackaged) {
     removeDeadStartMenuShortcuts();
   }
-  materials.register({ ipcMain, userDataDir: app.getPath('userData'), getWindow: () => mainWindow });
+  materials.register({ ipcMain, userDataDir: app.getPath('userData'), updateBaseUrl: UPDATE_BASE_URL, getWindow: () => mainWindow });
   createTray();
   createWindow();
   createFloatingWindow();

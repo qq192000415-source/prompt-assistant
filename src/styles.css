@@ -3655,3 +3655,176 @@ h2 {
     min-height: 240px;
   }
 }
+
+/* 素材库批量管理：蓝底操作条、卡片复选框、压缩设置、进度面板 */
+.materials-batch-bar {
+  display: flex;
+  width: min(100%, 1440px);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-inline: auto;
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
+  border-radius: 10px;
+  background: var(--accent-weak);
+  padding: 8px 10px;
+}
+
+.materials-batch-count {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.materials-batch-spacer {
+  flex: 1;
+}
+
+.materials-batch-warning {
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.material-card.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-weak);
+}
+
+.material-card-open[aria-pressed] {
+  cursor: pointer;
+}
+
+.material-card-check {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 2px solid #ffffff;
+  border-radius: 6px;
+  background: rgba(16, 17, 20, 0.35);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  color: #ffffff;
+}
+
+.material-card-check.is-on {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.batch-form {
+  display: grid;
+  gap: 14px;
+}
+
+.batch-form select {
+  appearance: auto;
+}
+
+.batch-form input[type='range'] {
+  padding: 0;
+  border: 0;
+  accent-color: var(--accent);
+}
+
+.batch-field-label {
+  display: flex;
+  justify-content: space-between;
+}
+
+.batch-field-label strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.batch-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.batch-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.materials-progress {
+  position: fixed;
+  z-index: 25;
+  right: 20px;
+  bottom: 20px;
+  display: grid;
+  width: min(360px, calc(100vw - 40px));
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--overlay-surface);
+  box-shadow: var(--shadow);
+  padding: 12px 14px;
+}
+
+.materials-progress-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.materials-progress-head strong {
+  font-weight: 600;
+}
+
+.materials-progress-head span {
+  flex: 1;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.materials-progress-track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-muted);
+}
+
+.materials-progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 200ms ease-out;
+}
+
+.materials-progress-bar.is-indeterminate {
+  width: 30%;
+  animation: materials-progress-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes materials-progress-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .materials-progress-bar.is-indeterminate {
+    width: 100%;
+    animation: none;
+    opacity: 0.4;
+  }
+}
+
+.materials-progress-current {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

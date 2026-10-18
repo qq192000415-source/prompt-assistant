@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { loadMaterialsExportDir, saveMaterialsExportDir } from '../localState';
 import { emptyLibrary, type MaterialLibrary, type MaterialMedia, type MaterialPatch } from './library';
 
 export type MaterialStatus = 'unavailable' | 'loading' | 'unconfigured' | 'ready' | 'error';
@@ -14,6 +15,20 @@ const importSummary = (result: MaterialImportResult) => {
   return parts.join('，');
 };
 
+const formatBytes = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`);
+const failureText = (failures: MaterialBatchFailure[]) =>
+  failures.length ? `，${failures.length} 个失败：${failures.map((failure) => `${failure.name}（${failure.message}）`).join('、')}` : '';
+
+const compressSummary = (kind: string, result: MaterialCompressResult) =>
+  [
+    result.canceled ? `已取消，取消前压缩了 ${result.processed} 个${kind}` : `压缩了 ${result.processed} 个${kind}`,
+    result.savedBytes > 0 ? `省下 ${formatBytes(result.savedBytes)}` : '',
+    result.notSmaller ? `${result.notSmaller} 个压不小，保持原样` : '',
+    result.skippedUnsupported ? `${result.skippedUnsupported} 个不是可压缩的${kind}，跳过` : '',
+  ]
+    .filter(Boolean)
+    .join('，') + failureText(result.failures);
+
 export function useMaterialLibrary(notify: (message: string) => void) {
   const api = window.promptAssistantDesktop?.materials;
   const [status, setStatus] = useState<MaterialStatus>(api ? 'loading' : 'unavailable');
@@ -21,6 +36,7 @@ export function useMaterialLibrary(notify: (message: string) => void) {
   const [library, setLibrary] = useState<MaterialLibrary>(() => emptyLibrary());
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
+  const [progress, setProgress] = useState<MaterialBatchProgress | null>(null);
   // 调用方每次渲染传进来的 notify 都可能是新函数，放进 ref，避免它变化时重新连 NAS。
   const notifyRef = useRef(notify);
   notifyRef.current = notify;
@@ -57,6 +73,17 @@ export function useMaterialLibrary(notify: (message: string) => void) {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => api?.onProgress(setProgress), [api]);
+
+  // 批量任务：进度条等主进程发来第一条进度才出现（导出要先选完文件夹），结束后清掉。
+  const runBatch = async <T,>(label: string, action: () => Promise<T>): Promise<T | null> => {
+    try {
+      return await run(label, action);
+    } finally {
+      setProgress(null);
+    }
+  };
 
   // 所有写操作走这里：显示进行中的文字，失败时把原因告诉用户，不吞掉。
   const run = async <T,>(label: string, action: () => Promise<T>): Promise<T | null> => {
@@ -117,6 +144,31 @@ export function useMaterialLibrary(notify: (message: string) => void) {
         return true;
       });
       if (done) notify('图片已复制');
+    },
+    progress,
+    cancelBatch: () => void api?.cancelBatch(),
+    ffmpegStatus: () => api!.ffmpegStatus(),
+    installFfmpeg: async () => Boolean(await runBatch('下载 FFmpeg', async () => (await api!.installFfmpeg(), true))),
+    compressImages: async (ids: string[], options: MaterialImageCompressOptions) => {
+      const result = await runBatch('压缩图片', () => api!.compressImages(ids, options));
+      if (!result) return false;
+      apply(result);
+      notify(compressSummary('图片', result));
+      return true;
+    },
+    compressVideos: async (ids: string[], options: MaterialVideoCompressOptions) => {
+      const result = await runBatch('压缩视频', () => api!.compressVideos(ids, options));
+      if (!result) return false;
+      apply(result);
+      notify(compressSummary('视频', result));
+      return true;
+    },
+    exportItems: async (ids: string[]) => {
+      const result = await runBatch('导出', () => api!.exportItems(ids, loadMaterialsExportDir()));
+      if (!result) return false;
+      saveMaterialsExportDir(result.dir);
+      notify(`${result.canceled ? '已取消，' : ''}导出了 ${result.exported} 个文件到 ${result.dir}${failureText(result.failures)}`);
+      return true;
     },
   };
 }

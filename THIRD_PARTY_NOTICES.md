@@ -1,11 +1,22 @@
 # 第三方代码声明
 
+## FFmpeg（按需下载的组件，不在安装包里）
+
+素材库的视频压缩会在第一次使用时，从部署者的更新源 `components/` 目录下载 FFmpeg 程序，下载后校验 SHA256 再启用。
+
+- 构建：gyan.dev FFmpeg 8.1.2 essentials（Windows 64 位静态构建），原样分发，未修改。
+- 协议：GPL v3。协议全文和构建说明随程序一起放在更新源：`components/ffmpeg-8.1.2-essentials_build-www.gyan.dev-LICENSE.txt`、`components/ffmpeg-8.1.2-essentials_build-www.gyan.dev-README.txt`。
+- 对应源码：https://github.com/FFmpeg/FFmpeg/commit/38b88335f9 ；构建来源：https://www.gyan.dev/ffmpeg/builds/ 、https://github.com/GyanD/codexffmpeg/releases/tag/8.1.2
+- 提示词助手通过命令行调用这个独立程序，没有链接 FFmpeg 的库。
+
 ## SuYan（素言）
 
 素材库的部分代码移植自 [guliacer/SuYan](https://github.com/guliacer/SuYan)，按 MIT 协议使用。移植过的文件在文件开头注明了来源：
 
 - `src/materials/mediaFileTypes.ts`：媒体扩展名定义
 - `src/materials/library.ts`：同组效果图的分组规则、组内排序、提示词文本规整、标签去重
+- `electron/materials/ffmpeg.ts`：视频编码器选择（显卡编码优先、软件编码兜底）、FFmpeg 参数、时长和进度解析
+- `electron/materials/batch.ts`：批量压缩的流程（逐个处理、变小才替换、失败逐条报告）
 
 ```text
 MIT License

@@ -4,7 +4,7 @@ Last updated: 2026-10-17
 
 Project root: 仓库根目录
 
-Current source version: `1.4.0`
+Current source version: `1.4.1`
 
 Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 
@@ -14,7 +14,7 @@ Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 
 - 当前主项目目录：仓库根目录
 - 当前分支：`master`
-- 当前源码版本：`1.4.0`
+- 当前源码版本：`1.4.1`
 - 云同步只使用 Supabase Auth + `public.prompt_libraries`，不再使用自建/VPS 同步服务。
 - 本机数据目录固定为 `%APPDATA%\prompt-assistant`（1.3.26 起）。旧版本按版本号分目录（`提示词助手X.Y.Z`），首次启动自动从最近使用的旧目录搬数据，旧目录保留。
 - 安装版自动更新源由部署者写入本机 `.env` 的 `UPDATE_BASE_URL`。仓库不保存真实服务器地址。
@@ -138,7 +138,7 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 
 ### Current Progress
 
-当前源码版本为 `1.4.0`。左栏可在「提示词 | 文档 | 素材」间切换：文档库原样保存文件，素材库（图片、视频）只存在用户自己的 NAS 上。界面升级到 shadcn/ui 设计令牌，保留双栏工作流，并支持本机浅色/深色外观。安装包更新源改为本项目自己的子域名，地址只写在本机 `.env`，不和其他项目共用主机名。
+当前源码版本为 `1.4.1`。左栏可在「提示词 | 文档 | 素材」间切换：文档库原样保存文件，素材库（图片、视频）只存在用户自己的 NAS 上。界面升级到 shadcn/ui 设计令牌，保留双栏工作流，并支持本机浅色/深色外观。安装包更新源改为本项目自己的子域名，地址只写在本机 `.env`，不和其他项目共用主机名。
 
 - 云同步：Supabase Auth + `prompt_libraries`，地址来自 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY`
 - 安装包更新：部署者自己的 HTTPS 目录，地址来自 `UPDATE_BASE_URL`
@@ -157,6 +157,21 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 - 界面升级为 shadcn/ui + Tailwind 设计令牌：中性表面、发丝边框、单一蓝色强调色、浅色/深色外观，以及菜单、弹窗和提示的短过渡。业务逻辑未改。
 
 ### Latest Verification
+
+- 2026-10-18：版本 `1.4.1` 发布素材库 M2。
+  - `release:publish` 生成三类产物，公网校验通过。发版清理后，更新源 `components/` 下的 FFmpeg 仍然可以访问（HTTP 200）。
+  - 打包版用临时数据目录实测：批量相关接口都在；用安装包里写入的更新源地址下载 FFmpeg，32 秒完成并校验通过。
+  - 以下是开发版的验证：
+  - 自动检查：测试 75 项通过（新增压缩替换、导出文件名、FFmpeg 参数和进度、下载校验失败、导出、同时只跑一个任务，共 7 项）；`npx tsc -b` 通过。
+  - FFmpeg 组件：已上传到更新源的 `components/`，exe、LICENSE、README 三个文件都通过公网校验。
+  - 开发版连真实 NAS 实测：
+    - 批量管理全选后，操作条显示「压缩图片 2、压缩视频 1」。
+    - 3000×2000 的 JPG 压到最长边 1920，777KB → 153KB；噪点 PNG 转成 JPG 反而更大，所以保持原样。
+    - FFmpeg 从更新源下载（97MB）并校验通过。
+    - 16MB 的 1080p 视频压到 720p，用了 3 秒，结果是 3.2MB，H.264，时长不变，能完整解码；NAS 上的旧文件已删除。
+    - 40 秒的视频压到 28% 时取消：原文件不变，FFmpeg 进程已退出，临时目录已清掉。
+    - 全选后批量删除：NAS 的 media/thumbs 清空。
+  - 未实测：原生的「选择文件夹」对话框。用模拟按键操作它会误触前台的其他窗口，所以停了；取消选择文件夹的路径实测过，导出本身由模拟 WebDAV 测试覆盖。
 
 - 2026-10-18：版本 `1.4.0` 发布素材库 M1。`release:publish` 生成三类产物，上传后公网校验安装包、blockmap、`latest.yml` 通过。打包后的 `app.asar` 里有 `electron/materials.cjs`；用临时数据目录启动 `win-unpacked` 实测：连接 NAS、导入一张图、卡片缩略图通过 `nas-media://` 正常显示、删除，全部正常，测试图已从 NAS 删掉。以下是开发版的验证：
   - 自动检查：测试 68 项通过（原有 54 项，新增素材库纯逻辑 8 项、模拟 WebDAV 加锁读改写 6 项），模拟服务器按 fnOS 实测行为编写；`npx tsc -b`（含新增的 `tsconfig.electron.json`）通过；`npm run build` 通过；全部 `electron/*.cjs` 的 `node --check` 通过。
@@ -231,7 +246,8 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 | Done | 外链协议白名单 | `electron/main.cjs` 的 `openExternal` 只放行 `http:`、`https:` |
 | Todo P3 | schema 去掉 anon select 授权 | RLS 已拦截，授权本身无用 |
 | Done（1.4.0） | 素材库 M1：NAS 存储与核心浏览 | 复用 SuYan（MIT）。WebDAV 存储层（加锁读改写）、`nas-media://` 协议、导入（选择/拖放/粘贴）、方案 B 卡片网格、分类标签页、搜索、详情编辑、同组效果图、精选、删除、复制图片 |
-| Todo | 素材库 M2（1.4.1） | 多选批量管理、去重、图像压缩（nativeImage）、视频压缩（FFmpeg 按需从 `UPDATE_BASE_URL` 下载并校验 SHA256）、导出带进度 |
+| Done（1.4.1） | 素材库 M2 | 批量管理（按组多选）、图片压缩（nativeImage）、视频压缩（FFmpeg 按需从 `UPDATE_BASE_URL/components/` 下载并校验 SHA256，显卡编码优先）、导出到文件夹带素材清单、进度面板、取消、批量删除。去重不单独做：导入和加锁写入时已按 SHA256 去重，库里不会有完全相同的文件 |
+| Todo P3 | 图片压缩输出 WebP | nativeImage 不能编码 WebP；已有 FFmpeg（带 libwebp）时可以用它 |
 | Todo | 素材库 M3（1.4.2） | Word 图文导入、分享 ZIP 导入导出、网络分享链接抓取（即梦、X、aiart.pics、opennana 等）和代理设置 |
 | Todo | 第二阶段：AI 助手 | 复用 SuYan 的 Ollama/OpenAI 兼容客户端：提示词优化、翻译、分类标签识别、图像反推 |
 | Todo | 第三阶段：创作画布 | 复用 SuYan 的画布生图 |
@@ -239,6 +255,12 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 
 ### Log Entries
 
+- 2026-10-18：版本 `1.4.1`，素材库 M2：批量管理、图片和视频压缩、导出。
+  - FFmpeg 选了 gyan.dev 8.1.2 essentials（GPL v3）：带 libx264/libx265 和 NVENC/QSV/AMF 显卡编码。它不进安装包，按需从更新源下载，协议说明见 `THIRD_PARTY_NOTICES.md`。
+  - 视频压缩的编码器选择、参数和进度解析移植自 SuYan。
+  - SuYan 的「去重」是按 SHA256 找完全相同的文件，我们导入时已经按 SHA256 去重，所以不单独做。
+
+- 2026-10-18：1.4.0 已打 tag `stable-提示词助手1.4.0`（master 提交 `c1e34d1`）。公开仓库同步到 `main`（提交 `9e2ff61`），推送前扫描过，没有 IP、邮箱、更新域名、NAS 地址、密钥。`.claude/`（本机 Impeccable 工具）已加入忽略。
 - 2026-10-17 ~ 18：版本 `1.4.0`，素材库 M1。用户要求复用开源项目 SuYan（MIT），并确认：做成和提示词库、文档库完全独立的第三个板块；分三个阶段（素材库 → AI 助手 → 画布）；素材只存在用户 NAS 的专用文件夹里，不落本机；家里和外网都能用；界面选了方案 B「整洁的卡片柜」（效果图在 Artifact 画布里）。
   - NAS 环境：用户的 fnOS 开了 WebDAV HTTPS，用 Let's Encrypt 证书，飞牛自动续签；专用普通用户只能读写团队文件夹「提示词助手素材库」。路由器原来的 5005/5006 已经转发给另一台群晖，所以飞牛 WebDAV 换了端口，另加了一条端口转发。地址和账户只存在用户电脑上，不进仓库。
   - 关键发现：fnOS 的 WebDAV 忽略 `If-Match`（拿旧版本号写照样成功），但支持 LOCK。所以 `library.json` 的写入改成加锁读改写，没有用原计划的 ETag 乐观锁。

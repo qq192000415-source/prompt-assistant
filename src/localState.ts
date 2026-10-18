@@ -8,6 +8,7 @@ const SYNC_RECORDS_KEY = 'prompt-library.syncRecords.v1';
 const EXPORT_SETTINGS_KEY = 'prompt-library.exportSettings.v1';
 const CLOUD_REMEMBERED_LOGIN_KEY = 'prompt-library.cloudRememberedLogin.v1';
 const LIBRARY_MODE_KEY = 'prompt-library.libraryMode.v1';
+const MATERIALS_EXPORT_DIR_KEY = 'prompt-library.materialsExportDir.v1';
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 420;
 
@@ -135,6 +136,23 @@ export const loadLibraryMode = (): LibraryMode => {
     return saved === 'documents' || saved === 'materials' ? saved : 'prompts';
   } catch {
     return 'prompts';
+  }
+};
+
+// 素材库上次导出到的文件夹，下次打开选择框时从这里开始。
+export const loadMaterialsExportDir = () => {
+  try {
+    return window.localStorage.getItem(MATERIALS_EXPORT_DIR_KEY) ?? '';
+  } catch {
+    return '';
+  }
+};
+
+export const saveMaterialsExportDir = (dir: string) => {
+  try {
+    window.localStorage.setItem(MATERIALS_EXPORT_DIR_KEY, dir);
+  } catch {
+    // 记不住导出目录不影响导出。
   }
 };
 

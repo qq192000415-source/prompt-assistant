@@ -198,6 +198,40 @@ export function deleteItems(library: MaterialLibrary, ids: readonly string[], no
   return { library: { ...library, updatedAt: now, items }, orphaned: [...orphaned.values()] };
 }
 
+export type MediaReplacement = { itemId: string; from: MaterialMedia; to: MaterialMedia };
+
+// 压缩后把条目换成新文件。只换「当前还指向旧文件」的条目，压缩期间别的电脑改过或删掉的条目原样不动。
+// orphaned 是换完后没人再用的旧文件，调用方删掉；skipped 是没换成的，调用方要把新传的文件删掉。
+export function replaceMedia(library: MaterialLibrary, replacements: readonly MediaReplacement[], now: string) {
+  const byItem = new Map(replacements.map((entry) => [entry.itemId, entry]));
+  const applied: MediaReplacement[] = [];
+  const items = library.items.map((item) => {
+    const entry = byItem.get(item.id);
+    if (!entry || item.media.sha256 !== entry.from.sha256) return item;
+    applied.push(entry);
+    return { ...item, media: entry.to, updatedAt: now };
+  });
+  const stillUsed = new Set(items.map((item) => item.media.sha256));
+  const orphaned = [...new Map(applied.filter((entry) => !stillUsed.has(entry.from.sha256)).map((entry) => [entry.from.sha256, entry.from])).values()];
+  const skipped = replacements.filter((entry) => !applied.includes(entry));
+  return { library: { ...library, updatedAt: now, items }, applied, skipped, orphaned };
+}
+
+// 导出时用标题当文件名，去掉 Windows 不允许的字符；和同批其他文件或 isTaken（目标文件夹里已有的）重名时加 (2)、(3)。
+export function exportFileNames(items: readonly MaterialItem[], isTaken: (name: string) => boolean = () => false): string[] {
+  const used = new Set<string>();
+  return items.map((item) => {
+    const base = (item.title || item.media.name.slice(0, item.media.name.length - item.media.ext.length) || item.media.sha256.slice(0, 8))
+      .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
+      .replace(/[. ]+$/, '')
+      .slice(0, 120) || 'file';
+    let name = `${base}${item.media.ext}`;
+    for (let index = 2; used.has(name.toLowerCase()) || isTaken(name); index += 1) name = `${base} (${index})${item.media.ext}`;
+    used.add(name.toLowerCase());
+    return name;
+  });
+}
+
 // 组内按加入时间排，原始效果图在前；组与组按最近一次加入排，新导入的在最前。
 export function groupMaterials(items: readonly MaterialItem[]): MaterialGroup[] {
   const groups = new Map<string, MaterialItem[]>();
