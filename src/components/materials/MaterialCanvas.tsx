@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { Check, ChevronLeft, ChevronRight, ClipboardPaste, Download, ImagePlus, RotateCcw, Save, Settings, Sparkles, Wand2, X } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, ClipboardPaste, Download, ImagePlus, RotateCcw, Save, Search, Settings, Sparkles, Trash2, Wand2, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import type { MaterialLibraryController } from '../../materials/useMaterialLibrary';
-import { canvas, isVideoModel, unsavedCount, useCanvasState, type CanvasBatch, type CanvasResult } from '../../materials/canvasStore';
+import { canvas, getCanvasState, isActive, isVideoModel, savedInHistory, useCanvasState, visibleTasks } from '../../materials/canvasStore';
 import {
   canvasAspectRatioOptions,
   extractPromptKeywords,
@@ -22,10 +22,8 @@ const RESOLUTIONS: Array<{ value: CanvasBaseResolution; label: string }> = [
   { value: '2k', label: '2K' },
   { value: '4k', label: '4K' },
 ];
-const REVEAL_MS = 900;
-
-// 等待时按已用时间换说法，和 SuYan 的「思考 → 生成」两段一致。
-const waitingLabel = (seconds: number) => (seconds < 4 ? '正在理解提示词' : seconds < 40 ? '正在生成画面' : '还在生成，复杂画面会久一些');
+// 生成记录每次多显示这么多个任务，历史多了也不卡。
+const PAGE_SIZE = 20;
 
 const readAsDataUrl = (file: File) =>
   new Promise<string>((resolve, reject) => {
@@ -57,18 +55,20 @@ type MaterialCanvasProps = {
 };
 
 export function MaterialCanvas({ controller, settingsOpen, onOpenSettings }: MaterialCanvasProps) {
-  const { draft, phase, batches, error, startedAt } = useCanvasState();
+  const { draft, error, queue, history, historyLoaded } = useCanvasState();
   const [model, setModel] = useState<string | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
-  const [now, setNow] = useState(Date.now());
+  const [query, setQuery] = useState('');
+  const [shown, setShown] = useState(PAGE_SIZE);
+  const [submitting, setSubmitting] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const finishedSlots = useRef(-1);
   const busy = Boolean(controller.busy);
-  const generating = phase === 'generating';
   const video = Boolean(model && isVideoModel(model));
   const sizeLabel = getCanvasGenerationSizeLabel(resolveCanvasGenerationSize(draft));
-  const keywords = useMemo(() => extractPromptKeywords(draft.prompt), [draft.prompt]);
-  const [latest, ...earlier] = batches;
-  const unsaved = unsavedCount(batches);
+  const tasks = useMemo(() => visibleTasks(queue, history, query), [queue, history, query]);
+  const queueIds = useMemo(() => new Set(queue.map((task) => task.id)), [queue]);
+  const activeCount = queue.filter(isActive).length;
 
   useEffect(() => {
     if (settingsOpen) return;
@@ -78,17 +78,27 @@ export function MaterialCanvas({ controller, settingsOpen, onOpenSettings }: Mat
       .catch(() => setModel(''));
   }, [settingsOpen]);
 
-  useEffect(() => {
-    if (!generating) return undefined;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [generating]);
+  const reloadHistory = () =>
+    controller
+      .canvasHistory()
+      .then(({ history: loaded }) => canvas.setHistory(loaded.tasks))
+      .catch((loadError) => {
+        // 读不到（比如 NAS 暂时连不上）时保留已有的，界面不卡在「正在读取」。
+        console.warn('读取生成历史失败', loadError);
+        canvas.setHistory(getCanvasState().history);
+      });
 
+  // 打开画布时取一次队列和历史（别的电脑可能生成过），之后跟着主进程推来的队列变化走；有槽位结束就重读历史。
   useEffect(() => {
-    if (phase !== 'reveal') return undefined;
-    const timer = window.setTimeout(() => canvas.revealDone(), REVEAL_MS);
-    return () => window.clearTimeout(timer);
-  }, [phase]);
+    void controller.canvasQueue().then(canvas.setQueue);
+    void reloadHistory();
+    return controller.onCanvasQueue((tasks) => {
+      canvas.setQueue(tasks);
+      const finished = tasks.reduce((sum, task) => sum + task.slots.filter((slot) => slot.status === 'done' || slot.status === 'failed').length, 0);
+      if (finishedSlots.current >= 0 && finished > finishedSlots.current) void reloadHistory();
+      finishedSlots.current = finished;
+    });
+  }, []);
 
   // 画布里按 Ctrl+V：剪贴板里有图就加成参考图；输入框里的粘贴照常。
   useEffect(() => {
@@ -119,39 +129,47 @@ export function MaterialCanvas({ controller, settingsOpen, onOpenSettings }: Mat
     if (optimized) canvas.setDraft({ [key]: optimized });
   };
 
-  const generate = () => {
-    if (!model) return;
-    void canvas.generate(model, controller.canvasGenerate);
+  // 提交后立刻可以改参数再提交，任务在主进程队列里排队。
+  const generate = async () => {
+    if (!model || submitting) return;
+    setSubmitting(true);
+    await canvas.submit(model, controller.canvasSubmit);
+    setSubmitting(false);
   };
 
-  const save = async (batch: CanvasBatch, result: CanvasResult) => {
-    if (await controller.canvasSave({ dataUrl: result.dataUrl, prompt: batch.prompt, negativePrompt: batch.negativePrompt, origin: batch.origin })) canvas.markSaved(result.id);
+  const save = async (task: MaterialCanvasTask, slot: MaterialCanvasSlot) => {
+    if (await controller.canvasSave(task.id, slot.index)) void reloadHistory();
   };
 
-  const all = batches.flatMap((batch) => batch.results.map((result) => ({ batch, result })));
-  const resultActions = (batch: CanvasBatch, result: CanvasResult) => (
-    <div className="canvas-result-actions">
-      <Button className="button ghost compact" type="button" disabled={busy || result.saved} onClick={() => void save(batch, result)}>
-        {result.saved ? <Check size={13} /> : <Save size={13} />}
-        {result.saved ? '已存入' : '存入素材库'}
-      </Button>
-      <Button className="button ghost compact" type="button" disabled={busy} onClick={() => void controller.canvasSaveAs(result.dataUrl)}>
-        <Download size={13} />
-        另存为
-      </Button>
-      <Button className="button ghost compact" type="button" title="把生成这张图用的提示词放回左边" onClick={() => canvas.reusePrompt(batch, result)}>
-        <RotateCcw size={13} />
-        复用提示词
-      </Button>
-    </div>
-  );
+  const removeTask = async (task: MaterialCanvasTask) => {
+    const remaining = await controller.canvasHistoryDelete([task.id]);
+    if (remaining) canvas.setHistory(remaining.tasks);
+  };
 
-  const media = (result: CanvasResult, className = '') =>
-    result.mediaType === 'video' ? (
-      <video className={className} src={result.dataUrl} controls playsInline />
-    ) : (
-      <img className={className} src={result.dataUrl} alt="生成结果" />
+  const viewerEntries = tasks.flatMap((task) => task.slots.filter((slot) => slot.status === 'done').map((slot) => ({ task, slot })));
+  const slotSaved = (task: MaterialCanvasTask, slot: MaterialCanvasSlot) => Boolean(slot.savedToLibrary) || savedInHistory(history, task.id, slot.index);
+  const resultActions = (task: MaterialCanvasTask, slot: MaterialCanvasSlot) => {
+    const saved = slotSaved(task, slot);
+    return (
+      <div className="canvas-result-actions">
+        <Button className="button ghost compact" type="button" disabled={busy || saved} onClick={() => void save(task, slot)}>
+          {saved ? <Check size={13} /> : <Save size={13} />}
+          {saved ? '已存入' : '存入素材库'}
+        </Button>
+        <Button className="button ghost compact" type="button" disabled={busy} onClick={() => void controller.canvasSaveAs(task.id, slot.index)}>
+          <Download size={13} />
+          另存为
+        </Button>
+        {/* 原提示词在任务头部就能复用；模型改写过提示词时，这里复用改写后的。 */}
+        {slot.revisedPrompt && (
+          <Button className="button ghost compact" type="button" title="把模型改写后的提示词放回左边" onClick={() => canvas.reusePrompt(task, slot)}>
+            <RotateCcw size={13} />
+            复用改写后的提示词
+          </Button>
+        )}
+      </div>
     );
+  };
 
   return (
     <div className="canvas-layout">
@@ -159,7 +177,7 @@ export function MaterialCanvas({ controller, settingsOpen, onOpenSettings }: Mat
         className="canvas-panel"
         onSubmit={(event) => {
           event.preventDefault();
-          generate();
+          void generate();
         }}
       >
         <label className="field" htmlFor="canvas-prompt">
@@ -348,90 +366,178 @@ export function MaterialCanvas({ controller, settingsOpen, onOpenSettings }: Mat
               </button>
             </p>
           )}
-          <Button className="button primary canvas-generate" type="submit" disabled={generating || !model || !draft.prompt.trim()}>
+          <Button className="button primary canvas-generate" type="submit" disabled={submitting || !model || !draft.prompt.trim()}>
             <Sparkles size={15} />
-            {generating ? '生成中…' : video ? '生成视频' : '生成'}
+            {video ? '生成视频' : activeCount ? '再提交一个任务' : '生成'}
           </Button>
         </div>
       </form>
 
-      <section className="canvas-stage" aria-label="生成结果">
-        {generating ? (
-          <div className="canvas-generating" aria-live="polite">
-            {draft.referenceImages[0] && <img className="canvas-generating-backdrop" src={draft.referenceImages[0].dataUrl} alt="" />}
-            <div className="canvas-scan" aria-hidden="true" />
-            <div className="canvas-generating-text">
-              <strong>{waitingLabel(Math.floor((now - startedAt) / 1000))}</strong>
-              <div className="canvas-keywords">
-                {keywords.map((keyword, index) => (
-                  <span key={keyword} style={{ animationDelay: `${index * 0.6}s` }}>
-                    {keyword}
-                  </span>
-                ))}
-              </div>
-              <span>已用 {Math.max(0, Math.floor((now - startedAt) / 1000))} 秒</span>
-            </div>
+      <section className="canvas-stage" aria-label="生成记录">
+        <div className="canvas-stage-header">
+          <div>
+            <strong>生成记录</strong>
+            <span>{activeCount ? `${activeCount} 个任务进行中` : '生成的图都自动存在 NAS 的生成历史里'}</span>
           </div>
-        ) : latest ? (
-          <div className={`canvas-latest is-count-${Math.min(latest.results.length, 4)} ${phase === 'reveal' ? 'is-revealing' : ''}`}>
-            {latest.results.map((result) => (
-              <figure key={result.id} className="canvas-result">
-                <button type="button" className="canvas-result-media" aria-label="全屏查看" onClick={() => setViewing(result.id)}>
-                  {media(result)}
-                </button>
-                {resultActions(latest, result)}
-              </figure>
-            ))}
-          </div>
-        ) : (
+          <label className="materials-search canvas-search">
+            <Search size={15} aria-hidden="true" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索提示词、模型" aria-label="搜索生成记录" />
+          </label>
+        </div>
+
+        {tasks.length === 0 ? (
           <div className="canvas-empty">
             <Sparkles size={22} aria-hidden="true" />
-            <strong>写好提示词，点生成</strong>
-            <span>生成的图先在这里预览，满意的点「存入素材库」上传到 NAS；没存的关掉软件就没了。</span>
+            <strong>{query ? '没有匹配的记录' : historyLoaded ? '写好提示词，点生成' : '正在读取生成历史…'}</strong>
+            {!query && historyLoaded && <span>可以连续提交多个任务，它们会排队生成；生成的图自动存进 NAS 的生成历史，满意的再存入素材库。</span>}
           </div>
-        )}
-
-        {batches.length > 0 && (
-          <div className="canvas-history">
-            <div className="canvas-history-header">
-              <strong>本次生成</strong>
-              <span>{unsaved ? `${unsaved} 个结果还没存入素材库，关掉软件后会消失` : '都已存入素材库'}</span>
-            </div>
-            {earlier.map((batch) => (
-              <div key={batch.id} className="canvas-history-row">
-                <div className="canvas-history-meta">
-                  <span>{new Date(batch.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} · {batch.model}</span>
-                  <p title={batch.prompt}>{batch.prompt}</p>
-                </div>
-                <div className="canvas-history-thumbs">
-                  {batch.results.map((result) => (
-                    <button key={result.id} type="button" className={result.saved ? 'is-saved' : ''} aria-label={result.saved ? '已存入素材库，全屏查看' : '全屏查看'} onClick={() => setViewing(result.id)}>
-                      {result.mediaType === 'video' ? <video src={result.dataUrl} muted preload="metadata" /> : <img src={result.dataUrl} alt="" />}
-                      {result.saved && <Check size={12} aria-hidden="true" />}
-                    </button>
-                  ))}
-                </div>
-              </div>
+        ) : (
+          <>
+            {tasks.slice(0, shown).map((task) => (
+              <CanvasTaskCard
+                key={task.id}
+                task={task}
+                inQueue={queueIds.has(task.id)}
+                busy={busy}
+                onView={(slot) => setViewing(`${task.id}:${slot.index}`)}
+                onRetry={(slot) => void controller.canvasRetry(task.id, slot.index)}
+                onCancel={() => void controller.canvasCancel(task.id)}
+                onDelete={() => void removeTask(task)}
+                onReuse={() => canvas.reusePrompt(task)}
+                actions={resultActions}
+              />
             ))}
-          </div>
+            {tasks.length > shown && (
+              <Button className="button ghost canvas-more" type="button" onClick={() => setShown(shown + PAGE_SIZE)}>
+                再显示 {Math.min(PAGE_SIZE, tasks.length - shown)} 个（共 {tasks.length} 个）
+              </Button>
+            )}
+          </>
         )}
       </section>
 
       {viewing && (
-        <CanvasViewer
-          entries={all}
-          currentId={viewing}
-          onChange={setViewing}
-          onClose={() => setViewing(null)}
-          actions={resultActions}
-          media={media}
-        />
+        <CanvasViewer entries={viewerEntries} currentId={viewing} onChange={setViewing} onClose={() => setViewing(null)} actions={resultActions} />
       )}
     </div>
   );
 }
 
-type ViewerEntry = { batch: CanvasBatch; result: CanvasResult };
+const STATUS_LABELS: Record<MaterialCanvasSlot['status'], string> = { queued: '排队中', running: '生成中', done: '', failed: '失败', canceled: '已取消' };
+
+// 生成好的图：生成历史里的走 nas-media://canvas-history/…；没存进历史的用内存里的 data URL。
+const slotSrc = (slot: MaterialCanvasSlot, full = false) => {
+  if (slot.media) {
+    const { sha256, ext, hasThumb } = slot.media;
+    return !full && hasThumb ? `nas-media://canvas-history/thumbs/${sha256}.jpg` : `nas-media://canvas-history/media/${sha256}${ext}`;
+  }
+  return slot.dataUrl ?? '';
+};
+
+const isVideoSlot = (slot: MaterialCanvasSlot) => slot.media?.kind === 'video' || Boolean(slot.dataUrl?.startsWith('data:video/'));
+
+type CanvasTaskCardProps = {
+  task: MaterialCanvasTask;
+  inQueue: boolean;
+  busy: boolean;
+  onView: (slot: MaterialCanvasSlot) => void;
+  onRetry: (slot: MaterialCanvasSlot) => void;
+  onCancel: () => void;
+  onDelete: () => void;
+  onReuse: () => void;
+  actions: (task: MaterialCanvasTask, slot: MaterialCanvasSlot) => React.ReactNode;
+};
+
+function CanvasTaskCard({ task, inQueue, busy, onView, onRetry, onCancel, onDelete, onReuse, actions }: CanvasTaskCardProps) {
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const active = isActive(task);
+  const keywords = useMemo(() => extractPromptKeywords(task.prompt, 3), [task.prompt]);
+  // 历史里没记录的槽位（取消了的，或别的电脑上还没结束的）补成占位，保证张数对得上。
+  const slots = Array.from({ length: task.total }, (_, index) => task.slots.find((slot) => slot.index === index) ?? null);
+  const time = new Date(task.createdAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const size = task.params.size && task.params.size !== 'auto' ? task.params.size.replace('x', '×') : '自动尺寸';
+
+  return (
+    <article className={`canvas-task ${active ? 'is-active' : ''}`}>
+      <header className="canvas-task-header">
+        <span className="canvas-task-meta">
+          {time} · {task.model} · {size}
+          {task.referenceCount ? ` · ${task.referenceCount} 张参考图` : ''}
+        </span>
+        <span className="canvas-task-actions">
+          <Button className="button ghost compact" type="button" title="把这个任务的提示词放回左边" onClick={onReuse}>
+            <RotateCcw size={13} />
+            复用提示词
+          </Button>
+          {active ? (
+            <Button className="button ghost compact" type="button" title="已经发出的请求停不下来，服务商可能仍会生成并扣费" onClick={onCancel}>
+              <X size={13} />
+              取消
+            </Button>
+          ) : confirmingDelete ? (
+            <>
+              <Button className="button ghost compact" type="button" onClick={() => setConfirmingDelete(false)}>
+                不删
+              </Button>
+              <Button className="button solid-danger compact" type="button" disabled={busy} onClick={onDelete}>
+                从 NAS 删除
+              </Button>
+            </>
+          ) : (
+            <Button className="button ghost danger compact" type="button" onClick={() => setConfirmingDelete(true)}>
+              <Trash2 size={13} />
+              删除
+            </Button>
+          )}
+        </span>
+      </header>
+      <p className="canvas-task-prompt" title={task.prompt}>
+        {task.prompt}
+      </p>
+      <div className={`canvas-task-slots is-count-${Math.min(task.total, 4)}`}>
+        {slots.map((slot, index) => (
+          <figure key={index} className={`canvas-slot is-${slot?.status ?? 'missing'}`}>
+            {slot?.status === 'done' ? (
+              <>
+                <button type="button" className={`canvas-result-media ${inQueue ? 'is-new' : ''}`} aria-label="全屏查看" onClick={() => onView(slot)}>
+                  {isVideoSlot(slot) ? <video src={slotSrc(slot, true)} controls playsInline preload="metadata" /> : <img src={slotSrc(slot)} alt="生成结果" loading="lazy" />}
+                </button>
+                {slot.error && <figcaption className="canvas-slot-warning">{slot.error}</figcaption>}
+                {actions(task, slot)}
+              </>
+            ) : (
+              <div className="canvas-slot-placeholder">
+                {slot?.status === 'running' && <div className="canvas-scan" aria-hidden="true" />}
+                <strong>{slot ? STATUS_LABELS[slot.status] : active ? '排队中' : '没有结果'}</strong>
+                {slot?.status === 'running' && (
+                  <div className="canvas-keywords">
+                    {keywords.map((keyword, position) => (
+                      <span key={keyword} style={{ animationDelay: `${position * 0.6}s` }}>
+                        {keyword}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {slot?.error && <span className="canvas-slot-error">{slot.error}</span>}
+                {slot && (slot.status === 'failed' || slot.status === 'canceled') &&
+                  (inQueue ? (
+                    <Button className="button ghost compact" type="button" onClick={() => onRetry(slot)}>
+                      <RotateCcw size={13} />
+                      重试这张
+                    </Button>
+                  ) : (
+                    <span className="canvas-slot-hint">要重新生成，点上面的「复用提示词」再生成</span>
+                  ))}
+              </div>
+            )}
+          </figure>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+type ViewerEntry = { task: MaterialCanvasTask; slot: MaterialCanvasSlot };
 
 function CanvasViewer({
   entries,
@@ -439,19 +545,18 @@ function CanvasViewer({
   onChange,
   onClose,
   actions,
-  media,
 }: {
   entries: ViewerEntry[];
   currentId: string;
   onChange: (id: string) => void;
   onClose: () => void;
-  actions: (batch: CanvasBatch, result: CanvasResult) => React.ReactNode;
-  media: (result: CanvasResult, className?: string) => React.ReactNode;
+  actions: (task: MaterialCanvasTask, slot: MaterialCanvasSlot) => React.ReactNode;
 }) {
-  const index = Math.max(0, entries.findIndex((entry) => entry.result.id === currentId));
+  const key = (entry: ViewerEntry) => `${entry.task.id}:${entry.slot.index}`;
+  const index = Math.max(0, entries.findIndex((entry) => key(entry) === currentId));
   const entry = entries[index];
   const [size, setSize] = useState('');
-  const go = (step: number) => onChange(entries[(index + step + entries.length) % entries.length].result.id);
+  const go = (step: number) => onChange(key(entries[(index + step + entries.length) % entries.length]));
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -468,18 +573,21 @@ function CanvasViewer({
     <div className="modal-shell canvas-viewer" role="dialog" aria-modal="true" aria-label="全屏查看">
       <Button className="modal-backdrop" type="button" aria-label="关闭" onClick={onClose} />
       <div className="canvas-viewer-body">
-        <div className="canvas-viewer-media" onLoadCapture={(event) => {
-          const target = event.target as HTMLImageElement;
-          if (target.naturalWidth) setSize(`${target.naturalWidth} × ${target.naturalHeight}`);
-        }}>
-          {media(entry.result)}
+        <div
+          className="canvas-viewer-media"
+          onLoadCapture={(event) => {
+            const target = event.target as HTMLImageElement;
+            if (target.naturalWidth) setSize(`${target.naturalWidth} × ${target.naturalHeight}`);
+          }}
+        >
+          {isVideoSlot(entry.slot) ? <video src={slotSrc(entry.slot, true)} controls playsInline /> : <img src={slotSrc(entry.slot, true)} alt="生成结果" />}
         </div>
         <div className="canvas-viewer-bar">
           <span>
-            {index + 1} / {entries.length} · {entry.batch.model}
-            {size && entry.result.mediaType === 'image' ? ` · ${size}` : ''}
+            {index + 1} / {entries.length} · {entry.task.model}
+            {size && !isVideoSlot(entry.slot) ? ` · ${size}` : ''}
           </span>
-          {actions(entry.batch, entry.result)}
+          {actions(entry.task, entry.slot)}
           {entries.length > 1 && (
             <>
               <Button className="icon-button" type="button" aria-label="上一张" onClick={() => go(-1)}>

@@ -1,5 +1,4 @@
 // 素材库主进程入口：nas-media:// 媒体协议、导入、IPC。编译成 electron/materials.cjs，由 main.cjs 引用。
-import fs from 'node:fs';
 import path from 'node:path';
 import { clipboard, dialog, nativeImage, protocol, type BrowserWindow, type IpcMain } from 'electron';
 import {
@@ -20,15 +19,16 @@ import { cancelBatch, reason, type BatchProgress, type Failure } from './tasks.t
 import { importFromClipboard } from './linkImport.ts';
 import { exportSharePackageTo, importSharePackageFile, importWordFiles } from './importers.ts';
 import { applyProxySettings, readProxySettings, saveProxySettings, testProxy } from './proxy.ts';
-import { CANVAS_CATEGORY, decodeGeneratedMedia, generateMedia, savedItemText, type CanvasOrigin } from './canvas.ts';
-import { commitImport, uploadBuffer, uploadFile } from './uploads.ts';
+import { registerCanvas } from './canvasService.ts';
+import { commitImport, uploadFile } from './uploads.ts';
 import { getPublicConfig, loadConfig, saveConfig } from './config.ts';
 import { FFMPEG_COMPONENT, ffmpegPath, installFfmpeg, isFfmpegInstalled, type VideoCompressOptions } from './ffmpeg.ts';
 import { mutateLibrary, readLibrary } from './libraryStore.ts';
 import * as webdav from './webdav.ts';
 
 const SCHEME = 'nas-media';
-const MEDIA_PATH_PATTERN = /^(media\/[0-9a-f]{64}\.[a-z0-9]{1,5}|thumbs\/[0-9a-f]{64}\.jpg)$/;
+// 素材库的原文件、缩略图，以及画布生成历史（canvas-history/）里的原文件、缩略图。
+const MEDIA_PATH_PATTERN = /^((canvas-history\/)?media\/[0-9a-f]{64}\.[a-z0-9]{1,5}|(canvas-history\/)?thumbs\/[0-9a-f]{64}\.jpg)$/;
 
 // 必须在 app ready 之前调用。
 export function registerScheme() {
@@ -249,44 +249,5 @@ export function register({ ipcMain, userDataDir, updateBaseUrl, getWindow }: Reg
     batchClassify(loadAiRuntime(userDataDir), loadConfig(userDataDir), asStringArray(ids), progressTo(event)),
   );
 
-  // 创作画布。生成结果只回给画布，用户点「存入素材库」才上传到 NAS。
-  ipcMain.handle('materials:canvas-generate', (_event, payload) => generateMedia(loadAiRuntime(userDataDir), payload ?? {}));
-  ipcMain.handle('materials:canvas-save', async (_event, input: { dataUrl?: unknown; prompt?: unknown; negativePrompt?: unknown; origin?: CanvasOrigin | null }) => {
-    const config = loadConfig(userDataDir);
-    const { buffer, ext } = decodeGeneratedMedia(String(input?.dataUrl ?? ''));
-    const { text, category } = savedItemText({
-      prompt: String(input?.prompt ?? ''),
-      negativePrompt: String(input?.negativePrompt ?? ''),
-      origin: input?.origin ?? null,
-    });
-    const stamp = new Date().toLocaleString('sv-SE').replace(/[: ]/g, '-');
-    const item = await uploadBuffer(config, buffer, `画布-${stamp}${ext}`, text, category || CANVAS_CATEGORY);
-    return commitImport(config, [item], []);
-  });
-  ipcMain.handle('materials:canvas-save-as', async (_event, dataUrl) => {
-    const { buffer, ext } = decodeGeneratedMedia(String(dataUrl ?? ''));
-    const window = getWindow();
-    const options: Electron.SaveDialogOptions = {
-      title: '另存为',
-      defaultPath: `画布-${new Date().toLocaleString('sv-SE').replace(/[: ]/g, '-')}${ext}`,
-      filters: [{ name: ext === '.mp4' ? '视频' : '图片', extensions: [ext.slice(1)] }],
-    };
-    const result = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options);
-    if (result.canceled || !result.filePath) return null;
-    fs.writeFileSync(result.filePath, buffer);
-    return result.filePath;
-  });
-  // 参考图：素材库里的图（视频用封面），或剪贴板里的图，都转成 data URL 交给画布。
-  ipcMain.handle('materials:canvas-reference', async (_event, itemId) => {
-    const { config, item } = await findItem(itemId);
-    const source = item.media.kind === 'image' ? mediaPath(item.media) : item.media.hasThumb ? thumbPath(item.media) : '';
-    if (!source) throw new Error('这个视频还没有封面，不能当参考图');
-    const bytes = await webdav.readBytes(config, source);
-    return { dataUrl: `data:${mimeTypeOf(source)};base64,${Buffer.from(bytes).toString('base64')}`, title: item.title || item.media.name };
-  });
-  ipcMain.handle('materials:canvas-clipboard-image', () => {
-    const image = clipboard.readImage();
-    if (image.isEmpty()) throw new Error('剪贴板里没有图片');
-    return image.toDataURL();
-  });
+  registerCanvas({ ipcMain, userDataDir, getWindow, findItem });
 }

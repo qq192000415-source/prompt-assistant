@@ -208,17 +208,29 @@ export function useMaterialLibrary(notify: (message: string) => void) {
       notify(`${result.canceled ? '已取消，' : ''}给 ${result.processed} 组分类打了标签${failureText(result.failures)}`);
       return true;
     },
-    // 生图不走 run：要等很久，不能把整个素材库锁住；进行状态由画布自己显示，错误也由画布显示。
-    canvasGenerate: (payload: Parameters<DesktopMaterialsApi['canvasGenerate']>[0]) => api!.canvasGenerate(payload),
-    canvasSave: async (input: Parameters<DesktopMaterialsApi['canvasSave']>[0]) => {
-      const result = await run('正在存入素材库…', () => api!.canvasSave(input));
+    // 提交生图不走 run：任务进队列后立刻返回，进行状态和失败原因由画布按队列显示，不锁整个素材库。
+    canvasSubmit: (input: Parameters<DesktopMaterialsApi['canvasSubmit']>[0]) => api!.canvasSubmit(input),
+    canvasQueue: () => api!.canvasQueue(),
+    onCanvasQueue: (callback: (tasks: MaterialCanvasTask[]) => void) => api?.onCanvasQueue(callback) ?? (() => undefined),
+    canvasCancel: (taskId: string) => api!.canvasCancel(taskId).catch((error) => notify(messageOf(error))),
+    canvasRetry: (taskId: string, index: number) => api!.canvasRetry(taskId, index).catch((error) => notify(messageOf(error))),
+    canvasDismiss: (taskId: string) => api!.canvasDismiss(taskId).catch((error) => notify(messageOf(error))),
+    canvasHistory: () => api!.canvasHistory(),
+    canvasHistoryDelete: async (ids: string[]) => {
+      const result = await run('正在删除…', () => api!.canvasHistoryDelete(ids));
+      if (!result) return null;
+      notify(result.warnings.length ? `已删除，但有 ${result.warnings.length} 个文件没能从 NAS 上删掉：${result.warnings.join('；')}` : '已删除');
+      return result.history;
+    },
+    canvasSave: async (taskId: string, index: number) => {
+      const result = await run('正在存入素材库…', () => api!.canvasSave(taskId, index));
       if (!result) return false;
       apply(result);
       notify(result.added ? '已存入素材库' : '素材库里已有这张图');
       return true;
     },
-    canvasSaveAs: async (dataUrl: string) => {
-      const saved = await run('正在保存…', () => api!.canvasSaveAs(dataUrl));
+    canvasSaveAs: async (taskId: string, index: number) => {
+      const saved = await run('正在保存…', () => api!.canvasSaveAs(taskId, index));
       if (saved) notify(`已保存到 ${saved}`);
     },
     canvasReference: (id: string) => run('正在读取参考图…', () => api!.canvasReference(id)),

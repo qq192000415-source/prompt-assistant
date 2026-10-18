@@ -119,9 +119,16 @@ type DesktopMaterialsApi = {
   aiClassify: (id: string, prompt: string) => Promise<{ category: string; tags: string[]; warnings: string[] }>;
   aiBatchReverse: (ids: string[]) => Promise<MaterialAiBatchResult>;
   aiBatchClassify: (ids: string[]) => Promise<MaterialAiBatchResult>;
-  canvasGenerate: (payload: import('./materials/suyan/canvasAiTypes').AiImageGenerationPayload) => Promise<MaterialCanvasGeneration>;
-  canvasSave: (input: { dataUrl: string; prompt: string; negativePrompt: string; origin: MaterialCanvasOrigin | null }) => Promise<MaterialImportResult>;
-  canvasSaveAs: (dataUrl: string) => Promise<string | null>;
+  canvasSubmit: (input: { payload: import('./materials/suyan/canvasAiTypes').AiImageGenerationPayload; count: number; origin: MaterialCanvasOrigin | null }) => Promise<string>;
+  canvasQueue: () => Promise<MaterialCanvasTask[]>;
+  canvasCancel: (taskId: string) => Promise<void>;
+  canvasRetry: (taskId: string, index: number) => Promise<void>;
+  canvasDismiss: (taskId: string) => Promise<void>;
+  canvasHistory: () => Promise<{ history: MaterialCanvasHistory; dropped: number }>;
+  canvasHistoryDelete: (ids: string[]) => Promise<{ history: MaterialCanvasHistory; dropped: number; warnings: string[] }>;
+  canvasSave: (taskId: string, index: number) => Promise<MaterialImportResult>;
+  canvasSaveAs: (taskId: string, index: number) => Promise<string | null>;
+  onCanvasQueue: (callback: (tasks: MaterialCanvasTask[]) => void) => () => void;
   canvasReference: (id: string) => Promise<{ dataUrl: string; title: string }>;
   canvasClipboardImage: () => Promise<string>;
   onProgress: (callback: (progress: MaterialBatchProgress) => void) => () => void;
@@ -141,14 +148,41 @@ type MaterialAiAction = {
   rulePresetIds: string[];
   customInstructions: string;
 };
-type MaterialAiSettings = { text: MaterialAiSlot | null; vision: MaterialAiSlot | null; image: MaterialAiSlot | null; actions: MaterialAiAction[] };
+type MaterialCanvasOptions = { concurrency: number; retries: number };
+type MaterialAiSettings = { text: MaterialAiSlot | null; vision: MaterialAiSlot | null; image: MaterialAiSlot | null; canvas: MaterialCanvasOptions; actions: MaterialAiAction[] };
 type MaterialAiSettingsInput = {
   text: MaterialAiSlotInput | null;
   vision: MaterialAiSlotInput | null;
   image: MaterialAiSlotInput | null;
+  canvas: MaterialCanvasOptions;
   actions: Record<string, { rulePresetIds: string[]; customInstructions: string }>;
 };
-type MaterialCanvasGeneration = { images: import('./materials/suyan/canvasAiTypes').AiGeneratedImage[]; model: string; mediaType?: 'image' | 'video' };
+// 创作画布：队列里的任务（主进程内存里，能取消、重试）和 NAS 上的生成历史，字段对应 electron/materials/canvasQueue.ts、canvasHistory.ts。
+type MaterialCanvasMedia = { sha256: string; ext: string; kind: 'image' | 'video'; size: number; width: number | null; height: number | null; hasThumb: boolean };
+type MaterialCanvasParams = { size: string; ratio: string; quality: string; outputFormat: string; background: string; mediaType: 'image' | 'video' };
+type MaterialCanvasSlot = {
+  index: number;
+  status: 'queued' | 'running' | 'done' | 'failed' | 'canceled';
+  attempts: number;
+  error: string;
+  media: MaterialCanvasMedia | null;
+  revisedPrompt: string | null;
+  dataUrl?: string | null;
+  savedToLibrary?: boolean;
+};
+type MaterialCanvasTask = {
+  id: string;
+  createdAt: string;
+  model: string;
+  prompt: string;
+  negativePrompt: string;
+  params: MaterialCanvasParams;
+  origin: MaterialCanvasOrigin | null;
+  referenceCount: number;
+  total: number;
+  slots: MaterialCanvasSlot[];
+};
+type MaterialCanvasHistory = { schemaVersion: 1; updatedAt: string; tasks: MaterialCanvasTask[] };
 type MaterialCanvasOrigin = { prompt: string; negativePrompt: string; title: string; category: string; tags: string[] };
 type MaterialAiBatchResult = MaterialLoadResult & { processed: number; skipped: number; failures: MaterialBatchFailure[]; canceled: boolean };
 

@@ -16,7 +16,18 @@ type Stored = {
   vision: AiSlot | null;
   image: AiSlot | null;
   actions: Partial<Record<AiFeatureAction, ActionPreference>>;
+  canvas: CanvasOptions;
 };
+
+// 画布任务队列：同时跑几张图、临时失败自动重试几次（和 iLab 的默认值一样）。
+export type CanvasOptions = { concurrency: number; retries: number };
+const DEFAULT_CANVAS: CanvasOptions = { concurrency: 2, retries: 2 };
+const clampInt = (value: unknown, min: number, max: number, fallback: number) =>
+  typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, Math.round(value))) : fallback;
+function normalizeCanvasOptions(raw: unknown): CanvasOptions {
+  const options = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return { concurrency: clampInt(options.concurrency, 1, 4, DEFAULT_CANVAS.concurrency), retries: clampInt(options.retries, 0, 5, DEFAULT_CANVAS.retries) };
+}
 
 // 素材库用到的功能，顺序就是设置里的显示顺序。
 const ACTIONS: AiFeatureAction[] = ['image-reverse', 'prompt-optimization', 'prompt-translation', 'image-category', 'image-tags', 'prompt-category', 'prompt-tags', 'image-generation'];
@@ -47,9 +58,9 @@ function readStored(userDataDir: string): Stored {
         customInstructions: asText(preference.customInstructions),
       };
     }
-    return { text: readSlot(raw.text), vision: readSlot(raw.vision), image: readSlot(raw.image), actions };
+    return { text: readSlot(raw.text), vision: readSlot(raw.vision), image: readSlot(raw.image), actions, canvas: normalizeCanvasOptions(raw.canvas) };
   } catch {
-    return { text: null, vision: null, image: null, actions: {} };
+    return { text: null, vision: null, image: null, actions: {}, canvas: DEFAULT_CANVAS };
   }
 }
 
@@ -67,6 +78,7 @@ export function getPublicAiSettings(userDataDir: string) {
     text: publicSlot(stored.text),
     vision: publicSlot(stored.vision),
     image: publicSlot(stored.image),
+    canvas: stored.canvas,
     actions: ACTIONS.map((action) => {
       const meta = aiFeatureActionMeta[action];
       const preference = stored.actions[action];
@@ -112,7 +124,9 @@ function slotFromInput(userDataDir: string, name: SlotName, input: SlotInput | n
   return { provider, baseUrl, model: asText(input.model), apiKey: provider === 'ollama' ? '' : apiKey };
 }
 
-export function saveAiSettings(userDataDir: string, input: { text?: SlotInput | null; vision?: SlotInput | null; image?: SlotInput | null; actions?: Record<string, { rulePresetIds?: unknown; customInstructions?: unknown }> }) {
+export const loadCanvasOptions = (userDataDir: string) => readStored(userDataDir).canvas;
+
+export function saveAiSettings(userDataDir: string, input: { text?: SlotInput | null; vision?: SlotInput | null; image?: SlotInput | null; canvas?: unknown; actions?: Record<string, { rulePresetIds?: unknown; customInstructions?: unknown }> }) {
   const text = slotFromInput(userDataDir, 'text', input.text);
   const vision = slotFromInput(userDataDir, 'vision', input.vision);
   const image = slotFromInput(userDataDir, 'image', input.image);
@@ -130,7 +144,7 @@ export function saveAiSettings(userDataDir: string, input: { text?: SlotInput | 
     };
   }
   fs.mkdirSync(userDataDir, { recursive: true });
-  fs.writeFileSync(settingsPath(userDataDir), JSON.stringify({ text: encryptSlot(text), vision: encryptSlot(vision), image: encryptSlot(image), actions }, null, 2));
+  fs.writeFileSync(settingsPath(userDataDir), JSON.stringify({ text: encryptSlot(text), vision: encryptSlot(vision), image: encryptSlot(image), actions, canvas: normalizeCanvasOptions(input.canvas) }, null, 2));
   return getPublicAiSettings(userDataDir);
 }
 

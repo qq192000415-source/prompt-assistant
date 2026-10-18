@@ -4181,12 +4181,38 @@ h2 {
   display: grid;
   min-height: 520px;
   align-content: start;
-  gap: 16px;
+  gap: 14px;
   padding: 16px;
 }
 
-.canvas-empty,
-.canvas-generating {
+.canvas-stage-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.canvas-stage-header > div {
+  display: grid;
+  gap: 2px;
+}
+
+.canvas-stage-header strong {
+  font-size: 15px;
+}
+
+.canvas-stage-header span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.canvas-search {
+  flex: 0 1 260px;
+  min-width: 180px;
+}
+
+.canvas-empty {
   display: grid;
   min-height: 460px;
   place-content: center;
@@ -4199,34 +4225,134 @@ h2 {
   padding: 24px;
 }
 
-.canvas-empty strong,
-.canvas-generating strong {
+.canvas-empty strong {
   color: var(--text);
   font-size: 15px;
 }
 
 .canvas-empty span {
-  max-width: 360px;
+  max-width: 380px;
   font-size: 13px;
   line-height: 1.6;
 }
 
-.canvas-generating {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
+/* 一个任务一张卡片：头部是时间、模型、操作，下面是 1–4 个图片槽位 */
+.canvas-task {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
 }
 
-.canvas-generating-backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: blur(28px) saturate(0.9);
-  opacity: 0.35;
-  transform: scale(1.1);
+.canvas-task.is-active {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.canvas-task-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.canvas-task-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.canvas-task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.canvas-task-prompt {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.canvas-task-slots {
+  display: grid;
+  gap: 10px;
+}
+
+.canvas-task-slots.is-count-1 {
+  grid-template-columns: minmax(0, 400px);
+}
+
+.canvas-task-slots.is-count-2,
+.canvas-task-slots.is-count-4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.canvas-task-slots.is-count-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.canvas-slot {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  margin: 0;
+}
+
+.canvas-slot-placeholder {
+  position: relative;
+  display: grid;
+  min-height: 200px;
+  overflow: hidden;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  isolation: isolate;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-quiet);
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+  padding: 12px;
+}
+
+.canvas-slot-placeholder strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.canvas-slot.is-running .canvas-slot-placeholder {
+  border-style: solid;
+}
+
+.canvas-slot.is-failed .canvas-slot-placeholder {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+
+.canvas-slot-error {
+  max-width: 100%;
+  color: var(--danger);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.canvas-slot.is-running .canvas-slot-error {
+  color: var(--warning);
+}
+
+.canvas-slot-hint {
+  color: var(--muted);
+}
+
+.canvas-slot-warning {
+  color: var(--warning);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .canvas-scan {
@@ -4240,19 +4366,12 @@ h2 {
   animation: canvas-scan 2.6s ease-in-out infinite;
 }
 
-.canvas-generating-text {
-  display: grid;
-  justify-items: center;
-  gap: 10px;
-  font-size: 13px;
-}
-
 .canvas-keywords {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 6px;
-  max-width: 420px;
+  max-width: 360px;
 }
 
 .canvas-keywords span {
@@ -4260,29 +4379,9 @@ h2 {
   border-radius: 999px;
   background: var(--surface);
   color: var(--text);
-  padding: 3px 10px;
+  padding: 2px 9px;
   opacity: 0;
   animation: canvas-keyword 0.5s ease forwards;
-}
-
-.canvas-latest {
-  display: grid;
-  gap: 12px;
-}
-
-.canvas-latest.is-count-2,
-.canvas-latest.is-count-4 {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.canvas-latest.is-count-3 {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.canvas-result {
-  display: grid;
-  gap: 8px;
-  margin: 0;
 }
 
 .canvas-result-media {
@@ -4300,12 +4399,13 @@ h2 {
 .canvas-result-media video {
   display: block;
   width: 100%;
-  max-height: 68vh;
+  max-height: 60vh;
   object-fit: contain;
 }
 
-.canvas-latest.is-revealing .canvas-result-media img,
-.canvas-latest.is-revealing .canvas-result-media video {
+/* 本次在队列里刚生成好的图由模糊到清晰显影；从历史读出来的不播 */
+.canvas-result-media.is-new img,
+.canvas-result-media.is-new video {
   animation: canvas-reveal 0.9s ease-out;
 }
 
@@ -4315,74 +4415,8 @@ h2 {
   gap: 4px;
 }
 
-.canvas-history {
-  display: grid;
-  gap: 10px;
-  border-top: 1px solid var(--border);
-  padding-top: 14px;
-}
-
-.canvas-history-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 13px;
-}
-
-.canvas-history-header span,
-.canvas-history-meta span {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.canvas-history-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-}
-
-.canvas-history-meta p {
-  overflow: hidden;
-  margin: 2px 0 0;
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.canvas-history-thumbs {
-  display: flex;
-  gap: 6px;
-}
-
-.canvas-history-thumbs button {
-  position: relative;
-  width: 56px;
-  height: 56px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  cursor: zoom-in;
-  padding: 0;
-}
-
-.canvas-history-thumbs img,
-.canvas-history-thumbs video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.canvas-history-thumbs svg {
-  position: absolute;
-  right: 3px;
-  bottom: 3px;
-  border-radius: 999px;
-  background: var(--success);
-  color: #fff;
-  padding: 1px;
+.canvas-more {
+  justify-self: center;
 }
 
 .canvas-viewer-body {
@@ -4442,8 +4476,8 @@ h2 {
 @media (prefers-reduced-motion: reduce) {
   .canvas-scan { animation: none; opacity: 0.4; }
   .canvas-keywords span { animation: none; opacity: 1; }
-  .canvas-latest.is-revealing .canvas-result-media img,
-  .canvas-latest.is-revealing .canvas-result-media video { animation: none; }
+  .canvas-result-media.is-new img,
+  .canvas-result-media.is-new video { animation: none; }
 }
 
 @media (max-width: 960px) {

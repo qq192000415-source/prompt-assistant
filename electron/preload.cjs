@@ -61,9 +61,20 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     aiClassify: (id, prompt) => ipcRenderer.invoke('materials:ai-classify', id, prompt),
     aiBatchReverse: (ids) => ipcRenderer.invoke('materials:ai-batch-reverse', ids),
     aiBatchClassify: (ids) => ipcRenderer.invoke('materials:ai-batch-classify', ids),
-    canvasGenerate: (payload) => ipcRenderer.invoke('materials:canvas-generate', payload),
-    canvasSave: (input) => ipcRenderer.invoke('materials:canvas-save', input),
-    canvasSaveAs: (dataUrl) => ipcRenderer.invoke('materials:canvas-save-as', dataUrl),
+    canvasSubmit: (input) => ipcRenderer.invoke('materials:canvas-submit', input),
+    canvasQueue: () => ipcRenderer.invoke('materials:canvas-queue'),
+    canvasCancel: (taskId) => ipcRenderer.invoke('materials:canvas-cancel', taskId),
+    canvasRetry: (taskId, index) => ipcRenderer.invoke('materials:canvas-retry', taskId, index),
+    canvasDismiss: (taskId) => ipcRenderer.invoke('materials:canvas-dismiss', taskId),
+    canvasHistory: () => ipcRenderer.invoke('materials:canvas-history'),
+    canvasHistoryDelete: (ids) => ipcRenderer.invoke('materials:canvas-history-delete', ids),
+    canvasSave: (taskId, index) => ipcRenderer.invoke('materials:canvas-save', taskId, index),
+    canvasSaveAs: (taskId, index) => ipcRenderer.invoke('materials:canvas-save-as', taskId, index),
+    onCanvasQueue: (callback) => {
+      const listener = (_event, tasks) => callback(tasks);
+      ipcRenderer.on('materials:canvas-queue', listener);
+      return () => ipcRenderer.removeListener('materials:canvas-queue', listener);
+    },
     canvasReference: (id) => ipcRenderer.invoke('materials:canvas-reference', id),
     canvasClipboardImage: () => ipcRenderer.invoke('materials:canvas-clipboard-image'),
     onProgress: (callback) => {

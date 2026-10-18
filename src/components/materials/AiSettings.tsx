@@ -7,7 +7,10 @@ type ModelOption = { id: string; vision: boolean; generation: boolean };
 const SLOT_LABELS: Record<MaterialAiSlotName, { title: string; note: string }> = {
   text: { title: '文本模型', note: '用于优化、翻译，以及没有视觉模型时按提示词分类。不填就用视觉模型。' },
   vision: { title: '视觉模型', note: '用于图像反推和看图分类打标签，要选能看图的模型，比如 qwen-vl、gpt-4o、qwen2.5vl。' },
-  image: { title: '生图模型', note: '用于创作画布，只支持 OpenAI 兼容的 /images 接口，比如 grok-imagine-image、gpt-image、Agnes；Agnes Video 模型可以生成视频。' },
+  image: {
+    title: '生图模型',
+    note: '用于创作画布，只支持 OpenAI 兼容的 /images 接口，比如 grok-imagine-image、gpt-image、Agnes；Agnes Video 模型可以生成视频。超时、断网、限流这类临时失败会自动重试，服务商那边可能已经扣过费；参数或 Key 错误不重试。',
+  },
 };
 const SLOTS: MaterialAiSlotName[] = ['text', 'vision', 'image'];
 
@@ -48,10 +51,12 @@ export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, te
   const [actions, setActions] = useState<MaterialAiAction[]>([]);
   const [models, setModels] = useState<Record<MaterialAiSlotName, ModelOption[]>>({ text: [], vision: [], image: [] });
   const [actionIndex, setActionIndex] = useState(0);
+  const [canvasOptions, setCanvasOptions] = useState<MaterialCanvasOptions>({ concurrency: 2, retries: 2 });
 
   const load = (settings: MaterialAiSettings) => {
     setSlots({ text: draftOf(settings.text), vision: draftOf(settings.vision), image: draftOf(settings.image) });
     setActions(settings.actions);
+    setCanvasOptions(settings.canvas);
   };
 
   // 只在打开时读一次：getSettings 每次渲染都是新函数。
@@ -71,6 +76,7 @@ export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, te
       text: inputOf(slots.text),
       vision: inputOf(slots.vision),
       image: inputOf(slots.image),
+      canvas: canvasOptions,
       actions: Object.fromEntries(actions.map((entry) => [entry.action, { rulePresetIds: entry.rulePresetIds, customInstructions: entry.customInstructions }])),
     });
     if (saved) load(saved);
@@ -132,6 +138,30 @@ export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, te
                 ))}
               </datalist>
             </label>
+            {name === 'image' && (
+              <div className="canvas-row">
+                <label className="field">
+                  同时生成
+                  <select value={canvasOptions.concurrency} onChange={(event) => setCanvasOptions({ ...canvasOptions, concurrency: Number(event.target.value) })}>
+                    {[1, 2, 3, 4].map((count) => (
+                      <option key={count} value={count}>
+                        {count} 张
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  失败自动重试
+                  <select value={canvasOptions.retries} onChange={(event) => setCanvasOptions({ ...canvasOptions, retries: Number(event.target.value) })}>
+                    {[0, 1, 2, 3, 4, 5].map((count) => (
+                      <option key={count} value={count}>
+                        {count ? `${count} 次` : '不重试'}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
             <p className="nas-form-note">
               {SLOT_LABELS[name].note}
               {models[name].length > 0 && capabilityNote(name, models[name])}

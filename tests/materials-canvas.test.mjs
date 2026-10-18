@@ -4,7 +4,7 @@ import http from 'node:http';
 
 const { generateMedia, decodeGeneratedMedia, savedItemText, CANVAS_CATEGORY } = await import('../electron/materials/canvas.ts');
 const { getSharp } = await import('../electron/materials/suyan/shim.ts');
-const { canvas, getCanvasState, isVideoModel, unsavedCount } = await import('../src/materials/canvasStore.ts');
+const { canvas, getCanvasState, isActive, isVideoModel, savedInHistory, visibleTasks } = await import('../src/materials/canvasStore.ts');
 
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=', 'base64');
 const pngDataUrl = `data:image/png;base64,${PNG.toString('base64')}`;
@@ -141,39 +141,45 @@ test('sharp 替身：从文件头读出 PNG、JPEG、WebP 的尺寸和透明通�
   await assert.rejects(sharp(Buffer.from('nope')).metadata(), /无法读取图片尺寸/);
 });
 
-test('画布状态：生成成功记一批结果；提示词改过就不算来源组；失败时显示原因、不丢已有结果', async () => {
+test('画布状态：提交只带一次来源组（提示词改过就不算），队列在前、历史在后合并去重，可搜索，已存标记来自历史', async () => {
   const item = { id: 'a', title: '唱片店', prompt: '少女', negativePrompt: '', category: '人像', tags: ['暖色'], favorite: false, sourceUrl: '', media: {}, createdAt: '', updatedAt: '' };
   canvas.sendFromItem(item, { fileName: '', title: 'ref', dataUrl: pngDataUrl });
-  const payloads = [];
-  const ok = await canvas.generate('grok-imagine-image', async (payload) => {
-    payloads.push(payload);
-    return { model: 'grok-imagine-image', images: [{ dataUrl: pngDataUrl, revisedPrompt: null }, { dataUrl: pngDataUrl, revisedPrompt: null }] };
-  });
-  assert.equal(ok, true);
-  assert.deepEqual(payloads[0].referenceImageDataUrls, [pngDataUrl]);
-  assert.equal(payloads[0].prompt, '少女');
-  assert.equal(payloads[0].mediaType, undefined);
+  canvas.setDraft({ count: 3 });
+  const submitted = [];
+  const request = async (input) => {
+    submitted.push(input);
+    return 'task-id';
+  };
+  assert.equal(await canvas.submit('grok-imagine-image', request), true);
+  assert.deepEqual(submitted[0].payload.referenceImageDataUrls, [pngDataUrl]);
+  assert.equal(submitted[0].count, 3);
+  assert.equal(submitted[0].payload.mediaType, undefined);
+  assert.equal(submitted[0].origin.title, '唱片店');
 
   canvas.setDraft({ prompt: '少女 夜晚' });
-  await canvas.generate('grok-imagine-image', async () => ({ model: 'grok-imagine-image', images: [{ dataUrl: pngDataUrl, revisedPrompt: '改写' }] }));
-  const failed = await canvas.generate('grok-imagine-image', async () => {
-    throw new Error("Error invoking remote method 'materials:canvas-generate': Error: 余额不足");
-  });
-  assert.equal(failed, false);
+  await canvas.submit('agnes-video-2.5', request);
+  assert.equal(submitted[1].origin, null);
+  assert.equal(submitted[1].payload.mediaType, 'video');
 
-  let state = getCanvasState();
-  assert.equal(state.error, '余额不足');
-  assert.equal(state.phase, 'idle');
-  assert.deepEqual(state.batches.map((batch) => [batch.prompt, batch.origin?.title ?? null, batch.results.length]), [
-    ['少女 夜晚', null, 1],
-    ['少女', '唱片店', 2],
-  ]);
+  assert.equal(await canvas.submit('grok-imagine-image', async () => {
+    throw new Error("Error invoking remote method 'materials:canvas-submit': Error: 还没有设置生图模型");
+  }), false);
+  assert.equal(getCanvasState().error, '还没有设置生图模型');
 
-  canvas.markSaved(state.batches[1].results[0].id);
-  canvas.reusePrompt(state.batches[0], state.batches[0].results[0]);
-  state = getCanvasState();
-  assert.equal(unsavedCount(state.batches), 2);
-  assert.equal(state.draft.prompt, '改写');
-  // Agnes 视频模型生成视频，其余按生图。
+  const task = (id, prompt, slots) => ({ id, createdAt: '', model: 'grok-imagine-image', prompt, negativePrompt: '', params: {}, origin: null, referenceCount: 0, total: slots.length, slots });
+  const slot = (index, status, savedToLibrary = false) => ({ index, status, attempts: 1, error: '', media: null, revisedPrompt: null, savedToLibrary });
+  const queue = [task('q1', '橘猫 窗台', [slot(0, 'running')]), task('h1', '橘猫 窗台', [slot(0, 'done')])];
+  const history = [task('h1', '橘猫 窗台', [slot(0, 'done', true)]), task('h2', '海边 日落', [slot(0, 'done')])];
+  assert.deepEqual(visibleTasks(queue, history, '').map((entry) => entry.id), ['q1', 'h1', 'h2']);
+  assert.deepEqual(visibleTasks(queue, history, '日落 海边').map((entry) => entry.id), ['h2']);
+  assert.deepEqual(visibleTasks(queue, history, 'GROK 橘猫').map((entry) => entry.id), ['q1', 'h1']);
+  assert.equal(savedInHistory(history, 'h1', 0), true);
+  assert.equal(savedInHistory(history, 'h2', 0), false);
+  assert.deepEqual([isActive(queue[0]), isActive(queue[1])], [true, false]);
+
+  canvas.reusePrompt(task('h3', '原提示词', [{ ...slot(0, 'done'), revisedPrompt: '模型改写的' }]), { ...slot(0, 'done'), revisedPrompt: '模型改写的' });
+  assert.equal(getCanvasState().draft.prompt, '模型改写的');
+  canvas.reusePrompt(task('h4', '原提示词', []));
+  assert.equal(getCanvasState().draft.prompt, '原提示词');
   assert.deepEqual([isVideoModel('agnes-video-2.5'), isVideoModel('grok-imagine-image')], [true, false]);
 });
