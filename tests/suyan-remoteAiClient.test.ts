@@ -1,14 +1,18 @@
 // 移植自 SuYan（MIT，guliacer）tests/unit/remoteAiClient.test.ts，只改了导入路径，用 tests/helpers/vitest-shim.mjs 在 node --test 下运行。
-// 没搬的用例（依赖 vi 模拟或测的是生图）：does not retry an aborted request after the analysis deadline；forces non-streaming requests and rebuilds SSE chat chunks；builds Agnes Video 2.5 keyframe requests with the documented fields；normalizes image-only canvas ratios and labels multi-image references；keeps more than five references for Agnes Video 2.5 regular；uses v2.0 frame parameters and keyframe extra_body；creates, polls, and downloads an Agnes video task；appends resolved image-generation instructions to the final prompt；supplements short upstream batches and logs sanitized request settings；rebuilds reference-image FormData for every supplemental request；uses downloaded file signatures instead of response content-type；keeps provider output even when format / size settings were ignored；accepts provider size bucketing when the aspect ratio is preserved；keeps alpha/opacity mismatched output with a warning instead of rejecting；fails clearly when supplemental requests still cannot satisfy n。请求和重试由 tests/materials-ai.test.mjs 用本地模拟服务覆盖。
-import { describe, expect, it } from "./helpers/vitest-shim.mjs";
+// 没搬的用例（依赖模块模拟、假时钟或 Electron 的 nativeImage，Node 里跑不了）：does not retry an aborted request after the analysis deadline；supplements short upstream batches and logs sanitized request settings；rebuilds reference-image FormData for every supplemental request；keeps provider output even when format / size settings were ignored；keeps alpha/opacity mismatched output with a warning instead of rejecting。
+import { describe, expect, it, vi } from "./helpers/vitest-shim.mjs";
 
 import {
+  buildImageGenerationRequestBody,
+  buildAgnesVideoRequestBody,
   buildPromptCategoryAnalysisUserText,
   buildPromptTagsAnalysisUserText,
   buildImageAnalysisUserText,
   buildRemoteNetworkFailureMessage,
   buildRemoteRequestFailureMessage,
   buildSystemAnalysisContent,
+  generateImagesWithRemoteApi,
+  generateVideosWithRemoteApi,
   normalizeChatEndpoint,
   normalizeModelsEndpoint,
   parseRemoteChatCompletionResponseBody,
@@ -18,6 +22,7 @@ import {
   parseRemotePromptAnalysisV2Content,
   resolveVisionImagePayloadPolicy,
   requestChatCompletions,
+  validateGeneratedImageSettings,
 } from "../electron/materials/suyan/remoteAiClient.ts";
 
 const imageProviderSettings = {
@@ -36,6 +41,50 @@ const opaquePngBase64 =
 
 describe("remoteAiClient", () => {
 
+  it("forces non-streaming requests and rebuilds SSE chat chunks", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response([
+      "event: message",
+      'data: {"choices":[{"index":0,"delta":{"role":"assistant"}}]}',
+      "",
+      'data: {"choices":[{"index":0,"delta":{"content":"半身人像"}}]}',
+      "",
+      'data: {"choices":[{"index":0,"delta":{"content":"，柔和自然光"},"finish_reason":"stop"}]}',
+      "",
+      "data: [DONE]",
+      "",
+    ].join("\n"), {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const result = await requestChatCompletions(
+        {
+          apiKey: "test-key",
+          baseUrl: "https://api.example.com/v1",
+          enabled: true,
+          id: "test-profile",
+          model: "test-model",
+          models: [],
+          name: "测试配置",
+        },
+        { model: "test-model", messages: [] },
+        false,
+      );
+
+      expect(result).toMatchObject({
+        choices: [{
+          finish_reason: "stop",
+          message: { content: "半身人像，柔和自然光", role: "assistant" },
+        }],
+      });
+      const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+      expect(requestBody.stream).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 
   it("accepts a UTF-8 BOM and a data envelope around a chat response", () => {
     expect(parseRemoteChatCompletionResponseBody(
@@ -57,10 +106,109 @@ describe("remoteAiClient", () => {
     );
   });
 
+  it("builds Agnes Video 2.5 keyframe requests with the documented fields", () => {
+    const references = [
+      { bytes: Buffer.from("first"), fileName: "first.png", mime: "image/png" as const },
+      { bytes: Buffer.from("last"), fileName: "last.png", mime: "image/png" as const },
+    ];
+    const body = buildAgnesVideoRequestBody(
+      "agnes-video-2.5",
+      { prompt: "人物向镜头走来", negativePrompt: "模糊", mediaType: "video" },
+      references,
+      { customInstructions: "保持电影感", ratio: "16:9", seconds: 5, size: "960P" },
+    );
 
+    expect(body).toMatchObject({
+      model: "agnes-video-2.5",
+      n: 1,
+      seconds: "5",
+      mode: "keyframe",
+      size: "960P",
+      aspect_ratio: "16:9",
+    });
+    expect(body.first_frame).toMatch(/^data:image\/png;base64,/);
+    expect(body.last_frame).toMatch(/^data:image\/png;base64,/);
+    expect(body.prompt).toContain("避免：模糊");
+  });
 
+  it("normalizes image-only canvas ratios and labels multi-image references", () => {
+    const references = [1, 2, 3].map((index) => ({
+      bytes: Buffer.from(`reference-${index}`),
+      fileName: `reference-${index}.png`,
+      mime: "image/png" as const,
+    }));
+    const body = buildAgnesVideoRequestBody(
+      "agnes-video-2.5-flash",
+      { prompt: "让主体自然移动", mediaType: "video" },
+      references,
+      { customInstructions: "", ratio: "2:3", seconds: 5, size: "720P" },
+    );
 
+    expect(body).toMatchObject({ n: 1, mode: "reference", aspect_ratio: "3:4", size: "720P" });
+    expect(body.prompt).toContain("<Picture 1>");
+    expect(body.prompt).toContain("<Picture 3>");
+  });
 
+  it("keeps more than five references for Agnes Video 2.5 regular", () => {
+    const references = Array.from({ length: 6 }, (_, index) => ({
+      bytes: Buffer.from(`reference-${index}`),
+      fileName: `reference-${index}.png`,
+      mime: "image/png" as const,
+    }));
+    const body = buildAgnesVideoRequestBody(
+      "agnes-video-2.5",
+      { prompt: "保持六张参考图中的主体关系", mediaType: "video" },
+      references,
+      { customInstructions: "", ratio: "16:9", seconds: 5, size: "720P" },
+    );
+
+    expect((body.images as string[]).length).toBe(6);
+    expect(body.prompt).toContain("<Picture 6>");
+  });
+
+  it("uses v2.0 frame parameters and keyframe extra_body", () => {
+    const references = [
+      { bytes: Buffer.from("first"), fileName: "first.png", mime: "image/png" as const },
+      { bytes: Buffer.from("last"), fileName: "last.png", mime: "image/png" as const },
+    ];
+    const body = buildAgnesVideoRequestBody(
+      "agnes-video-v2.0",
+      { prompt: "镜头平滑推进", mediaType: "video" },
+      references,
+      { customInstructions: "", ratio: "16:9", seconds: 5, size: "720P" },
+    );
+
+    expect(body).toMatchObject({ width: 1280, height: 720, num_frames: 121, frame_rate: 24 });
+    expect(body.extra_body).toMatchObject({ mode: "keyframes" });
+    expect((body.extra_body as { image: string[] }).image).toHaveLength(2);
+  });
+
+  it("creates, polls, and downloads an Agnes video task", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ video_id: "video-1" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        status: "completed",
+        metadata: { url: "https://cdn.example/video.mp4" },
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(Buffer.from("mp4-bytes"), {
+        status: 200,
+        headers: { "content-type": "video/mp4" },
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const result = await generateVideosWithRemoteApi(
+        { ...imageProviderSettings, baseUrl: "https://apihub.agnes-ai.com/v1", model: "agnes-video-2.5" },
+        { prompt: "雨夜城市", mediaType: "video", ratio: "16:9", videoSeconds: 4, videoSize: "720P" },
+      );
+      expect(result).toMatchObject({ model: "agnes-video-2.5", mediaType: "video" });
+      expect(result.images[0]).toMatchObject({ mediaType: "video", dataUrl: expect.stringContaining("data:video/mp4;base64,") });
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock.mock.calls[0]?.[0]).toBe("https://apihub.agnes-ai.com/v1/videos");
+      expect(fetchMock.mock.calls[1]?.[0]).toContain("/agnesapi?video_id=video-1");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 
   it("parses remote model lists with guessed capabilities", () => {
     expect(
@@ -343,11 +491,90 @@ describe("remoteAiClient", () => {
     expect(system).not.toContain("SFW、NSFW 或 UNKNOWN");
   });
 
+  it("appends resolved image-generation instructions to the final prompt", () => {
+    const body = buildImageGenerationRequestBody(
+      imageProviderSettings,
+      { prompt: "a ceramic cup", negativePrompt: "watermark" },
+      { customInstructions: "Keep the supplied brand text unchanged." },
+    );
+
+    expect(body.prompt).toBe(
+      "a ceramic cup\n\n" +
+      "Additional generation instructions / 附加生成规则：Keep the supplied brand text unchanged.\n\n" +
+      "Negative prompt / 反向约束：watermark",
+    );
+  });
 
 
 
+  it("uses downloaded file signatures instead of response content-type", async () => {
+    const pngBytes = Buffer.from(transparentPngBase64, "base64");
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "https://cdn.example.com/result") {
+        return new Response(new Uint8Array(pngBytes), {
+          headers: { "Content-Type": "image/jpeg" },
+          status: 200,
+        });
+      }
+      return new Response(JSON.stringify({ data: [{ url: "https://cdn.example.com/result" }] }), { status: 200 });
+    }));
+
+    try {
+      const result = await generateImagesWithRemoteApi(imageProviderSettings, {
+        outputFormat: "png",
+        prompt: "a red square",
+        size: "auto",
+      });
+
+      expect(result.images[0]?.dataUrl).toBe(`data:image/png;base64,${transparentPngBase64}`);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 
 
+  it("accepts provider size bucketing when the aspect ratio is preserved", () => {
+    const base = { format: "png" as const, hasAlpha: false, hasTransparency: false, mime: "image/png" as const };
+
+    // gpt-image-2 把 640x960 (2:3) 吸附到 1024x1536 (2:3)：比例一致，应放行。
+    expect(() => validateGeneratedImageSettings(
+      { ...base, width: 1024, height: 1536 },
+      { size: "640x960", outputFormat: "png" },
+    )).not.toThrow();
+
+    // 比例明显偏了（1:1 vs 2:3），应拒绝。
+    expect(() => validateGeneratedImageSettings(
+      { ...base, width: 1024, height: 1024 },
+      { size: "640x960", outputFormat: "png" },
+    )).toThrowError(/未应用尺寸设置/);
+
+    // 短边被砍到一半以下：即便比例一致也视为服务商无视尺寸降级。
+    expect(() => validateGeneratedImageSettings(
+      { ...base, width: 300, height: 450 },
+      { size: "640x960", outputFormat: "png" },
+    )).toThrowError(/未应用尺寸设置/);
+  });
 
 
+  it("fails clearly when supplemental requests still cannot satisfy n", async () => {
+    let callCount = 0;
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      callCount += 1;
+      return new Response(JSON.stringify({
+        data: callCount === 1 ? [{ b64_json: transparentPngBase64 }] : [],
+      }), { status: 200 });
+    }));
+
+    try {
+      await expect(generateImagesWithRemoteApi(imageProviderSettings, {
+        n: 2,
+        outputFormat: "png",
+        prompt: "two variations",
+        size: "auto",
+      })).rejects.toMatchObject({ code: "AI_IMAGE_COUNT_MISMATCH" });
+      expect(callCount).toBe(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

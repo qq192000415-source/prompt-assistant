@@ -61,6 +61,11 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     aiClassify: (id, prompt) => ipcRenderer.invoke('materials:ai-classify', id, prompt),
     aiBatchReverse: (ids) => ipcRenderer.invoke('materials:ai-batch-reverse', ids),
     aiBatchClassify: (ids) => ipcRenderer.invoke('materials:ai-batch-classify', ids),
+    canvasGenerate: (payload) => ipcRenderer.invoke('materials:canvas-generate', payload),
+    canvasSave: (input) => ipcRenderer.invoke('materials:canvas-save', input),
+    canvasSaveAs: (dataUrl) => ipcRenderer.invoke('materials:canvas-save-as', dataUrl),
+    canvasReference: (id) => ipcRenderer.invoke('materials:canvas-reference', id),
+    canvasClipboardImage: () => ipcRenderer.invoke('materials:canvas-clipboard-image'),
     onProgress: (callback) => {
       const listener = (_event, progress) => callback(progress);
       ipcRenderer.on('materials:progress', listener);

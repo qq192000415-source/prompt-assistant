@@ -9,6 +9,7 @@ const EXPORT_SETTINGS_KEY = 'prompt-library.exportSettings.v1';
 const CLOUD_REMEMBERED_LOGIN_KEY = 'prompt-library.cloudRememberedLogin.v1';
 const LIBRARY_MODE_KEY = 'prompt-library.libraryMode.v1';
 const MATERIALS_EXPORT_DIR_KEY = 'prompt-library.materialsExportDir.v1';
+const MATERIALS_CANVAS_DRAFT_KEY = 'prompt-library.materialsCanvasDraft.v1';
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 420;
 
@@ -153,6 +154,23 @@ export const saveMaterialsExportDir = (dir: string) => {
     window.localStorage.setItem(MATERIALS_EXPORT_DIR_KEY, dir);
   } catch {
     // 记不住导出目录不影响导出。
+  }
+};
+
+// 画布草稿（提示词、尺寸等参数）原样存取，归一由 SuYan 的 normalizeCanvasDraftSettings 负责。
+export const loadMaterialsCanvasDraft = (): unknown => {
+  try {
+    return JSON.parse(window.localStorage.getItem(MATERIALS_CANVAS_DRAFT_KEY) ?? 'null');
+  } catch {
+    return null;
+  }
+};
+
+export const saveMaterialsCanvasDraft = (draft: unknown) => {
+  try {
+    window.localStorage.setItem(MATERIALS_CANVAS_DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    // 记不住草稿不影响生图。
   }
 };
 

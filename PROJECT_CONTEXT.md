@@ -14,7 +14,7 @@ Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 
 - 当前主项目目录：仓库根目录
 - 当前分支：`master`
-- 当前源码版本：`1.5.0`
+- 当前源码版本：`1.6.0`
 - 云同步只使用 Supabase Auth + `public.prompt_libraries`，不再使用自建/VPS 同步服务。
 - 本机数据目录固定为 `%APPDATA%\prompt-assistant`（1.3.26 起）。旧版本按版本号分目录（`提示词助手X.Y.Z`），首次启动自动从最近使用的旧目录搬数据，旧目录保留。
 - 安装版自动更新源由部署者写入本机 `.env` 的 `UPDATE_BASE_URL`。仓库不保存真实服务器地址。
@@ -138,7 +138,7 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 
 ### Current Progress
 
-当前源码版本为 `1.5.0`。左栏可在「提示词 | 文档 | 素材」间切换：文档库原样保存文件，素材库（图片、视频）只存在用户自己的 NAS 上。界面升级到 shadcn/ui 设计令牌，保留双栏工作流，并支持本机浅色/深色外观。安装包更新源改为本项目自己的子域名，地址只写在本机 `.env`，不和其他项目共用主机名。
+当前源码版本为 `1.6.0`。左栏可在「提示词 | 文档 | 素材」间切换：文档库原样保存文件，素材库（图片、视频）只存在用户自己的 NAS 上。界面升级到 shadcn/ui 设计令牌，保留双栏工作流，并支持本机浅色/深色外观。安装包更新源改为本项目自己的子域名，地址只写在本机 `.env`，不和其他项目共用主机名。
 
 - 云同步：Supabase Auth + `prompt_libraries`，地址来自 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY`
 - 安装包更新：部署者自己的 HTTPS 目录，地址来自 `UPDATE_BASE_URL`
@@ -157,6 +157,8 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 - 界面升级为 shadcn/ui + Tailwind 设计令牌：中性表面、发丝边框、单一蓝色强调色、浅色/深色外观，以及菜单、弹窗和提示的短过渡。业务逻辑未改。
 
 ### Latest Verification
+
+- 2026-10-18：版本 `1.6.0` 发布素材库创作画布。`release:publish` 生成三类产物，公网校验通过；更新源 `components/` 下的 FFmpeg 仍可访问（HTTP 200）。打包版用临时数据目录启动：标题 1.6.0，5 个画布接口都在，AI 设置有生图位置、规则里显示「生图」；没设生图模型时提示明确，非图片数据被拒绝。开发版的实测见 Log Entries。自动检查：测试 316 项通过；`npx tsc -b` 通过；全部 `.cjs` 的 `node --check` 通过。
 
 - 2026-10-18：版本 `1.5.0` 发布素材库 AI 助手。`release:publish` 生成三类产物，公网校验通过；更新源 `components/` 下的 FFmpeg 仍可访问（HTTP 200）。打包版用临时数据目录启动：标题 1.5.0，10 个 AI 接口、7 个功能、8 条反推预设都在；没设模型时提示明确；打包版能查询本机 Ollama 的模型并测试连接通过。开发版的实测见 Log Entries。自动检查：测试 225 项通过；`npx tsc -b` 通过；全部 `.cjs` 的 `node --check` 通过。
 
@@ -266,11 +268,22 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 | Todo P3 | 链接抓取「只存链接」模式 | SuYan 可以只记链接、之后再下载；我们只做了直接下载 |
 | Done（1.5.0） | 第二阶段：AI 助手 | 只用于素材库。复用 SuYan 的 Ollama/OpenAI 兼容客户端、预设规则、摄影分类体系：图像反推、提示词优化、翻译、分类打标签；详情页结果先填草稿，批量反推（只补没提示词的组）、批量分类。本机 Ollama 和远程接口（Claude、Grok）都实测过 |
 | Todo P3 | AI：NSFW 分级、标题总结、AI 设置导入导出、多套 API 配置 | SuYan 有，这次没做 |
-| Todo | 第三阶段：创作画布 | 复用 SuYan 的画布生图 |
+| Done（1.6.0） | 第三阶段：创作画布 | 素材库里「素材 | 画布」切换。复用 SuYan 的生图、Agnes 生视频、画布参数逻辑：提示词、多张参考图、尺寸比例、质量格式、1-4 张、生成动效、本次生成历史、全屏查看、存入素材库（挑满意的存）、另存为、复用提示词、详情页「发到画布」。用真实生图接口（grok-imagine-image）实测过；Agnes 视频只用模拟服务测过 |
+| Todo P3 | 画布：豆包网页画布、TapRelay 通知、ComfyUI 快捷保存、生成历史跨重启保留 | SuYan 有，这次没做 |
+| Todo P3 | 画布：Agnes 视频真实接口实测 | 没有 Agnes 的 Key，只用模拟服务测过请求格式、轮询和下载 |
 | Todo P3 | 素材缩略图透明底 | 缩略图一律存 JPEG，透明 PNG 的透明处会变黑 |
 
 ### Log Entries
 
+- 2026-10-18：版本 `1.6.0`，素材库创作画布。三个阶段（素材库、AI 助手、创作画布）全部完成。
+  - 需求按主人确认：只用 OpenAI 兼容的生图接口（不做豆包网页）；放在素材库里（我的建议，主人让我定）；生成结果挑满意的再存进 NAS；要生成历史、生图动效、Agnes 图生视频（没有 Agnes Key，照样做，只用模拟服务测）。
+  - SuYan 的 `remoteAiClient.ts` 改为整份搬（含生图、生视频），`sharp` 换成 `shim.ts` 里约 80 行的替身（文件头读尺寸和透明通道，nativeImage 算透明度、转 JPEG）。画布参数逻辑 `canvasGeneration.ts`、`canvasTypes.ts` 搬到 `src/materials/suyan/`。SuYan 原有测试又搬来 aiImageGeneration、canvasRemoteIntegration、canvasGeneration 和之前没搬的 remoteAiClient 用例：给 vitest 替身补了 vi.fn、stubGlobal、resolves/rejects 等，只剩依赖模块模拟、假时钟、nativeImage 的 6 个用例没搬（文件开头列了名字）。测试共 316 项通过。
+  - 生图模型是 AI 设置里的第三个位置，测连接只查模型列表（生图模型不能聊天，也避免扣费）；SuYan 的名称规则认不出 grok-imagine，生图位置不按能力过滤。
+  - 开发版连真实 NAS 和主人的网关（grok-imagine-image）实测：文生图 1024×1024 约 15 秒；从详情页发到画布带参考图、生成 2 张 10 秒；存入素材库进「画布生成」分类，带缩略图；提示词没改时存进原来那一组；全屏查看显示模型和像素尺寸，Esc 关闭；没有的模型测连接时明确报错。测试数据已从 NAS 删掉，设置里的 Key 已清除。
+  - 没实测：另存为（系统保存对话框，代码只是写文件）、Agnes 视频（没有 Key）。
+  - 顺手修：多了「素材 | 画布」切换后，1200px 左右宽的窗口里素材库头部会折行，搜索框基准宽度从 300 改成 240、有空间再长到 300。
+
+- 2026-10-18：1.5.0 已打 tag `stable-提示词助手1.5.0`（master 提交 `f4597b2`）。公开仓库同步到 `main`（提交 `30a5421`），推送前扫描过，没有 IP、邮箱、更新域名、NAS 地址、API Key（命中的只有测试里的检查规则和那个脚本文件名里的版本号）。
 - 2026-10-18：版本 `1.5.0`，素材库 AI 助手。
   - 范围按主人确认：只用于素材库；OpenAI 兼容接口和 Ollama 都支持；分类候选是库里已有分类＋SuYan 摄影分类体系；手动＋批量触发，导入时不自动跑（公开分发，避免悄悄花用户的 API 额度）。
   - SuYan 的 AI 客户端、类型和预设规则、分类体系、标签规范原样搬到 `electron/materials/suyan/`（`remoteAiClient.ts` 去掉了生图部分），SuYan 的 61 项相关测试搬来全部通过。

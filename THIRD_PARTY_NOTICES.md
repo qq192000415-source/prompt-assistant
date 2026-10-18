@@ -24,10 +24,11 @@
   - `generationModels.ts`、`promptTitle.ts`
   - `wordDocumentImport.ts`：Word 图文的解析和配对
   - `placeholderImage.ts`：占位图生成
-  - `remoteAiClient.ts`（只取文本和视觉部分，去掉了生图）、`ollamaAiClient.ts`：AI 请求、系统提示词、结果解析
+  - `remoteAiClient.ts`、`ollamaAiClient.ts`：AI 请求、系统提示词、结果解析，以及生图、Agnes 生视频（`sharp` 换成 `shim.ts` 里的替身）
   - `aiTypes.ts`：AI 功能定义和各功能的预设规则
   - `photographyCategories.ts`：摄影分类体系；`tagKnowledge.ts`、`tagEntityGroups.ts`、`tagQuality.ts`、`tagKnowledgeTypes.ts`：标签规范
   - `remoteAnalysisV2.ts`、`aiBaseUrl.ts`：分析结果归一、接口地址规整
+- `src/materials/suyan/`：创作画布的参数逻辑（`canvasGeneration.ts`、`canvasTypes.ts`，`canvasAiTypes.ts` 摘自 SuYan 的 AI 类型），原样移植
 - `electron/jimengCapture.cjs`：即梦抓取用的 preload
 - `electron/materials/linkImport.ts`、`wordImport.ts`：剪贴板、链接、Word 导入流程
 - `electron/materials/sharePackage.ts`：分享包格式（`data.json` + `images/`，和素言互通）

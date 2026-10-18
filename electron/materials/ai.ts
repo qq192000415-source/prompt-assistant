@@ -34,11 +34,11 @@ import {
 
 export type AiProvider = 'openai-compatible' | 'ollama';
 export type AiSlot = { provider: AiProvider; baseUrl: string; apiKey: string; model: string };
-// text 用于优化、翻译、按提示词分类；vision 用于反推、按图分类。只配了视觉模型时，文字任务也交给它。
-export type AiRuntime = { text: AiSlot | null; vision: AiSlot | null; instructions: (action: AiFeatureAction) => string };
+// text 用于优化、翻译、按提示词分类；vision 用于反推、按图分类。只配了视觉模型时，文字任务也交给它。image 是创作画布的生图模型。
+export type AiRuntime = { text: AiSlot | null; vision: AiSlot | null; image: AiSlot | null; instructions: (action: AiFeatureAction) => string };
 export type AiSuggestion = { category: string; tags: string[]; warnings: string[] };
 
-const toSettings = (slot: AiSlot): AiProviderSettings => ({
+export const toSettings = (slot: AiSlot): AiProviderSettings => ({
   id: 'materials',
   name: '素材库',
   enabled: true,

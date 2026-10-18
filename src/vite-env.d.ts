@@ -111,7 +111,7 @@ type DesktopMaterialsApi = {
   saveProxy: (settings: MaterialProxySettings) => Promise<{ settings: MaterialProxySettings; results: Array<{ name: string; ok: boolean; detail: string }> }>;
   aiGetSettings: () => Promise<MaterialAiSettings>;
   aiSaveSettings: (settings: MaterialAiSettingsInput) => Promise<MaterialAiSettings>;
-  aiListModels: (slot: MaterialAiSlotName, input: MaterialAiSlotInput) => Promise<Array<{ id: string; vision: boolean }>>;
+  aiListModels: (slot: MaterialAiSlotName, input: MaterialAiSlotInput) => Promise<Array<{ id: string; vision: boolean; generation: boolean }>>;
   aiTest: (slot: MaterialAiSlotName, input: MaterialAiSlotInput) => Promise<void>;
   aiReverse: (id: string) => Promise<string>;
   aiOptimize: (prompt: string, kind: 'positive' | 'negative') => Promise<string>;
@@ -119,10 +119,15 @@ type DesktopMaterialsApi = {
   aiClassify: (id: string, prompt: string) => Promise<{ category: string; tags: string[]; warnings: string[] }>;
   aiBatchReverse: (ids: string[]) => Promise<MaterialAiBatchResult>;
   aiBatchClassify: (ids: string[]) => Promise<MaterialAiBatchResult>;
+  canvasGenerate: (payload: import('./materials/suyan/canvasAiTypes').AiImageGenerationPayload) => Promise<MaterialCanvasGeneration>;
+  canvasSave: (input: { dataUrl: string; prompt: string; negativePrompt: string; origin: MaterialCanvasOrigin | null }) => Promise<MaterialImportResult>;
+  canvasSaveAs: (dataUrl: string) => Promise<string | null>;
+  canvasReference: (id: string) => Promise<{ dataUrl: string; title: string }>;
+  canvasClipboardImage: () => Promise<string>;
   onProgress: (callback: (progress: MaterialBatchProgress) => void) => () => void;
 };
 
-type MaterialAiSlotName = 'text' | 'vision';
+type MaterialAiSlotName = 'text' | 'vision' | 'image';
 type MaterialAiProvider = 'openai-compatible' | 'ollama';
 type MaterialAiSlotInput = { provider: MaterialAiProvider; baseUrl: string; model: string; apiKey?: string };
 type MaterialAiSlot = { provider: MaterialAiProvider; baseUrl: string; model: string; hasApiKey: boolean; usable: boolean };
@@ -136,12 +141,15 @@ type MaterialAiAction = {
   rulePresetIds: string[];
   customInstructions: string;
 };
-type MaterialAiSettings = { text: MaterialAiSlot | null; vision: MaterialAiSlot | null; actions: MaterialAiAction[] };
+type MaterialAiSettings = { text: MaterialAiSlot | null; vision: MaterialAiSlot | null; image: MaterialAiSlot | null; actions: MaterialAiAction[] };
 type MaterialAiSettingsInput = {
   text: MaterialAiSlotInput | null;
   vision: MaterialAiSlotInput | null;
+  image: MaterialAiSlotInput | null;
   actions: Record<string, { rulePresetIds: string[]; customInstructions: string }>;
 };
+type MaterialCanvasGeneration = { images: import('./materials/suyan/canvasAiTypes').AiGeneratedImage[]; model: string; mediaType?: 'image' | 'video' };
+type MaterialCanvasOrigin = { prompt: string; negativePrompt: string; title: string; category: string; tags: string[] };
 type MaterialAiBatchResult = MaterialLoadResult & { processed: number; skipped: number; failures: MaterialBatchFailure[]; canceled: boolean };
 
 type MaterialProxySettings = { mode: 'system' | 'direct' | 'custom'; url: string };

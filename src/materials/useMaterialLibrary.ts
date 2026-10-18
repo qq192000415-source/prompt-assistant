@@ -208,6 +208,21 @@ export function useMaterialLibrary(notify: (message: string) => void) {
       notify(`${result.canceled ? '已取消，' : ''}给 ${result.processed} 组分类打了标签${failureText(result.failures)}`);
       return true;
     },
+    // 生图不走 run：要等很久，不能把整个素材库锁住；进行状态由画布自己显示，错误也由画布显示。
+    canvasGenerate: (payload: Parameters<DesktopMaterialsApi['canvasGenerate']>[0]) => api!.canvasGenerate(payload),
+    canvasSave: async (input: Parameters<DesktopMaterialsApi['canvasSave']>[0]) => {
+      const result = await run('正在存入素材库…', () => api!.canvasSave(input));
+      if (!result) return false;
+      apply(result);
+      notify(result.added ? '已存入素材库' : '素材库里已有这张图');
+      return true;
+    },
+    canvasSaveAs: async (dataUrl: string) => {
+      const saved = await run('正在保存…', () => api!.canvasSaveAs(dataUrl));
+      if (saved) notify(`已保存到 ${saved}`);
+    },
+    canvasReference: (id: string) => run('正在读取参考图…', () => api!.canvasReference(id)),
+    canvasClipboardImage: () => run('正在读取剪贴板…', () => api!.canvasClipboardImage()),
     exportItems: async (ids: string[]) => {
       const result = await runBatch('导出', () => api!.exportItems(ids, loadMaterialsExportDir()));
       if (!result) return false;

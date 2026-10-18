@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Copy, ImageDown, Languages, Sparkles, Tags, Trash2, Wand2, X } from 'lucide-react';
+import { Copy, ImageDown, Languages, Palette, Sparkles, Tags, Trash2, Wand2, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { UNCATEGORIZED, normalizePromptText, uniqueTags, type MaterialGroup, type MaterialItem } from '../../materials/library';
 import type { MaterialLibraryController } from '../../materials/useMaterialLibrary';
@@ -45,10 +45,12 @@ type MaterialDetailDialogProps = {
   categories: string[];
   controller: MaterialLibraryController;
   onCopyPrompt: (text: string) => void;
+  // 带这条素材的提示词和图去创作画布。
+  onSendToCanvas: (item: MaterialItem) => void;
   onClose: () => void;
 };
 
-export function MaterialDetailDialog({ group, itemId, onSelectItem, categories, controller, onCopyPrompt, onClose }: MaterialDetailDialogProps) {
+export function MaterialDetailDialog({ group, itemId, onSelectItem, categories, controller, onCopyPrompt, onSendToCanvas, onClose }: MaterialDetailDialogProps) {
   const current = group.items.find((item) => item.id === itemId) ?? group.primary;
   const [draft, setDraft] = useState<Draft>(() => draftOf(group.primary));
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -279,6 +281,16 @@ export function MaterialDetailDialog({ group, itemId, onSelectItem, categories, 
             <div className="material-detail-actions">
               <Button className="button primary" type="submit" disabled={!dirty || busy}>
                 {controller.busy === '正在保存…' ? '正在保存…' : '保存'}
+              </Button>
+              <Button
+                className="button ghost"
+                type="button"
+                disabled={busy || dirty}
+                title={dirty ? '先保存改动，再发到画布' : '把提示词和这张图（当参考图）带到创作画布'}
+                onClick={() => onSendToCanvas(current)}
+              >
+                <Palette size={15} />
+                发到画布
               </Button>
               {current.media.kind === 'image' && (
                 <Button className="button ghost" type="button" disabled={busy} onClick={() => void controller.copyImage(current.media)}>

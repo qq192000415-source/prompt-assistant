@@ -32,6 +32,8 @@ import {
   type MaterialMedia,
 } from '../../materials/library';
 import { useMaterialLibrary } from '../../materials/useMaterialLibrary';
+import { canvas } from '../../materials/canvasStore';
+import { MaterialCanvas } from './MaterialCanvas';
 import { BatchProgressPanel, CompressImagesDialog, CompressVideosDialog } from './BatchDialogs';
 import { MaterialDetailDialog } from './MaterialDetailDialog';
 import { NasSettingsDialog, NasSettingsForm } from './NasSettings';
@@ -57,6 +59,8 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [batchDialog, setBatchDialog] = useState<'images' | 'videos' | null>(null);
   const [confirmingBatchDelete, setConfirmingBatchDelete] = useState(false);
+  const [view, setView] = useState<'library' | 'canvas'>('library');
+  const onCanvas = view === 'canvas';
 
   const groups = useMemo(() => groupMaterials(library.items), [library.items]);
   const counts = useMemo(() => categoryCounts(groups), [groups]);
@@ -90,7 +94,7 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
     if (!ready) return undefined;
     const onPaste = (event: ClipboardEvent) => {
       const target = event.target as HTMLElement | null;
-      if (target?.closest('input, textarea, [contenteditable="true"]') || openItemId || settingsOpen || controller.busy) return;
+      if (target?.closest('input, textarea, [contenteditable="true"]') || openItemId || settingsOpen || controller.busy || onCanvas) return;
       const paths = [...(event.clipboardData?.files ?? [])].map(controller.pathForFile).filter(Boolean);
       if (paths.length) {
         event.preventDefault();
@@ -102,12 +106,12 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
     };
     document.addEventListener('paste', onPaste);
     return () => document.removeEventListener('paste', onPaste);
-  }, [ready, openItemId, settingsOpen, importCategory, controller]);
+  }, [ready, openItemId, settingsOpen, importCategory, controller, onCanvas]);
 
   const onDrop = (event: DragEvent) => {
     event.preventDefault();
     setDragging(false);
-    if (!ready || busy) return;
+    if (!ready || busy || onCanvas) return;
     const paths = [...event.dataTransfer.files].map(controller.pathForFile).filter(Boolean);
     if (paths.length) void controller.importPaths(paths, importCategory);
   };
@@ -133,7 +137,7 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
     <main
       className={`materials-view ${dragging ? 'is-dragging' : ''}`}
       onDragOver={(event) => {
-        if (!ready || !event.dataTransfer.types.includes('Files')) return;
+        if (!ready || onCanvas || !event.dataTransfer.types.includes('Files')) return;
         event.preventDefault();
         setDragging(true);
       }}
@@ -149,6 +153,15 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
           <span>{busy || summary}</span>
         </div>
         {ready && (
+          <div className="library-switch materials-view-switch" role="tablist" aria-label="素材或画布">
+            {(['library', 'canvas'] as const).map((mode) => (
+              <button key={mode} type="button" role="tab" aria-selected={view === mode} className={`library-switch-option ${view === mode ? 'is-active' : ''}`} onClick={() => setView(mode)}>
+                {mode === 'library' ? '素材' : '画布'}
+              </button>
+            ))}
+          </div>
+        )}
+        {ready && !onCanvas && (
           <>
             <label className="materials-search">
               <Search size={16} aria-hidden="true" />
@@ -195,7 +208,9 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
         )}
       </header>
 
-      {ready && selecting && (
+      {ready && onCanvas && <MaterialCanvas controller={controller} settingsOpen={settingsOpen} onOpenSettings={() => setSettingsOpen(true)} />}
+
+      {ready && !onCanvas && selecting && (
         <div className="materials-batch-bar" role="toolbar" aria-label="批量操作">
           <span className="materials-batch-count">
             已选 {selectedGroups.length} 组 · {selectedItems.length} 个文件
@@ -281,7 +296,7 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
         </div>
       )}
 
-      {ready && library.items.length > 0 && (
+      {ready && !onCanvas && library.items.length > 0 && (
         <div className="materials-tabs" role="tablist" aria-label="分类">
           {counts.map((entry) => (
             <button
@@ -338,7 +353,7 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
         </div>
       )}
 
-      {ready && library.items.length === 0 && (
+      {ready && !onCanvas && library.items.length === 0 && (
         <div className="materials-state">
           <strong>还没有素材</strong>
           <span>导入图片、视频、Word 图文或分享包；也可以把文件拖进来，或者按 Ctrl+V 粘贴截图和即梦、X 等网站的分享链接。</span>
@@ -351,7 +366,7 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
         </div>
       )}
 
-      {ready && library.items.length > 0 && visibleGroups.length === 0 && (
+      {ready && !onCanvas && library.items.length > 0 && visibleGroups.length === 0 && (
         <div className="materials-state">
           <strong>没有匹配的素材</strong>
           <span>换个关键词，或者查看全部分类。</span>
@@ -370,7 +385,7 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
         </div>
       )}
 
-      {ready && visibleGroups.length > 0 && (
+      {ready && !onCanvas && visibleGroups.length > 0 && (
         <div className="materials-grid">
           {visibleGroups.map((group) => (
             <MaterialCard
@@ -399,6 +414,13 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
           categories={counts.map((entry) => entry.name).filter((name) => name !== ALL_CATEGORIES && name !== UNCATEGORIZED)}
           controller={controller}
           onCopyPrompt={(text) => void copyPrompt(text)}
+          onSendToCanvas={async (item) => {
+            // 图片直接当参考图；视频用封面。读不到图也照样带上提示词。
+            const reference = item.media.kind === 'image' || item.media.hasThumb ? await controller.canvasReference(item.id) : null;
+            canvas.sendFromItem(item, reference ? { fileName: '', title: reference.title, dataUrl: reference.dataUrl } : null);
+            setOpenItemId(null);
+            setView('canvas');
+          }}
           onClose={() => setOpenItemId(null)}
         />
       )}

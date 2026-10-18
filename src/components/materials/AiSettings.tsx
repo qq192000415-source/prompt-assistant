@@ -2,12 +2,22 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Button } from '../ui/button';
 
 type SlotDraft = MaterialAiSlotInput & { hasApiKey: boolean };
-type ModelOption = { id: string; vision: boolean };
+type ModelOption = { id: string; vision: boolean; generation: boolean };
 
 const SLOT_LABELS: Record<MaterialAiSlotName, { title: string; note: string }> = {
   text: { title: '文本模型', note: '用于优化、翻译，以及没有视觉模型时按提示词分类。不填就用视觉模型。' },
   vision: { title: '视觉模型', note: '用于图像反推和看图分类打标签，要选能看图的模型，比如 qwen-vl、gpt-4o、qwen2.5vl。' },
+  image: { title: '生图模型', note: '用于创作画布，只支持 OpenAI 兼容的 /images 接口，比如 grok-imagine-image、gpt-image、Agnes；Agnes Video 模型可以生成视频。' },
 };
+const SLOTS: MaterialAiSlotName[] = ['text', 'vision', 'image'];
+
+// 模型能力是按接口字段或模型名推断的，认不出时不代表没有这个能力。
+const capabilityLabel = (name: MaterialAiSlotName, model: ModelOption) =>
+  name === 'image' ? (model.generation ? '能生图' : '没认出能不能生图') : model.vision ? '能看图' : '没认出能不能看图';
+const capabilityNote = (name: MaterialAiSlotName, models: ModelOption[]) =>
+  name === 'image'
+    ? ` 查到 ${models.length} 个模型，其中 ${models.filter((model) => model.generation).length} 个认得出能生图（按模型名推断，没认出的也可能能生图），在模型框里选。`
+    : ` 查到 ${models.length} 个模型，其中 ${models.filter((model) => model.vision).length} 个认得出能看图（按模型名推断，没认出的也可能能看图，用测试连接或直接反推试一下），在模型框里选。`;
 
 const URL_PLACEHOLDER: Record<MaterialAiProvider, string> = {
   'openai-compatible': 'https://api.deepseek.com/v1',
@@ -36,11 +46,11 @@ type AiSettingsFormProps = {
 export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, testModel }: AiSettingsFormProps) {
   const [slots, setSlots] = useState<Record<MaterialAiSlotName, SlotDraft> | null>(null);
   const [actions, setActions] = useState<MaterialAiAction[]>([]);
-  const [models, setModels] = useState<Record<MaterialAiSlotName, ModelOption[]>>({ text: [], vision: [] });
+  const [models, setModels] = useState<Record<MaterialAiSlotName, ModelOption[]>>({ text: [], vision: [], image: [] });
   const [actionIndex, setActionIndex] = useState(0);
 
   const load = (settings: MaterialAiSettings) => {
-    setSlots({ text: draftOf(settings.text), vision: draftOf(settings.vision) });
+    setSlots({ text: draftOf(settings.text), vision: draftOf(settings.vision), image: draftOf(settings.image) });
     setActions(settings.actions);
   };
 
@@ -60,6 +70,7 @@ export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, te
     const saved = await saveSettings({
       text: inputOf(slots.text),
       vision: inputOf(slots.vision),
+      image: inputOf(slots.image),
       actions: Object.fromEntries(actions.map((entry) => [entry.action, { rulePresetIds: entry.rulePresetIds, customInstructions: entry.customInstructions }])),
     });
     if (saved) load(saved);
@@ -72,19 +83,21 @@ export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, te
 
   return (
     <form className="nas-form" onSubmit={(event) => void submit(event)}>
-      {(['text', 'vision'] as const).map((name) => {
+      {SLOTS.map((name) => {
         const slot = slots[name];
         const listId = `ai-models-${name}`;
         return (
           <fieldset key={name} className="ai-slot">
             <legend>{SLOT_LABELS[name].title}</legend>
-            <label className="field">
-              接口类型
-              <select value={slot.provider} onChange={(event) => setSlot(name, { provider: event.target.value as MaterialAiProvider })}>
-                <option value="openai-compatible">OpenAI 兼容接口（DeepSeek、通义、豆包、OpenAI 等）</option>
-                <option value="ollama">本机 Ollama</option>
-              </select>
-            </label>
+            {name !== 'image' && (
+              <label className="field">
+                接口类型
+                <select value={slot.provider} onChange={(event) => setSlot(name, { provider: event.target.value as MaterialAiProvider })}>
+                  <option value="openai-compatible">OpenAI 兼容接口（DeepSeek、通义、豆包、OpenAI 等）</option>
+                  <option value="ollama">本机 Ollama</option>
+                </select>
+              </label>
+            )}
             <label className="field">
               接口地址
               <input
@@ -114,14 +127,14 @@ export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, te
               <datalist id={listId}>
                 {models[name].map((model) => (
                   <option key={model.id} value={model.id}>
-                    {model.vision ? '能看图' : '没认出能不能看图'}
+                    {capabilityLabel(name, model)}
                   </option>
                 ))}
               </datalist>
             </label>
             <p className="nas-form-note">
               {SLOT_LABELS[name].note}
-              {models[name].length > 0 && ` 查到 ${models[name].length} 个模型，其中 ${models[name].filter((model) => model.vision).length} 个认得出能看图（按模型名推断，没认出的也可能能看图，用测试连接或直接反推试一下），在模型框里选。`}
+              {models[name].length > 0 && capabilityNote(name, models[name])}
             </p>
             <div className="nas-form-actions">
               <Button className="button ghost compact" type="button" disabled={busy || !slot.baseUrl.trim()} onClick={() => void queryModels(name)}>

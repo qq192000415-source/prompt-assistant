@@ -90,7 +90,7 @@ function startFakeAi(provider) {
   });
 }
 
-const runtimeOf = (slots, rules = {}) => ({ text: null, vision: null, ...slots, instructions: (action) => rules[action] ?? '' });
+const runtimeOf = (slots, rules = {}) => ({ text: null, vision: null, image: null, ...slots, instructions: (action) => rules[action] ?? '' });
 
 async function seed(nas, items) {
   for (const entry of items) nas.files.set(decodeURIComponent(new URL(`media/${entry.media.sha256}${entry.media.ext}`, nas.config.baseUrl).pathname), PNG);
