@@ -4,7 +4,7 @@ Last updated: 2026-10-17
 
 Project root: 仓库根目录
 
-Current source version: `1.3.32`
+Current source version: `1.4.0`
 
 Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 
@@ -14,7 +14,7 @@ Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 
 - 当前主项目目录：仓库根目录
 - 当前分支：`master`
-- 当前源码版本：`1.3.32`
+- 当前源码版本：`1.4.0`
 - 云同步只使用 Supabase Auth + `public.prompt_libraries`，不再使用自建/VPS 同步服务。
 - 本机数据目录固定为 `%APPDATA%\prompt-assistant`（1.3.26 起）。旧版本按版本号分目录（`提示词助手X.Y.Z`），首次启动自动从最近使用的旧目录搬数据，旧目录保留。
 - 安装版自动更新源由部署者写入本机 `.env` 的 `UPDATE_BASE_URL`。仓库不保存真实服务器地址。
@@ -138,7 +138,7 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 
 ### Current Progress
 
-当前源码版本为 `1.3.32`。左栏可在「提示词 | 文档」间切换，文档库原样保存文件。界面升级到 shadcn/ui 设计令牌，保留双栏工作流，并支持本机浅色/深色外观。安装包更新源改为本项目自己的子域名，地址只写在本机 `.env`，不和其他项目共用主机名。
+当前源码版本为 `1.4.0`。左栏可在「提示词 | 文档 | 素材」间切换：文档库原样保存文件，素材库（图片、视频）只存在用户自己的 NAS 上。界面升级到 shadcn/ui 设计令牌，保留双栏工作流，并支持本机浅色/深色外观。安装包更新源改为本项目自己的子域名，地址只写在本机 `.env`，不和其他项目共用主机名。
 
 - 云同步：Supabase Auth + `prompt_libraries`，地址来自 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY`
 - 安装包更新：部署者自己的 HTTPS 目录，地址来自 `UPDATE_BASE_URL`
@@ -157,6 +157,18 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 - 界面升级为 shadcn/ui + Tailwind 设计令牌：中性表面、发丝边框、单一蓝色强调色、浅色/深色外观，以及菜单、弹窗和提示的短过渡。业务逻辑未改。
 
 ### Latest Verification
+
+- 2026-10-18：版本 `1.4.0` 发布素材库 M1。`release:publish` 生成三类产物，上传后公网校验安装包、blockmap、`latest.yml` 通过。打包后的 `app.asar` 里有 `electron/materials.cjs`；用临时数据目录启动 `win-unpacked` 实测：连接 NAS、导入一张图、卡片缩略图通过 `nas-media://` 正常显示、删除，全部正常，测试图已从 NAS 删掉。以下是开发版的验证：
+  - 自动检查：测试 68 项通过（原有 54 项，新增素材库纯逻辑 8 项、模拟 WebDAV 加锁读改写 6 项），模拟服务器按 fnOS 实测行为编写；`npx tsc -b`（含新增的 `tsconfig.electron.json`）通过；`npm run build` 通过；全部 `electron/*.cjs` 的 `node --check` 通过。
+  - 真实 NAS（走外网）：
+    - 3 路并发写 `library.json`，3 条都在。
+    - 开发版用临时数据目录加 CDP 实测：连接设置保存后，密码在本机是加密的；导入 JPG/PNG/MP4 成功，txt 被拒并说明原因，NAS 上的原图和本地大小一致，缩略图已生成；重复导入跳过。
+    - 卡片网格和视频封面显示正常；视频能跳到第 3 秒（Range 生效）。
+    - 详情编辑后两张图合并成一组；精选、搜索、删除同组中的一张都正常，删除后对应文件从 NAS 上删掉。
+    - 「复制图片」后系统剪贴板里是 1600×900 的图；粘贴导入成功；重启后数据还在，并回到素材库。
+    - 逐字节扫描本机数据目录，没有任何素材内容。深色模式正常。
+    - 测试数据已从 NAS 清空。
+  - 未实测：从 Windows 资源管理器真实拖放文件（拖放代码和导入走同一条路径）、两台真实电脑同时操作。
 
 - 2026-10-17：`1.3.32` 修复任务栏图标变白。原因是开始菜单里残留了 1.3.26/27/28/30 的快捷方式，指向的 exe 已被升级删除；本机这 4 个已手动删除。测试 54 项通过，`npx tsc -b` 和全部 `.cjs` 的 `node --check` 通过。用 Electron 单独跑了一遍清理判断（不删除，只打印）：1.3.31 的有效快捷方式判为保留，人为造的指向不存在 exe 的快捷方式判为删除。`release:publish` 公网校验通过。没有实测从 1.3.31 自动更新到 1.3.32 后快捷方式的实际变化。
 - 2026-10-17：`1.3.31` 新增 .md/.txt 文档在软件里直接编辑。测试 54 项通过（新增“编辑后另存一份”1 项），`npx tsc -b` 和全部 `.cjs` 的 `node --check` 通过。Electron 开发版用临时数据目录实测：点“编辑”出现编辑框，改一行后保存，预览立刻更新，条目的 sha256 和大小换成新文件，搜索用的 content 同步更新，CRLF 换行保留；Esc 能取消。`release:publish` 生成三类产物，公网校验安装包、blockmap、`latest.yml` 通过。没有实测登录状态下新文件补传到云端（没有测试账号），走的是添加文档时同一个 `pushDocumentFiles`。
@@ -218,8 +230,19 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 | Todo P2 | 去掉明文记住密码 | `prompt-library.cloudRememberedLogin.v1` 存明文密码；Supabase 已持久化会话，只记邮箱即可 |
 | Done | 外链协议白名单 | `electron/main.cjs` 的 `openExternal` 只放行 `http:`、`https:` |
 | Todo P3 | schema 去掉 anon select 授权 | RLS 已拦截，授权本身无用 |
+| Done（1.4.0） | 素材库 M1：NAS 存储与核心浏览 | 复用 SuYan（MIT）。WebDAV 存储层（加锁读改写）、`nas-media://` 协议、导入（选择/拖放/粘贴）、方案 B 卡片网格、分类标签页、搜索、详情编辑、同组效果图、精选、删除、复制图片 |
+| Todo | 素材库 M2（1.4.1） | 多选批量管理、去重、图像压缩（nativeImage）、视频压缩（FFmpeg 按需从 `UPDATE_BASE_URL` 下载并校验 SHA256）、导出带进度 |
+| Todo | 素材库 M3（1.4.2） | Word 图文导入、分享 ZIP 导入导出、网络分享链接抓取（即梦、X、aiart.pics、opennana 等）和代理设置 |
+| Todo | 第二阶段：AI 助手 | 复用 SuYan 的 Ollama/OpenAI 兼容客户端：提示词优化、翻译、分类标签识别、图像反推 |
+| Todo | 第三阶段：创作画布 | 复用 SuYan 的画布生图 |
+| Todo P3 | 素材缩略图透明底 | 缩略图一律存 JPEG，透明 PNG 的透明处会变黑 |
 
 ### Log Entries
+
+- 2026-10-17 ~ 18：版本 `1.4.0`，素材库 M1。用户要求复用开源项目 SuYan（MIT），并确认：做成和提示词库、文档库完全独立的第三个板块；分三个阶段（素材库 → AI 助手 → 画布）；素材只存在用户 NAS 的专用文件夹里，不落本机；家里和外网都能用；界面选了方案 B「整洁的卡片柜」（效果图在 Artifact 画布里）。
+  - NAS 环境：用户的 fnOS 开了 WebDAV HTTPS，用 Let's Encrypt 证书，飞牛自动续签；专用普通用户只能读写团队文件夹「提示词助手素材库」。路由器原来的 5005/5006 已经转发给另一台群晖，所以飞牛 WebDAV 换了端口，另加了一条端口转发。地址和账户只存在用户电脑上，不进仓库。
+  - 关键发现：fnOS 的 WebDAV 忽略 `If-Match`（拿旧版本号写照样成功），但支持 LOCK。所以 `library.json` 的写入改成加锁读改写，没有用原计划的 ETag 乐观锁。
+  - 结构：主进程 TS 放在 `electron/materials/`，用 vite 打成 `electron/materials.cjs`；纯逻辑在 `src/materials/library.ts`。新增 `THIRD_PARTY_NOTICES.md`、Impeccable 设计上下文（`PRODUCT.md`、`DESIGN.md`、`.impeccable/`），`AGENTS.md` 加了素材库不走 Supabase 的例外说明。
 
 - 2026-10-15：`AGENTS.md` 新增「结构约定」，作为长期规则。内容来自用户给的《开发要求》（模块化、核心与外壳分开、配置与代码分开），没有照抄原文，而是写成本项目可检查的具体边界：纯函数放哪、每类外部依赖的唯一出入口、`App.tsx` 和 `src/components/` 的分工、何时单独成文件、删除功能要删干净、什么放 `.env`。只改文档，不需要递增版本和发布；用户要求后已同步公开仓库（`main` 提交 `9c3ff1c`，推送前扫描无命中）。
 

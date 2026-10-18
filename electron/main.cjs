@@ -1,6 +1,8 @@
 const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, screen, shell, Notification } = require('electron');
 const { execFile } = require('node:child_process');
 const attachmentStore = require('./attachmentStore.cjs');
+// 素材库由 electron/materials/*.ts 编译而来（npm run build:electron）。
+const materials = require('./materials.cjs');
 const { migrateLegacyUserData } = require('./userDataMigration.cjs');
 const { autoUpdater } = require('electron-updater');
 const fs = require('node:fs');
@@ -19,6 +21,7 @@ try {
   userDataMigrationError = error;
 }
 app.setPath('userData', userDataDir);
+materials.registerScheme();
 app.whenReady().then(() => {
   if (userDataMigrationError) {
     dialog.showErrorBox(
@@ -865,6 +868,7 @@ app.whenReady().then(() => {
   if (process.platform === 'win32' && app.isPackaged) {
     removeDeadStartMenuShortcuts();
   }
+  materials.register({ ipcMain, userDataDir: app.getPath('userData'), getWindow: () => mainWindow });
   createTray();
   createWindow();
   createFloatingWindow();

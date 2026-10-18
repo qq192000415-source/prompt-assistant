@@ -21,6 +21,7 @@ type TopMenuBarProps = {
   importFormat: FileFormat;
   promptCount: number;
   query: string;
+  showSearch: boolean;
   searchLabel: string;
   recentCount: number;
   onChangeView: (view: ViewKey) => void;
@@ -43,6 +44,7 @@ export function TopMenuBar({
   importFormat,
   promptCount,
   query,
+  showSearch,
   searchLabel,
   recentCount,
   onChangeView,
@@ -170,6 +172,7 @@ export function TopMenuBar({
           </Button>
         </div>
 
+        {showSearch && (
         <label className={`top-search-box ${query.trim() ? 'is-global-search' : ''}`}>
           <Search size={15} />
           <span className="search-scope-chip">全局</span>
@@ -180,6 +183,7 @@ export function TopMenuBar({
             </Button>
           )}
         </label>
+        )}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

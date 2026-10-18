@@ -9,11 +9,9 @@ import { createPortal } from 'react-dom';
 import {
   ArrowDown,
   ArrowUp,
-  BookOpen,
   ChevronRight,
   Cloud,
   FilePlus,
-  FileText,
   Folder,
   LogIn,
   LogOut,
@@ -22,6 +20,7 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react';
+import { LibrarySwitch } from './LibrarySwitch';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import type { LibraryMode } from '../localState';
@@ -131,28 +130,7 @@ export function Sidebar({
     <>
       {open && <Button className="sidebar-scrim" type="button" aria-label="关闭导航" onClick={onClose} />}
       <aside className={`sidebar ${open ? 'open' : ''}`} style={{ flexBasis: width, width }}>
-        <div className="library-switch" role="tablist" aria-label="切换库">
-          <button
-            className={`library-switch-option ${libraryMode === 'prompts' ? 'is-active' : ''}`}
-            type="button"
-            role="tab"
-            aria-selected={libraryMode === 'prompts'}
-            onClick={() => onChangeLibraryMode('prompts')}
-          >
-            <BookOpen size={15} />
-            提示词
-          </button>
-          <button
-            className={`library-switch-option ${libraryMode === 'documents' ? 'is-active' : ''}`}
-            type="button"
-            role="tab"
-            aria-selected={libraryMode === 'documents'}
-            onClick={() => onChangeLibraryMode('documents')}
-          >
-            <FileText size={15} />
-            文档
-          </button>
-        </div>
+        <LibrarySwitch libraryMode={libraryMode} onChange={onChangeLibraryMode} />
 
         <div className="sidebar-primary-actions">
           <Button className="button ghost sidebar-action-button" type="button" onClick={onAddCategory}>

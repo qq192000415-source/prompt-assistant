@@ -15,6 +15,7 @@ node --test --test-name-pattern="云端合并" tests/library-logic.test.mjs   # 
 npx.cmd tsc -b                                # 类型检查，没有 lint
 node --check electron/main.cjs                # .cjs 语法检查（electron/、scripts/ 下每个都要查）
 npm.cmd run dev                               # Vite，127.0.0.1:5173
+npm.cmd run build:electron                    # 把 electron/materials/*.ts 打成 electron/materials.cjs（build、desktop:dev 会自动先跑）
 npm.cmd run desktop:dev                       # Electron 连 5174 端口，dev 要用 --port 5174 启动
 npm.cmd run release:publish                   # 打三类包 + 上传更新源 + 公网校验（内部会 build）
 ```
@@ -56,6 +57,14 @@ npm.cmd run release:publish                   # 打三类包 + 上传更新源 +
 - 打开、复制、拖出时，先在临时目录生成一份原文件名的副本：打开用的副本只读，发送用的可写。
 - 云端存在 Supabase Storage 私有 bucket `prompt-attachments`，路径 `<uid>/<sha256>`，RLS 策略在 `supabase-schema.sql` 末尾。上传在添加文档后和登录合并后进行，下载在打开时按需进行。
 - "复制文件"在主进程里通过 PowerShell `Set-Clipboard` 把文件放进剪贴板。剪贴板同时放文件和文字时，Chromium 系软件只拿得到文件，文字会丢，所以"指令+文件"对非文本格式分两步复制。
+
+**素材库（NAS）。**
+- 第三个库，和提示词、文档的数据完全分开。素材和索引只存在用户 NAS 的一个专用文件夹里（WebDAV），本机只存加密后的连接设置 `<userData>/materials-nas.json`。部分代码移植自 SuYan（MIT），见 `THIRD_PARTY_NOTICES.md`。
+- NAS 上的布局：`library.json`（全部条目）、`media/<sha256><ext>`（原文件）、`thumbs/<sha256>.jpg`（图片缩略图，主进程用 nativeImage 生成）。
+- 主进程代码是 TS，写在 `electron/materials/`，由 `vite.electron.config.ts` 打成被 Git 忽略的 `electron/materials.cjs`，`main.cjs` 直接 require。纯逻辑（归一、增删改、同组分组、筛选）在 `src/materials/library.ts`，主进程和界面共用。
+- fnOS 的 WebDAV 不认 `If-Match`，所以写 `library.json` 一律走 `libraryStore.ts` 的 `mutateLibrary`：加锁（30 秒自动过期）→ 读最新的 → 改 → 带锁令牌写回 → 解锁。别处不要直接 PUT `library.json`。
+- 渲染进程通过 `nas-media://media/...` 和 `nas-media://thumbs/...` 显示媒体，主进程带上账户去 NAS 取，透传 Range（视频能拖进度条），并返回 `Cache-Control: no-store`。
+- 测试：`tests/materials-library.test.mjs`（纯逻辑），`tests/materials-nas.test.mjs`（用本地模拟的 WebDAV 测加锁读改写）。
 
 **数据目录。** `productName` 带版本号，Electron 默认会每个版本换一个 userData 目录。`electron/main.cjs` 启动时固定为 `%APPDATA%\prompt-assistant`，首次启动由 `electron/userDataMigration.cjs` 从最近使用的旧目录 `提示词助手X.Y.Z` 拷贝数据。
 

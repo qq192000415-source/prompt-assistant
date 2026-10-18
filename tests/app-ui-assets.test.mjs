@@ -168,6 +168,7 @@ test('public source keeps deployer endpoints out of the repository', () => {
       .filter((name) => /\.(ts|tsx)$/.test(name))
       .map((name) => `src/${name.replaceAll('\\', '/')}`),
     'electron/main.cjs',
+    ...readdirSync(join(rootDir, 'electron', 'materials')).map((name) => `electron/materials/${name}`),
     'electron/app-update-source.json',
     'scripts/publish-update-to-server.cjs',
     'scripts/write-update-source.cjs',

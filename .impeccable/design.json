@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-17T21:30:00Z",
+  "title": "Design System: 提示词助手",
+  "extensions": {
+    "colorMeta": {
+      "accent": { "role": "primary", "displayName": "工作蓝 Work Blue", "tonalRamp": ["#172554", "#1e3a8a", "#1d4ed8", "#2563eb", "#60a5fa", "#93b0f0", "#c9d8f7", "#eaf1ff"] },
+      "global": { "role": "secondary", "displayName": "全局青 Global Teal", "tonalRamp": ["#042f2e", "#134e4a", "#115e59", "#0f766e", "#2dd4bf", "#99e6d8", "#cdf2ea", "#e7f6f3"] },
+      "text": { "role": "neutral", "displayName": "墨色 Ink" },
+      "muted": { "role": "neutral", "displayName": "石灰 Slate Muted" },
+      "surface-quiet": { "role": "neutral", "displayName": "静底 Quiet Ground" },
+      "border": { "role": "neutral", "displayName": "细线 Hairline" }
+    },
+    "typographyMeta": {
+      "code": { "displayName": "Code", "purpose": "只用于 Markdown 文档里的代码。" }
+    },
+    "shadows": [
+      { "name": "shadow-soft", "value": "0 10px 28px rgba(24, 24, 27, 0.08), 0 0 0 1px rgba(24, 24, 27, 0.04)", "purpose": "下拉菜单、悬停卡片" },
+      { "name": "shadow", "value": "0 18px 40px rgba(24, 24, 27, 0.1), 0 0 0 1px rgba(24, 24, 27, 0.04)", "purpose": "弹窗、对话框" }
+    ],
+    "motion": [
+      { "name": "hover", "value": "160ms ease", "purpose": "卡片描边与阴影过渡" }
+    ]
+  },
+  "components": [
+    { "name": "Primary Button", "kind": "button", "refersTo": "button-primary", "description": "主动作，如导入、复制提示词（详情内）。", "html": "<button class=\"ds-btn-primary\">导入</button>", "css": ".ds-btn-primary{height:36px;border:0;border-radius:8px;background:var(--accent,#2563eb);color:#fff;padding:0 14px;font-size:14px;font-weight:600;cursor:pointer}.ds-btn-primary:hover{background:var(--accent-hover,#1d4ed8)}.ds-btn-primary:focus-visible{outline:2px solid #2563eb;outline-offset:2px}" },
+    { "name": "Outline Button", "kind": "button", "refersTo": "button-outline", "description": "次要动作。", "html": "<button class=\"ds-btn-outline\">复制图片</button>", "css": ".ds-btn-outline{height:32px;border:1px solid var(--border,#e6e8ee);border-radius:8px;background:var(--surface,#fff);color:var(--text,#18181b);padding:0 12px;font-size:13px;cursor:pointer}.ds-btn-outline:hover{background:var(--hover,rgba(24,24,27,.045))}.ds-btn-outline:focus-visible{outline:2px solid #2563eb;outline-offset:2px}" },
+    { "name": "Search Field", "kind": "input", "refersTo": "input-search", "description": "搜索框，聚焦时蓝色光环。", "html": "<input class=\"ds-input\" placeholder=\"搜索标题、提示词、标签\">", "css": ".ds-input{height:34px;box-sizing:border-box;border:1px solid var(--border,#e6e8ee);border-radius:8px;background:var(--surface,#fff);color:var(--text,#18181b);padding:0 10px;font-size:14px;outline:none}.ds-input:focus-visible{border-color:#93b0f0;box-shadow:0 0 0 3px var(--accent-weak,#eaf1ff)}" },
+    { "name": "Category Chip", "kind": "chip", "refersTo": "chip-category", "description": "分类徽标。", "html": "<span class=\"ds-chip-cat\">场景</span>", "css": ".ds-chip-cat{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:999px;background:var(--accent-weak,#eaf1ff);color:var(--accent,#2563eb);font-size:12px;font-weight:600}" },
+    { "name": "Filter Tab", "kind": "nav", "description": "素材库分类筛选标签页。", "html": "<button class=\"ds-tab is-on\">全部 <span>8</span></button><button class=\"ds-tab\">场景 <span>3</span></button>", "css": ".ds-tab{height:32px;border:1px solid var(--border,#e6e8ee);border-radius:999px;background:#fff;color:#18181b;padding:0 14px;font-size:13px;cursor:pointer;margin-right:6px}.ds-tab span{font-size:12px;opacity:.75}.ds-tab.is-on{background:#18181b;border-color:#18181b;color:#fff}.ds-tab:hover{background:rgba(24,24,27,.045)}.ds-tab.is-on:hover{background:#18181b}.ds-tab:focus-visible{outline:2px solid #2563eb;outline-offset:2px}" },
+    { "name": "Material Card", "kind": "card", "refersTo": "card", "description": "素材卡片：预览、标题、徽标、摘要、复制。", "html": "<article class=\"ds-card\"><div class=\"ds-card-img\">1024×1536</div><div class=\"ds-card-body\"><strong>晨雾中的玻璃温室</strong><p>a glass greenhouse in morning fog, soft diffused light…</p><button class=\"ds-card-copy\">复制提示词</button></div></article>", "css": ".ds-card{width:240px;border:1px solid #e6e8ee;border-radius:12px;background:#fff;overflow:hidden;transition:box-shadow 160ms ease,border-color 160ms ease}.ds-card:hover{border-color:#d5d8e1;box-shadow:0 10px 28px rgba(24,24,27,.08)}.ds-card-img{aspect-ratio:4/3;background:#d9e4dd;color:#4b5260;display:flex;align-items:center;justify-content:center;font-size:12px}.ds-card-body{padding:12px;display:flex;flex-direction:column;gap:8px;font-size:14px}.ds-card-body p{margin:0;font-size:12px;color:#6d727c}.ds-card-copy{height:30px;border:1px solid #e6e8ee;border-radius:7px;background:#fff;font-size:13px;cursor:pointer}.ds-card-copy:hover{background:rgba(24,24,27,.045)}" }
+  ],
+  "narrative": {
+    "northStar": "整洁的卡片柜 (The Tidy Card Cabinet)",
+    "overview": "每一条提示词、每一个文档、每一张素材都像归好位的卡片：放在哪里一眼可见，取用只要一步。界面是安静的浅色工作台，只在需要动作的地方出现一抹蓝。所有装饰都服从「找到即复制」。",
+    "keyCharacteristics": ["浅灰底面（surface-quiet）上放白色卡片，描边 1px。", "单一蓝色强调，只用于主按钮、选中状态和分类徽标。", "青绿色专门表示「全局搜索」，不挪作他用。", "中文界面，系统字体 Segoe UI Variable 和微软雅黑。"],
+    "rules": [
+      { "name": "一处蓝 The One Blue Rule", "body": "同一屏里蓝色只标出「下一步该点哪里」和「当前选中的是什么」，其余一律中性色。", "section": "colors" },
+      { "name": "青绿专用 The Teal Is Global Rule", "body": "青绿色只表示全局搜索，别的状态不能借用。", "section": "colors" },
+      { "name": "静止即平面 The Flat At Rest Rule", "body": "卡片静止时只有描边，悬停或打开时才出现阴影。", "section": "elevation" }
+    ],
+    "dos": ["Do 让最常用的动作（复制）在卡片上一步可达。", "Do 选中状态用工作蓝描边加 accent-weak 背景或光环来表示。", "Do 暗色模式下使用令牌，不要写死颜色。"],
+    "donts": ["Don't 把青绿色用在全局搜索以外的地方。", "Don't 给静止的卡片加阴影，或用渐变铺背景。", "Don't 用 faint 色写需要阅读的文字。"]
+  }
+}

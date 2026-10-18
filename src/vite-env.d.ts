@@ -77,8 +77,32 @@ type DesktopDocumentsApi = {
   startDrag: (sha: string, name: string) => void;
 };
 
+type NasConfig = { baseUrl: string; username: string; hasPassword: boolean };
+
+type MaterialLoadResult = { library: import('./materials/library').MaterialLibrary; dropped: number };
+
+type MaterialImportResult = MaterialLoadResult & {
+  added: number;
+  skipped: number;
+  errors: Array<{ name: string; message: string }>;
+};
+
+type DesktopMaterialsApi = {
+  getConfig: () => Promise<NasConfig>;
+  saveConfig: (config: { baseUrl: string; username: string; password?: string }) => Promise<NasConfig>;
+  load: () => Promise<MaterialLoadResult>;
+  pickAndImport: (category: string) => Promise<MaterialImportResult | null>;
+  importPaths: (paths: string[], category: string) => Promise<MaterialImportResult>;
+  importClipboard: (category: string) => Promise<MaterialImportResult>;
+  update: (id: string, patch: import('./materials/library').MaterialPatch) => Promise<MaterialLoadResult>;
+  remove: (ids: string[]) => Promise<MaterialLoadResult & { warnings: string[] }>;
+  copyImage: (media: { sha256: string; ext: string }) => Promise<void>;
+  pathForFile: (file: File) => string;
+};
+
 interface Window {
   promptAssistantDesktop?: {
+    materials?: DesktopMaterialsApi;
     platform: string;
     getSettings: () => Promise<DesktopRuntimeSettings>;
     updateSettings: (settings: DesktopRuntimeSettingsUpdate) => Promise<DesktopRuntimeSettings>;

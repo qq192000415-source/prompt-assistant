@@ -25,6 +25,7 @@
 - 顶部搜索框必须是全局搜索：输入关键词后应在全部提示词中匹配标题、正文、主文件夹、子分类和标签，不受当前选中的分类或子分类限制。
 - 新建/导入提示词必须按主文件夹、子标题、内容去重。
 - 云同步只使用 Supabase；数据变更必须同时考虑 localStorage 和 Supabase 云同步行为。
+- 例外：素材库（图片、视频）不走 Supabase，也不存本机，只存在用户自己的 NAS（WebDAV）上，见 `electron/materials/`。提示词库和文档库的同步规则不受影响。
 
 ## 结构约定
 
@@ -36,6 +37,7 @@
     - 条目和分类在 `src/promptStorage.ts`，其余本机状态在 `src/localState.ts`，新的本机状态也放这里。
     - 例外：云端设置由 `src/cloudSync.ts` 自己存，外观由 `src/lib/theme.ts` 自己存。
   - Supabase 请求：`src/cloudSync.ts`
+  - NAS（WebDAV）请求：`electron/materials/webdav.ts`；素材库的读写时机：`src/materials/useMaterialLibrary.ts`
   - 同步时机（登录合并、自动保存、冲突合并、焦点拉取）：`src/useCloudSync.ts`
   - 桌面能力：preload 暴露的 `window.promptAssistantDesktop`
 - `src/App.tsx` 只放状态和处理函数；界面组件放 `src/components/`（`ui/` 是 shadcn 基础件），不再往 `App.tsx` 里加组件。

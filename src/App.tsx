@@ -82,6 +82,7 @@ import { PromptDetail } from './components/PromptView';
 import { SettingsPanel } from './components/SettingsPanel';
 import { type MoveDirection, Sidebar } from './components/Sidebar';
 import { TopMenuBar } from './components/TopMenuBar';
+import { MaterialLibraryView } from './components/materials/MaterialLibraryView';
 
 const emptyDraft: PromptDraft = {
   title: '',
@@ -1153,9 +1154,17 @@ function App() {
         importFormat={importFormat}
         promptCount={prompts.length}
         query={query}
+        showSearch={libraryMode !== 'materials'}
         searchLabel={isDocumentMode ? '文档' : '提示词'}
         recentCount={prompts.filter((prompt) => prompt.lastUsedAt).length}
-        onChangeView={changeView}
+        onChangeView={
+          libraryMode === 'materials'
+            ? (view) => {
+                changeLibraryMode('prompts');
+                changeView(view);
+              }
+            : changeView
+        }
         onExport={exportPrompts}
         onExportFormatChange={setExportFormat}
         onImport={() => fileInputRef.current?.click()}
@@ -1167,6 +1176,10 @@ function App() {
         onToggleTheme={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
       />
 
+      {libraryMode === 'materials' ? (
+        <MaterialLibraryView libraryMode={libraryMode} onChangeLibraryMode={changeLibraryMode} notify={showToast} />
+      ) : (
+      <>
       <Sidebar
         activeView={activeView}
         categories={categories}
@@ -1283,6 +1296,8 @@ function App() {
           />
         )}
       </main>
+      </>
+      )}
 
       <input
         ref={fileInputRef}

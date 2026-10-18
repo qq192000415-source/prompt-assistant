@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('promptAssistantDesktop', {
   platform: process.platform,
@@ -28,6 +28,18 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     sharePath: (sha, name) => ipcRenderer.invoke('documents:share-path', sha, name),
     saveAs: (sha, name) => ipcRenderer.invoke('documents:save-as', sha, name),
     startDrag: (sha, name) => ipcRenderer.send('documents:start-drag', sha, name),
+  },
+  materials: {
+    getConfig: () => ipcRenderer.invoke('materials:get-config'),
+    saveConfig: (config) => ipcRenderer.invoke('materials:save-config', config),
+    load: () => ipcRenderer.invoke('materials:load'),
+    pickAndImport: (category) => ipcRenderer.invoke('materials:pick-and-import', category),
+    importPaths: (paths, category) => ipcRenderer.invoke('materials:import-paths', paths, category),
+    importClipboard: (category) => ipcRenderer.invoke('materials:import-clipboard', category),
+    update: (id, patch) => ipcRenderer.invoke('materials:update', id, patch),
+    remove: (ids) => ipcRenderer.invoke('materials:delete', ids),
+    copyImage: (media) => ipcRenderer.invoke('materials:copy-image', media),
+    pathForFile: (file) => webUtils.getPathForFile(file),
   },
   onUpdateStatus: (callback) => {
     const listener = (_event, status) => callback(status);

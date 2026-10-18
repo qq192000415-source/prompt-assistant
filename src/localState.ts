@@ -11,7 +11,7 @@ const LIBRARY_MODE_KEY = 'prompt-library.libraryMode.v1';
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 420;
 
-export type LibraryMode = 'prompts' | 'documents';
+export type LibraryMode = 'prompts' | 'documents' | 'materials';
 
 export type RememberedCloudLogin = {
   email: string;
@@ -131,7 +131,8 @@ export const saveSyncRecords = (records: SyncRecord[]) => {
 
 export const loadLibraryMode = (): LibraryMode => {
   try {
-    return window.localStorage.getItem(LIBRARY_MODE_KEY) === 'documents' ? 'documents' : 'prompts';
+    const saved = window.localStorage.getItem(LIBRARY_MODE_KEY);
+    return saved === 'documents' || saved === 'materials' ? saved : 'prompts';
   } catch {
     return 'prompts';
   }

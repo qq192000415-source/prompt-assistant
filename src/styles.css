@@ -2819,7 +2819,7 @@ h2 {
 /* 提示词 / 文档 库切换 */
 .library-switch {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 2px;
   padding: 3px;
   border: 1px solid var(--border);
@@ -3105,4 +3105,553 @@ h2 {
 .document-instruction-empty:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+/* 素材库（方案 B「整洁的卡片柜」）：标签页筛选分类，统一卡片，详情弹窗 */
+.materials-view {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--surface-quiet);
+  padding: 22px clamp(20px, 3.2vw, 52px) 32px;
+}
+
+.materials-header,
+.materials-tabs,
+.materials-grid,
+.materials-state,
+.materials-connect {
+  width: min(100%, 1440px);
+  margin-inline: auto;
+}
+
+.materials-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.materials-switch {
+  width: 228px;
+}
+
+.materials-title {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  margin-right: auto;
+}
+
+.materials-title h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.materials-title span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.materials-search {
+  display: flex;
+  flex: 0 1 300px;
+  min-width: 200px;
+  height: 36px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  padding: 0 6px 0 10px;
+}
+
+.materials-search:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  box-shadow: 0 0 0 3px var(--accent-weak);
+}
+
+.materials-search input {
+  height: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+.materials-search input:focus-visible {
+  box-shadow: none;
+}
+
+.materials-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+}
+
+.materials-tab {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  padding: 0 14px;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.materials-tab span {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.materials-tab:hover {
+  border-color: var(--border-strong);
+  background: var(--hover);
+}
+
+.materials-tab.is-active {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--surface);
+}
+
+.materials-tab.is-active span {
+  color: color-mix(in srgb, var(--surface) 75%, transparent);
+}
+
+.materials-tab:focus-visible,
+.material-card-open:focus-visible,
+.material-detail-strip button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.materials-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.material-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.material-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-soft);
+}
+
+.material-card-open {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border: 0;
+  background: var(--surface-muted);
+  cursor: zoom-in;
+  padding: 0;
+}
+
+.material-card-media {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.material-card-media.is-missing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.material-card-badge {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: inline-flex;
+  height: 22px;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  background: rgba(16, 17, 20, 0.62);
+  color: #ffffff;
+  font-size: 11px;
+  padding: 0 8px;
+}
+
+.material-card-badge.is-left {
+  right: auto;
+  left: 10px;
+}
+
+.material-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.material-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.material-card-title strong {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.material-card-body p {
+  display: -webkit-box;
+  min-height: 36px;
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  word-break: break-word;
+}
+
+.material-card-body p.is-empty {
+  font-style: italic;
+}
+
+.material-chip {
+  display: inline-flex;
+  height: 22px;
+  flex: none;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--text);
+  font-size: 12px;
+  padding: 0 8px;
+}
+
+.material-chip.is-category {
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.material-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.material-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.material-card-actions .button {
+  flex: 1;
+}
+
+.material-favorite {
+  width: 32px;
+  height: 30px;
+}
+
+.material-favorite.is-on {
+  border-color: color-mix(in srgb, var(--warning) 35%, var(--border));
+  background: var(--warning-weak);
+  color: var(--warning);
+}
+
+.materials-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 64px 16px;
+  text-align: center;
+}
+
+.materials-state strong {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.materials-state.is-error {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--danger) 30%, var(--border));
+  background: var(--danger-weak);
+}
+
+.materials-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.materials-connect {
+  display: grid;
+  /* 和上方居中的 1440px 内容区左对齐 */
+  width: min(100%, 920px);
+  margin-right: auto;
+  margin-left: max(0px, calc((100% - 1440px) / 2));
+  grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
+  gap: 28px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 24px;
+}
+
+.materials-connect > div {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.materials-connect strong {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.materials-connect span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.nas-form {
+  display: grid;
+  gap: 12px;
+}
+
+.nas-form-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.nas-form-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.materials-drop-hint {
+  position: absolute;
+  z-index: 5;
+  inset: 12px;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.material-detail {
+  width: min(1080px, 100%);
+  grid-template-columns: minmax(0, 1.15fr) minmax(340px, 1fr);
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.material-detail-media {
+  display: flex;
+  min-width: 0;
+  min-height: 360px;
+  flex-direction: column;
+  background: var(--surface-muted);
+}
+
+.material-detail-media > img,
+.material-detail-media > video {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  max-height: calc(100vh - 150px);
+  flex: 1;
+  object-fit: contain;
+}
+
+.material-detail-strip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding: 10px;
+}
+
+.material-detail-strip button {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: var(--surface-muted);
+  cursor: pointer;
+  padding: 0;
+}
+
+.material-detail-strip button.is-active {
+  border-color: var(--accent);
+}
+
+.material-detail-strip img,
+.material-detail-strip video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.material-detail-info {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 14px;
+  overflow: auto;
+  padding: 20px;
+}
+
+.material-detail-heading {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.material-detail-heading h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.material-detail-heading span {
+  color: var(--muted);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.material-detail-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.material-detail-fields .is-wide {
+  grid-column: 1 / -1;
+}
+
+.material-detail-fields textarea {
+  font: inherit;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.material-field-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.material-detail-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.material-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.material-detail-delete {
+  margin-left: auto;
+}
+
+.material-detail-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  background: var(--danger-weak);
+  color: var(--text);
+  font-size: 13px;
+  padding: 10px;
+}
+
+.material-detail-confirm span {
+  flex: 1 1 180px;
+}
+
+@media (max-width: 860px) {
+  .materials-connect,
+  .material-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .materials-search {
+    flex-basis: 100%;
+  }
+
+  .material-detail-media {
+    min-height: 240px;
+  }
 }
