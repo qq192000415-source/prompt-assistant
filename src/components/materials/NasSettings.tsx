@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '../ui/button';
+import { AiSettingsForm } from './AiSettings';
 
 type NasSettingsFormProps = {
   config: NasConfig | null;
@@ -131,9 +132,10 @@ function ProxySettingsForm({ busy, getProxy, saveProxy }: ProxySettingsFormProps
   );
 }
 
-type NasSettingsDialogProps = Omit<NasSettingsFormProps, 'onSaved'> & ProxySettingsFormProps & { onClose: () => void };
+type NasSettingsDialogProps = Omit<NasSettingsFormProps, 'onSaved'> &
+  ProxySettingsFormProps & { ai: Omit<Parameters<typeof AiSettingsForm>[0], 'busy'>; onClose: () => void };
 
-export function NasSettingsDialog({ onClose, getProxy, saveProxy, ...formProps }: NasSettingsDialogProps) {
+export function NasSettingsDialog({ onClose, getProxy, saveProxy, ai, ...formProps }: NasSettingsDialogProps) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
@@ -156,6 +158,8 @@ export function NasSettingsDialog({ onClose, getProxy, saveProxy, ...formProps }
         <NasSettingsForm {...formProps} onSaved={onClose} />
         <h3 className="settings-subheading">网络</h3>
         <ProxySettingsForm busy={formProps.busy} getProxy={getProxy} saveProxy={saveProxy} />
+        <h3 className="settings-subheading">AI 助手</h3>
+        <AiSettingsForm busy={formProps.busy} {...ai} />
       </section>
     </div>
   );

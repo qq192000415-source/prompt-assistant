@@ -24,10 +24,14 @@
   - `generationModels.ts`、`promptTitle.ts`
   - `wordDocumentImport.ts`：Word 图文的解析和配对
   - `placeholderImage.ts`：占位图生成
+  - `remoteAiClient.ts`（只取文本和视觉部分，去掉了生图）、`ollamaAiClient.ts`：AI 请求、系统提示词、结果解析
+  - `aiTypes.ts`：AI 功能定义和各功能的预设规则
+  - `photographyCategories.ts`：摄影分类体系；`tagKnowledge.ts`、`tagEntityGroups.ts`、`tagQuality.ts`、`tagKnowledgeTypes.ts`：标签规范
+  - `remoteAnalysisV2.ts`、`aiBaseUrl.ts`：分析结果归一、接口地址规整
 - `electron/jimengCapture.cjs`：即梦抓取用的 preload
 - `electron/materials/linkImport.ts`、`wordImport.ts`：剪贴板、链接、Word 导入流程
 - `electron/materials/sharePackage.ts`：分享包格式（`data.json` + `images/`，和素言互通）
-- `tests/suyan-*.test.ts`：SuYan 自带的解析器单元测试，原样搬来，通过 `tests/helpers/vitest-shim.mjs` 在 `node --test` 下运行
+- `tests/suyan-*.test.ts`：SuYan 自带的解析器和 AI 客户端单元测试（依赖 vi 模拟的用例没搬，文件开头列了名字），原样搬来，通过 `tests/helpers/vitest-shim.mjs` 在 `node --test` 下运行
 
 ```text
 MIT License

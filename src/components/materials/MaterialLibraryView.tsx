@@ -232,6 +232,24 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
             </>
           ) : (
             <>
+              <Button
+                className="button ghost compact"
+                type="button"
+                disabled={batchBusy || selectedGroups.length === 0}
+                title="只给还没有提示词的组看图反推，已有提示词的跳过"
+                onClick={() => void controller.aiBatchReverse(selectedItems.map((item) => item.id))}
+              >
+                AI 反推
+              </Button>
+              <Button
+                className="button ghost compact"
+                type="button"
+                disabled={batchBusy || selectedGroups.length === 0}
+                title="AI 给出的分类覆盖原分类，标签并入原有标签"
+                onClick={() => void controller.aiBatchClassify(selectedItems.map((item) => item.id))}
+              >
+                AI 分类打标签
+              </Button>
               <Button className="button ghost compact" type="button" disabled={batchBusy || selectedImageIds.length === 0} onClick={() => setBatchDialog('images')}>
                 压缩图片{selectedImageIds.length ? ` ${selectedImageIds.length}` : ''}
               </Button>
@@ -391,6 +409,12 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
           busy={Boolean(busy)}
           getProxy={controller.getProxy}
           saveProxy={controller.saveProxy}
+          ai={{
+            getSettings: controller.aiGetSettings,
+            saveSettings: controller.aiSaveSettings,
+            listModels: controller.aiListModels,
+            testModel: controller.aiTest,
+          }}
           onSubmit={controller.saveConfig}
           onClose={() => setSettingsOpen(false)}
         />

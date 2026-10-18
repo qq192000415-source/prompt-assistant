@@ -109,8 +109,40 @@ type DesktopMaterialsApi = {
   exportShare: (ids: string[], defaultDir: string) => Promise<MaterialExportResult | null>;
   getProxy: () => Promise<MaterialProxySettings>;
   saveProxy: (settings: MaterialProxySettings) => Promise<{ settings: MaterialProxySettings; results: Array<{ name: string; ok: boolean; detail: string }> }>;
+  aiGetSettings: () => Promise<MaterialAiSettings>;
+  aiSaveSettings: (settings: MaterialAiSettingsInput) => Promise<MaterialAiSettings>;
+  aiListModels: (slot: MaterialAiSlotName, input: MaterialAiSlotInput) => Promise<Array<{ id: string; vision: boolean }>>;
+  aiTest: (slot: MaterialAiSlotName, input: MaterialAiSlotInput) => Promise<void>;
+  aiReverse: (id: string) => Promise<string>;
+  aiOptimize: (prompt: string, kind: 'positive' | 'negative') => Promise<string>;
+  aiTranslate: (prompt: string, negativePrompt: string) => Promise<{ prompt: string; negativePrompt: string; targetLanguage: 'zh' | 'en' }>;
+  aiClassify: (id: string, prompt: string) => Promise<{ category: string; tags: string[]; warnings: string[] }>;
+  aiBatchReverse: (ids: string[]) => Promise<MaterialAiBatchResult>;
+  aiBatchClassify: (ids: string[]) => Promise<MaterialAiBatchResult>;
   onProgress: (callback: (progress: MaterialBatchProgress) => void) => () => void;
 };
+
+type MaterialAiSlotName = 'text' | 'vision';
+type MaterialAiProvider = 'openai-compatible' | 'ollama';
+type MaterialAiSlotInput = { provider: MaterialAiProvider; baseUrl: string; model: string; apiKey?: string };
+type MaterialAiSlot = { provider: MaterialAiProvider; baseUrl: string; model: string; hasApiKey: boolean; usable: boolean };
+type MaterialAiAction = {
+  action: string;
+  label: string;
+  description: string;
+  placeholder: string;
+  capability: string;
+  presets: Array<{ id: string; label: string }>;
+  rulePresetIds: string[];
+  customInstructions: string;
+};
+type MaterialAiSettings = { text: MaterialAiSlot | null; vision: MaterialAiSlot | null; actions: MaterialAiAction[] };
+type MaterialAiSettingsInput = {
+  text: MaterialAiSlotInput | null;
+  vision: MaterialAiSlotInput | null;
+  actions: Record<string, { rulePresetIds: string[]; customInstructions: string }>;
+};
+type MaterialAiBatchResult = MaterialLoadResult & { processed: number; skipped: number; failures: MaterialBatchFailure[]; canceled: boolean };
 
 type MaterialProxySettings = { mode: 'system' | 'direct' | 'custom'; url: string };
 type MaterialBatchProgress ={ task: string; done: number; total: number; current: string };

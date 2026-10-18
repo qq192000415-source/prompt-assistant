@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Copy, ImageDown, Trash2, X } from 'lucide-react';
+import { Copy, ImageDown, Languages, Sparkles, Tags, Trash2, Wand2, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { UNCATEGORIZED, normalizePromptText, uniqueTags, type MaterialGroup, type MaterialItem } from '../../materials/library';
 import type { MaterialLibraryController } from '../../materials/useMaterialLibrary';
@@ -52,6 +52,7 @@ export function MaterialDetailDialog({ group, itemId, onSelectItem, categories, 
   const current = group.items.find((item) => item.id === itemId) ?? group.primary;
   const [draft, setDraft] = useState<Draft>(() => draftOf(group.primary));
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [aiNote, setAiNote] = useState('');
   const dirty = normalizedDraft(draft) !== normalizedDraft(draftOf(group.primary));
   const busy = Boolean(controller.busy);
 
@@ -68,6 +69,7 @@ export function MaterialDetailDialog({ group, itemId, onSelectItem, categories, 
   const save = async (event: FormEvent) => {
     event.preventDefault();
     if (!dirty) return;
+    setAiNote('');
     await controller.update(group.primary.id, {
       title: draft.title,
       category: draft.category,
@@ -75,6 +77,39 @@ export function MaterialDetailDialog({ group, itemId, onSelectItem, categories, 
       negativePrompt: draft.negativePrompt,
       tags: splitTags(draft.tags),
     });
+  };
+
+  // AI 结果只填进草稿，不直接写入：用户看过、改过再点保存。
+  const fillFromAi = (patch: Partial<Draft>, note: string) => {
+    setDraft((previous) => ({ ...previous, ...patch }));
+    setAiNote(note);
+  };
+  const SAVE_HINT = '确认没问题再点保存；不想要就关掉，不会写入。';
+
+  const aiReverse = async () => {
+    const prompt = await controller.aiReverse(current.id);
+    if (prompt) fillFromAi({ prompt }, `AI 看图反推的提示词已填进正向提示词。${SAVE_HINT}`);
+  };
+  const aiOptimize = async (key: 'prompt' | 'negativePrompt') => {
+    const optimized = await controller.aiOptimize(draft[key], key === 'prompt' ? 'positive' : 'negative');
+    if (optimized) fillFromAi({ [key]: optimized }, `AI 优化后的${key === 'prompt' ? '正向' : '负向'}提示词已填进去。${SAVE_HINT}`);
+  };
+  const aiTranslate = async () => {
+    const result = await controller.aiTranslate(draft.prompt, draft.negativePrompt);
+    if (result) {
+      fillFromAi(
+        { prompt: result.prompt, negativePrompt: result.negativePrompt || draft.negativePrompt },
+        `已译成${result.targetLanguage === 'en' ? '英文' : '中文'}。${SAVE_HINT}`,
+      );
+    }
+  };
+  const aiClassify = async () => {
+    const result = await controller.aiClassify(current.id, draft.prompt);
+    if (!result) return;
+    fillFromAi(
+      { category: result.category || draft.category, tags: uniqueTags([...splitTags(draft.tags), ...result.tags]).join('，') },
+      [`AI 给出的分类和标签已填进去，标签并入了原有的。${SAVE_HINT}`, ...result.warnings].join(' '),
+    );
   };
 
   // 先切到同组下一张再删，否则删完后弹窗按旧 id 找不到组会直接关掉。
@@ -160,36 +195,74 @@ export function MaterialDetailDialog({ group, itemId, onSelectItem, categories, 
                 ))}
               </datalist>
             </label>
-            <label className="field is-wide">
+            <label className="field is-wide" htmlFor="material-prompt">
               <span className="material-field-label">
                 正向提示词
-                <Button className="button ghost compact" type="button" disabled={!draft.prompt.trim()} onClick={() => onCopyPrompt(draft.prompt)}>
-                  <Copy size={13} />
-                  复制
-                </Button>
+                <span className="material-field-tools">
+                  <Button className="button ghost compact" type="button" disabled={busy} onClick={() => void aiReverse()} title="让 AI 看图写出提示词">
+                    <Sparkles size={13} />
+                    AI 反推
+                  </Button>
+                  <Button className="button ghost compact" type="button" disabled={busy || !draft.prompt.trim()} onClick={() => void aiOptimize('prompt')}>
+                    <Wand2 size={13} />
+                    优化
+                  </Button>
+                  <Button
+                    className="button ghost compact"
+                    type="button"
+                    disabled={busy || !(draft.prompt.trim() || draft.negativePrompt.trim())}
+                    onClick={() => void aiTranslate()}
+                    title="中英互译，正向和负向一起译"
+                  >
+                    <Languages size={13} />
+                    翻译
+                  </Button>
+                  <Button className="button ghost compact" type="button" disabled={!draft.prompt.trim()} onClick={() => onCopyPrompt(draft.prompt)}>
+                    <Copy size={13} />
+                    复制
+                  </Button>
+                </span>
               </span>
-              <textarea value={draft.prompt} onChange={set('prompt')} rows={5} />
+              <textarea id="material-prompt" value={draft.prompt} onChange={set('prompt')} rows={5} />
             </label>
-            <label className="field is-wide">
+            <label className="field is-wide" htmlFor="material-negative-prompt">
               <span className="material-field-label">
                 负向提示词
-                <Button
-                  className="button ghost compact"
-                  type="button"
-                  disabled={!draft.negativePrompt.trim()}
-                  onClick={() => onCopyPrompt(draft.negativePrompt)}
-                >
-                  <Copy size={13} />
-                  复制
+                <span className="material-field-tools">
+                  <Button className="button ghost compact" type="button" disabled={busy || !draft.negativePrompt.trim()} onClick={() => void aiOptimize('negativePrompt')}>
+                    <Wand2 size={13} />
+                    优化
+                  </Button>
+                  <Button
+                    className="button ghost compact"
+                    type="button"
+                    disabled={!draft.negativePrompt.trim()}
+                    onClick={() => onCopyPrompt(draft.negativePrompt)}
+                  >
+                    <Copy size={13} />
+                    复制
+                  </Button>
+                </span>
+              </span>
+              <textarea id="material-negative-prompt" value={draft.negativePrompt} onChange={set('negativePrompt')} rows={3} />
+            </label>
+            <label className="field is-wide" htmlFor="material-tags">
+              <span className="material-field-label">
+                标签
+                <Button className="button ghost compact" type="button" disabled={busy} onClick={() => void aiClassify()} title="AI 识别分类和标签">
+                  <Tags size={13} />
+                  AI 分类打标签
                 </Button>
               </span>
-              <textarea value={draft.negativePrompt} onChange={set('negativePrompt')} rows={3} />
-            </label>
-            <label className="field is-wide">
-              标签
-              <input value={draft.tags} onChange={set('tags')} placeholder="用逗号分隔，例如：人像，暖色" />
+              <input id="material-tags" value={draft.tags} onChange={set('tags')} placeholder="用逗号分隔，例如：人像，暖色" />
             </label>
           </div>
+          {controller.busy.startsWith('AI ') && <p className="material-detail-note" role="status">{controller.busy}</p>}
+          {aiNote && !controller.busy && (
+            <p className="material-detail-note is-ai" role="status">
+              {aiNote}
+            </p>
+          )}
           {group.items.length > 1 && <p className="material-detail-note">改动会同时应用到同组的 {group.items.length} 张效果图。</p>}
 
           {confirmingDelete ? (

@@ -11,6 +11,8 @@ import {
   type MaterialPatch,
 } from '../../src/materials/library.ts';
 import { mimeTypeOf } from '../../src/materials/mediaFileTypes.ts';
+import { batchClassify, batchReverse, classifyItem, knownCategoriesOf, optimizePrompt, reversePrompt, translatePrompt } from './ai.ts';
+import { getPublicAiSettings, listModels, loadAiRuntime, saveAiSettings, testModel } from './aiSettings.ts';
 import { compressImages, compressVideos, type ImageCompressOptions } from './batch.ts';
 import { exportItems } from './export.ts';
 import { cancelBatch, reason, type BatchProgress, type Failure } from './tasks.ts';
@@ -210,4 +212,38 @@ export function register({ ipcMain, userDataDir, updateBaseUrl, getWindow }: Reg
   void applyProxySettings(readProxySettings(userDataDir)).catch((error) => console.warn('应用抓取代理设置失败', error));
   ipcMain.handle('materials:get-proxy', () => readProxySettings(userDataDir));
   ipcMain.handle('materials:save-proxy', async (_event, input) => ({ settings: await saveProxySettings(userDataDir, input), results: await testProxy() }));
+
+  const slotName = (value: unknown) => (value === 'vision' ? 'vision' : 'text');
+  const findItem = async (itemId: unknown) => {
+    const config = loadConfig(userDataDir);
+    const { library } = await readLibrary(config);
+    const item = library.items.find((entry) => entry.id === itemId);
+    if (!item) throw new Error('这条素材已经不存在，可能在另一台电脑上被删除了');
+    return { config, library, item };
+  };
+  ipcMain.handle('materials:ai-get-settings', () => getPublicAiSettings(userDataDir));
+  ipcMain.handle('materials:ai-save-settings', (_event, input) => saveAiSettings(userDataDir, input ?? {}));
+  ipcMain.handle('materials:ai-list-models', (_event, name, input) => listModels(userDataDir, slotName(name), input ?? {}));
+  ipcMain.handle('materials:ai-test', (_event, name, input) => testModel(userDataDir, slotName(name), input ?? {}));
+  ipcMain.handle('materials:ai-reverse', async (_event, itemId) => {
+    const { config, item } = await findItem(itemId);
+    return reversePrompt(loadAiRuntime(userDataDir), config, item);
+  });
+  ipcMain.handle('materials:ai-optimize', (_event, prompt, kind) =>
+    optimizePrompt(loadAiRuntime(userDataDir), String(prompt ?? ''), kind === 'negative' ? 'negative' : 'positive'),
+  );
+  ipcMain.handle('materials:ai-translate', (_event, prompt, negativePrompt) =>
+    translatePrompt(loadAiRuntime(userDataDir), String(prompt ?? ''), String(negativePrompt ?? '')),
+  );
+  // prompt 是详情页里还没保存的提示词，没有视觉模型时按它分类。
+  ipcMain.handle('materials:ai-classify', async (_event, itemId, prompt) => {
+    const { config, library, item } = await findItem(itemId);
+    return classifyItem(loadAiRuntime(userDataDir), config, item, String(prompt ?? ''), knownCategoriesOf(library));
+  });
+  ipcMain.handle('materials:ai-batch-reverse', (event, ids) =>
+    batchReverse(loadAiRuntime(userDataDir), loadConfig(userDataDir), asStringArray(ids), progressTo(event)),
+  );
+  ipcMain.handle('materials:ai-batch-classify', (event, ids) =>
+    batchClassify(loadAiRuntime(userDataDir), loadConfig(userDataDir), asStringArray(ids), progressTo(event)),
+  );
 }

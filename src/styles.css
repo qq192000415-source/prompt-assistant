@@ -3481,6 +3481,36 @@ h2 {
 .nas-form-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+}
+
+.ai-slot {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px 12px;
+}
+
+.ai-slot legend {
+  padding: 0 4px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ai-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.ai-preset {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
 }
 
 .materials-drop-hint {
@@ -3613,6 +3643,17 @@ h2 {
   margin: 0;
   color: var(--muted);
   font-size: 12px;
+}
+
+.material-detail-note.is-ai {
+  color: var(--text);
+}
+
+.material-field-tools {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px;
 }
 
 .material-detail-actions {

@@ -51,6 +51,16 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     exportShare: (ids, defaultDir) => ipcRenderer.invoke('materials:export-share', ids, defaultDir),
     getProxy: () => ipcRenderer.invoke('materials:get-proxy'),
     saveProxy: (settings) => ipcRenderer.invoke('materials:save-proxy', settings),
+    aiGetSettings: () => ipcRenderer.invoke('materials:ai-get-settings'),
+    aiSaveSettings: (settings) => ipcRenderer.invoke('materials:ai-save-settings', settings),
+    aiListModels: (slot, input) => ipcRenderer.invoke('materials:ai-list-models', slot, input),
+    aiTest: (slot, input) => ipcRenderer.invoke('materials:ai-test', slot, input),
+    aiReverse: (id) => ipcRenderer.invoke('materials:ai-reverse', id),
+    aiOptimize: (prompt, kind) => ipcRenderer.invoke('materials:ai-optimize', prompt, kind),
+    aiTranslate: (prompt, negativePrompt) => ipcRenderer.invoke('materials:ai-translate', prompt, negativePrompt),
+    aiClassify: (id, prompt) => ipcRenderer.invoke('materials:ai-classify', id, prompt),
+    aiBatchReverse: (ids) => ipcRenderer.invoke('materials:ai-batch-reverse', ids),
+    aiBatchClassify: (ids) => ipcRenderer.invoke('materials:ai-batch-classify', ids),
     onProgress: (callback) => {
       const listener = (_event, progress) => callback(progress);
       ipcRenderer.on('materials:progress', listener);

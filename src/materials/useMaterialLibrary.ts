@@ -174,6 +174,40 @@ export function useMaterialLibrary(notify: (message: string) => void) {
     },
     getProxy: () => api!.getProxy(),
     saveProxy: (settings: MaterialProxySettings) => run('正在测试网络…', () => api!.saveProxy(settings)),
+    aiGetSettings: () => api!.aiGetSettings(),
+    aiSaveSettings: async (settings: MaterialAiSettingsInput) => {
+      const saved = await run('正在保存 AI 设置…', () => api!.aiSaveSettings(settings));
+      if (saved) notify('AI 设置已保存');
+      return saved;
+    },
+    aiListModels: (slot: MaterialAiSlotName, input: MaterialAiSlotInput) => run('正在查询模型…', () => api!.aiListModels(slot, input)),
+    aiTest: async (slot: MaterialAiSlotName, input: MaterialAiSlotInput) => {
+      const done = await run('正在测试连接…', async () => (await api!.aiTest(slot, input), true));
+      if (done) notify(`${slot === 'text' ? '文本' : '视觉'}模型连接成功`);
+    },
+    // 详情页的单条 AI：结果只回给调用方填进草稿，用户点保存才写入 NAS。
+    aiReverse: (id: string) => run('AI 正在看图反推…', () => api!.aiReverse(id)),
+    aiOptimize: (prompt: string, kind: 'positive' | 'negative') => run('AI 正在优化…', () => api!.aiOptimize(prompt, kind)),
+    aiTranslate: (prompt: string, negativePrompt: string) => run('AI 正在翻译…', () => api!.aiTranslate(prompt, negativePrompt)),
+    aiClassify: (id: string, prompt: string) => run('AI 正在分类打标签…', () => api!.aiClassify(id, prompt)),
+    aiBatchReverse: async (ids: string[]) => {
+      const result = await runBatch('AI 反推', () => api!.aiBatchReverse(ids));
+      if (!result) return false;
+      apply(result);
+      notify(
+        `${result.canceled ? '已取消，' : ''}反推了 ${result.processed} 组` +
+          (result.skipped ? `，${result.skipped} 组已有提示词，跳过` : '') +
+          failureText(result.failures),
+      );
+      return true;
+    },
+    aiBatchClassify: async (ids: string[]) => {
+      const result = await runBatch('AI 分类打标签', () => api!.aiBatchClassify(ids));
+      if (!result) return false;
+      apply(result);
+      notify(`${result.canceled ? '已取消，' : ''}给 ${result.processed} 组分类打了标签${failureText(result.failures)}`);
+      return true;
+    },
     exportItems: async (ids: string[]) => {
       const result = await runBatch('导出', () => api!.exportItems(ids, loadMaterialsExportDir()));
       if (!result) return false;
