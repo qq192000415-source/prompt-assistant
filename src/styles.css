@@ -5107,11 +5107,11 @@ h2 {
 
 .canvas-detail-resizer:hover::after,
 .canvas-detail-resizer:focus-visible::after,
-body.resizing-canvas .canvas-detail-resizer::after {
+body.resizing-detail .canvas-detail-resizer::after {
   opacity: 1;
 }
 
-body.resizing-canvas {
+body.resizing-detail {
   cursor: col-resize;
   user-select: none;
 }
@@ -5943,7 +5943,7 @@ html.dark {
 
 .document-browser-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
+  grid-template-columns: minmax(0, 1fr) var(--document-pane-width, 400px);
   align-items: start;
   gap: 16px;
 }
@@ -6129,6 +6129,10 @@ html.dark {
 
   .document-browser-pane {
     position: static;
+  }
+
+  .document-browser-pane .canvas-detail-resizer {
+    display: none;
   }
 
   .document-card.document-pane {

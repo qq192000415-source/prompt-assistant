@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { Copy, FilePlus } from 'lucide-react';
 import { Button } from './ui/button';
 import { documentKind, documentKindCounts, filterDocumentsByKind, sortDocuments, type DocumentKind, type DocumentSort } from '../documentBrowser';
-import { loadDocumentSort, saveDocumentSort } from '../localState';
+import { loadDocumentPaneWidth, loadDocumentSort, saveDocumentPaneWidth, saveDocumentSort } from '../localState';
 import { formatFileSize } from '../promptUtils';
 import type { PromptItem } from '../types';
+import { useDetailResize } from '../useDetailResize';
 
 type DocumentBrowserProps = {
   title: string;
@@ -35,6 +36,7 @@ export function DocumentBrowser({ title, query, documents, selectedId, onSelect,
   const api = window.promptAssistantDesktop?.documents;
   const [sort, setSort] = useState<DocumentSort>(loadDocumentSort);
   const [kind, setKind] = useState<DocumentKind | 'all'>('all');
+  const { width: paneWidth, resizerProps } = useDetailResize(loadDocumentPaneWidth, saveDocumentPaneWidth);
   // 已经在本机的文件（按 sha256）：只有这些能直接拖出去，云端的要先选中下载。
   const [localShas, setLocalShas] = useState<ReadonlySet<string>>(new Set());
   const listRef = useRef<HTMLDivElement>(null);
@@ -129,7 +131,7 @@ export function DocumentBrowser({ title, query, documents, selectedId, onSelect,
         </div>
       )}
 
-      <div className="document-browser-body">
+      <div className="document-browser-body" style={{ '--document-pane-width': `${paneWidth}px` } as CSSProperties}>
         <div className="document-list-scroll">
           <div ref={listRef} className="document-list" role="listbox" aria-label="文档" onKeyDown={onListKeyDown}>
             <div className="document-list-header" aria-hidden="true">
@@ -185,7 +187,20 @@ export function DocumentBrowser({ title, query, documents, selectedId, onSelect,
             })}
           </div>
         </div>
-        <div className="document-browser-pane">{selected && renderPane(selected, markLocal)}</div>
+        <div className="document-browser-pane">
+          {selected && (
+            <>
+              <Button
+                className="canvas-detail-resizer"
+                type="button"
+                aria-label="拖动调整预览栏宽度"
+                title="拖动调整预览栏宽度（也可以用左右方向键）"
+                {...resizerProps}
+              />
+              {renderPane(selected, markLocal)}
+            </>
+          )}
+        </div>
       </div>
       <p className="document-browser-hint">选中一行后按 ↑↓ 换文件，Enter 复制文件；本机已有的文件整行都能拖出去发送。</p>
     </section>

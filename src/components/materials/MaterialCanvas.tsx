@@ -1,9 +1,8 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
 import { BookOpen, BookmarkPlus, Check, ChevronLeft, ChevronRight, ClipboardPaste, Copy, Download, ImagePlus, PanelLeftClose, PanelLeftOpen, Play, RotateCcw, Save, Search, Settings, Sparkles, Trash2, TriangleAlert, Wand2, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import type { MaterialLibraryController } from '../../materials/useMaterialLibrary';
 import {
-  clampCanvasDetailWidth,
   loadCanvasDetailWidth,
   loadCanvasPanelCollapsed,
   loadCanvasRecordView,
@@ -16,6 +15,7 @@ import {
   type CanvasSortOrder,
 } from '../../localState';
 import { copyToClipboard } from '../../promptUtils';
+import { useDetailResize } from '../../useDetailResize';
 import type { PromptItem } from '../../types';
 import { canvas, getCanvasState, isActive, isVideoModel, savedInHistory, useCanvasState, visibleTasks } from '../../materials/canvasStore';
 import {
@@ -86,7 +86,7 @@ export function MaterialCanvas({ controller, onOpenSettings, templates, template
   const [shown, setShown] = useState(PAGE_SIZE);
   const [recordView, setRecordView] = useState(loadCanvasRecordView);
   const [sortOrder, setSortOrder] = useState(loadCanvasSortOrder);
-  const [detailWidth, setDetailWidth] = useState(loadCanvasDetailWidth);
+  const { width: detailWidth, resizerProps } = useDetailResize(loadCanvasDetailWidth, saveCanvasDetailWidth);
   const [panelCollapsed, setPanelCollapsed] = useState(loadCanvasPanelCollapsed);
   // 右侧详情栏显示的记录：`任务 id:图序号`，没有图的任务是 `任务 id:`；没选过或选的不见了就显示第一条。
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -263,35 +263,6 @@ export function MaterialCanvas({ controller, onOpenSettings, templates, template
   const togglePanel = () => {
     setPanelCollapsed(!panelCollapsed);
     saveCanvasPanelCollapsed(!panelCollapsed);
-  };
-
-  // 拖详情栏左边缘改宽度，照侧栏的做法：松手时才写进本机。
-  const startDetailResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    const startX = event.clientX;
-    const startWidth = detailWidth;
-    let latest = startWidth;
-    document.body.classList.add('resizing-canvas');
-    const move = (moveEvent: PointerEvent) => {
-      latest = clampCanvasDetailWidth(startWidth + startX - moveEvent.clientX);
-      setDetailWidth(latest);
-    };
-    const up = () => {
-      document.body.classList.remove('resizing-canvas');
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      saveCanvasDetailWidth(latest);
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-  };
-  const nudgeDetailWidth = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
-    const step = event.key === 'ArrowLeft' ? 24 : event.key === 'ArrowRight' ? -24 : 0;
-    if (!step) return;
-    event.preventDefault();
-    const next = clampCanvasDetailWidth(detailWidth + step);
-    setDetailWidth(next);
-    saveCanvasDetailWidth(next);
   };
 
   const pageTasks = tasks.slice(0, shown);
@@ -655,8 +626,7 @@ export function MaterialCanvas({ controller, onOpenSettings, templates, template
           type="button"
           aria-label="拖动调整详情栏宽度"
           title="拖动调整详情栏宽度（也可以用左右方向键）"
-          onPointerDown={startDetailResize}
-          onKeyDown={nudgeDetailWidth}
+          {...resizerProps}
         />
         {selected ? (
           <CanvasDetail

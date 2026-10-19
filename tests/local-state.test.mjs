@@ -9,7 +9,7 @@ window.localStorage = {
   removeItem: (key) => store.delete(key),
 };
 
-const { clampCanvasDetailWidth, loadCanvasDetailWidth, loadCanvasPanelCollapsed, loadCanvasRecordView, loadCanvasSortOrder, saveCanvasDetailWidth, saveCanvasPanelCollapsed, saveCanvasSortOrder, loadDeletedRecords, loadExportSettings, loadLibraryMode, loadSidebarWidth, loadSyncRecords, saveCanvasRecordView, saveDeletedRecords } = await import(
+const { clampCanvasDetailWidth, loadCanvasDetailWidth, loadCanvasPanelCollapsed, loadCanvasRecordView, loadCanvasSortOrder, saveCanvasDetailWidth, saveCanvasPanelCollapsed, saveCanvasSortOrder, loadDeletedRecords, loadExportSettings, loadLibraryMode, loadSidebarWidth, loadSyncRecords, saveCanvasRecordView, saveDeletedRecords, loadDocumentPaneWidth, saveDocumentPaneWidth } = await import(
   '../src/localState.ts'
 );
 const { normalizeDesktopSettings } = await import('../src/desktopSettings.ts');
@@ -81,6 +81,18 @@ test('画布的排序、详情栏宽度、参数栏收起：有默认值，存�
   store.set('prompt-library.canvasDetailWidth.v1', 'wide');
   store.set('prompt-library.canvasSortOrder.v1', 'random');
   assert.deepEqual([loadCanvasDetailWidth(), loadCanvasSortOrder()], [400, 'newest']);
+});
+
+test('文档库预览栏宽度：默认 400，夹在 300–720，和画布详情栏分开记', () => {
+  for (const key of ['canvasDetailWidth', 'documentPaneWidth']) store.delete(`prompt-library.${key}.v1`);
+  assert.equal(loadDocumentPaneWidth(), 400);
+
+  saveDocumentPaneWidth(600);
+  assert.deepEqual([loadDocumentPaneWidth(), loadCanvasDetailWidth()], [600, 400]);
+  saveDocumentPaneWidth(5000);
+  assert.equal(loadDocumentPaneWidth(), 720);
+  store.set('prompt-library.documentPaneWidth.v1', 'wide');
+  assert.equal(loadDocumentPaneWidth(), 400);
 });
 
 test('桌面设置：透明度夹在 0.25–1，非法关闭行为沿用原值，坐标缺失时保留原坐标', () => {

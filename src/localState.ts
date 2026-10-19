@@ -234,6 +234,14 @@ export const loadDocumentSort = (): DocumentSort => {
 };
 export const saveDocumentSort = (order: DocumentSort) => writeKey(DOCUMENT_SORT_KEY, order);
 
+// 文档库右边预览栏的宽度：范围和画布详情栏一样（300–720），但分开记。
+const DOCUMENT_PANE_WIDTH_KEY = 'prompt-library.documentPaneWidth.v1';
+export const loadDocumentPaneWidth = () => {
+  const saved = Number(readKey(DOCUMENT_PANE_WIDTH_KEY) ?? NaN);
+  return Number.isFinite(saved) ? clampCanvasDetailWidth(saved) : 400;
+};
+export const saveDocumentPaneWidth = (width: number) => writeKey(DOCUMENT_PANE_WIDTH_KEY, String(clampCanvasDetailWidth(width)));
+
 export const loadCanvasPanelCollapsed = () => readKey(CANVAS_PANEL_COLLAPSED_KEY) === '1';
 export const saveCanvasPanelCollapsed = (collapsed: boolean) => writeKey(CANVAS_PANEL_COLLAPSED_KEY, collapsed ? '1' : '0');
 
