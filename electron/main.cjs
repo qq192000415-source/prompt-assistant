@@ -794,7 +794,8 @@ ipcMain.handle('desktop:update-install', () => {
   }
 
   forceQuit = true;
-  autoUpdater.quitAndInstall(false, true);
+  // 静默安装：沿用上次的安装位置，装完自动重开，不弹安装向导让用户一路点「下一步」。
+  autoUpdater.quitAndInstall(true, true);
   return updateStatus;
 });
 ipcMain.handle('floating:show-main', () => showMainWindow());

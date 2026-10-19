@@ -15,6 +15,8 @@ const importSummary = (result: MaterialImportResult) => {
   return parts.join('，');
 };
 
+const SLOT_NAMES: Record<MaterialAiSlotName, string> = { text: '文本模型', vision: '视觉模型', image: '生图模型' };
+
 const formatBytes = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`);
 const failureText = (failures: MaterialBatchFailure[]) =>
   failures.length ? `，${failures.length} 个失败：${failures.map((failure) => `${failure.name}（${failure.message}）`).join('、')}` : '';
@@ -183,7 +185,7 @@ export function useMaterialLibrary(notify: (message: string) => void) {
     aiListModels: (slot: MaterialAiSlotName, input: MaterialAiSlotInput) => run('正在查询模型…', () => api!.aiListModels(slot, input)),
     aiTest: async (slot: MaterialAiSlotName, input: MaterialAiSlotInput) => {
       const done = await run('正在测试连接…', async () => (await api!.aiTest(slot, input), true));
-      if (done) notify(`${slot === 'text' ? '文本' : '视觉'}模型连接成功`);
+      if (done) notify(`${SLOT_NAMES[slot]}连接成功`);
     },
     // 详情页的单条 AI：结果只回给调用方填进草稿，用户点保存才写入 NAS。
     aiReverse: (id: string) => run('AI 正在看图反推…', () => api!.aiReverse(id)),

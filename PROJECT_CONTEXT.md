@@ -14,7 +14,7 @@ Current update channel: 部署者自己的 `UPDATE_BASE_URL`
 
 - 当前主项目目录：仓库根目录
 - 当前分支：`master`
-- 当前源码版本：`1.7.0`
+- 当前源码版本：`1.7.1`
 - 云同步只使用 Supabase Auth + `public.prompt_libraries`，不再使用自建/VPS 同步服务。
 - 本机数据目录固定为 `%APPDATA%\prompt-assistant`（1.3.26 起）。旧版本按版本号分目录（`提示词助手X.Y.Z`），首次启动自动从最近使用的旧目录搬数据，旧目录保留。
 - 安装版自动更新源由部署者写入本机 `.env` 的 `UPDATE_BASE_URL`。仓库不保存真实服务器地址。
@@ -138,7 +138,7 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 
 ### Current Progress
 
-当前源码版本为 `1.7.0`。左栏可在「提示词 | 文档 | 素材 | 画布」间切换：文档库原样保存文件，素材库（图片、视频）只存在用户自己的 NAS 上。界面升级到 shadcn/ui 设计令牌，保留双栏工作流，并支持本机浅色/深色外观。安装包更新源改为本项目自己的子域名，地址只写在本机 `.env`，不和其他项目共用主机名。
+当前源码版本为 `1.7.1`。左栏可在「提示词 | 文档 | 素材 | 画布」间切换：文档库原样保存文件，素材库（图片、视频）只存在用户自己的 NAS 上。界面升级到 shadcn/ui 设计令牌，保留双栏工作流，并支持本机浅色/深色外观。安装包更新源改为本项目自己的子域名，地址只写在本机 `.env`，不和其他项目共用主机名。
 
 - 云同步：Supabase Auth + `prompt_libraries`，地址来自 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY`
 - 安装包更新：部署者自己的 HTTPS 目录，地址来自 `UPDATE_BASE_URL`
@@ -157,6 +157,8 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 - 界面升级为 shadcn/ui + Tailwind 设计令牌：中性表面、发丝边框、单一蓝色强调色、浅色/深色外观，以及菜单、弹窗和提示的短过渡。业务逻辑未改。
 
 ### Latest Verification
+
+- 2026-10-19：版本 `1.7.1`，在主人电脑的正式安装版上验收（数据目录是真实的 `%APPDATA%prompt-assistant`）。1.7.0 软件内更新到 1.7.1 成功（这一次仍由 1.7.0 的旧代码执行，所以还是弹了向导，主人手动点完）。用和 electron-updater 相同的参数 `--updated /S --force-run` 运行 1.7.1 安装包模拟下一次自动更新：没有出现任何窗口，13 秒装完，故意改坏的 `app.asar` 被恢复、多放的标记文件被清掉（证明装回了原来的 `C:Program Filesprompt-library`），装完自动重开。生图模型测连接提示「生图模型连接成功」。NAS 连接、桌面设置两个文件和验收前逐字节一致。自动检查：测试 323 项通过；`npx tsc -b` 通过；全部 `.cjs` 的 `node --check` 通过。
 
 - 2026-10-18：版本 `1.7.0`。`release:publish` 生成三类产物，公网校验通过。打包版用临时数据目录启动：标题 1.7.0，12 个画布接口都在，并发和重试默认都是 2，队列为空；没设生图模型、没连 NAS 时提示明确。开发版的实测见 Log Entries。自动检查：测试 323 项通过；`npx tsc -b` 通过；全部 `.cjs` 的 `node --check` 通过。
 
@@ -280,6 +282,11 @@ Electron 主进程通过 `electron-updater` 使用 generic provider。更新地�
 
 ### Log Entries
 
+- 2026-10-19：版本 `1.7.1`，修 1.7.0 正式安装版验收中发现的两个问题：
+  - 自动更新会弹出完整安装向导（`quitAndInstall(false, true)` 不静默，加上 `oneClick: false`），用户要一路点下一步。改成 `quitAndInstall(true, true)`：静默装回原位置、装完自动重开。从 1.7.1 往后的更新生效；1.7.0 升 1.7.1 这一次仍走旧代码。默认 UAC 设置的电脑因为装在 Program Files，仍会弹一次 Windows 权限确认；主人电脑的管理员提权设成了不提示，所以不会弹。
+  - 生图模型测连接成功后提示「视觉模型连接成功」，改为按位置显示「文本模型 / 视觉模型 / 生图模型」。
+- 2026-10-18～19：1.7.0 在主人电脑正式安装版上做完整验收：软件内更新 1.6.1→1.7.0、设置生图模型、排队（2 张在跑 1 张排队，12 秒完成）、取消（迟到结果被丢弃）、模型填错失败后单张重试成功并记实际模型、重启后历史还在、从历史存入素材库、另存为（用 UI 自动化操作系统保存对话框，默认文件名正确，存出 1024×1024 JPEG；取消后软件恢复正常）、界面删除后直接列 NAS 目录确认文件清空。测试数据只删「验收测试」开头的，AI 设置恢复成验收前（无），设置文件和备份逐字节一致。另：老式 Win32 消息填不了新式另存为对话框的文件名框，要用 UI 自动化（AutomationId 1001 的 ValuePattern、按钮 1 的 InvokePattern），而且要用 pwsh 7 跑，Windows PowerShell 5 会把 UTF-8 脚本按 ANSI 读坏。
+- 2026-10-18：1.7.0 已打 tag `stable-提示词助手1.7.0`（master 提交 `fa7785c`）。公开仓库同步到 `main`（提交 `3c3afd7`），推送前扫描过，没有 IP、邮箱、更新域名、NAS 地址、API Key。
 - 2026-10-18：版本 `1.7.0`，画布任务队列、失败重试、永久历史。
   - 背景：主人部署的 iLab CONJURE（AGPL-3.0）在生图深度上比我们的画布强，选了方案 B：借鉴思路、自己实现，协议保持 MIT。需求按主人确认：本版做队列和取消、失败重试、历史永久保存；历史存 NAS 一直保留；并发可设默认 2；重试选「省心：都自动重试」。
   - 新增 `canvasQueue.ts`（纯逻辑，生成和保存由外部注入）、`canvasHistory.ts`（历史读写、删除时清理没人用的文件）、`canvasService.ts`（主进程接线）；`libraryStore.ts` 抽出通用的 `mutateJsonFile`，素材库和生成历史共用加锁读改写。nas-media 协议放行 `canvas-history/` 下的原图和缩略图。
