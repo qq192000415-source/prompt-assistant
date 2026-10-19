@@ -238,3 +238,16 @@ test('没有设置任何模型时批量任务直接报错，不动 NAS', async (
     nas.server.close();
   }
 });
+
+test('模型列表：Gemini 不会因为名字里有 emi 被当成生图模型（查询模型时不能被过滤掉）', async () => {
+  const { parseRemoteModels } = await import('../electron/materials/suyan/remoteAiClient.ts');
+  const capabilities = Object.fromEntries(
+    parseRemoteModels({
+      data: [{ id: 'gemini-3-flash' }, { id: 'gemini-3.5-flash-lite' }, { id: 'emi-2' }, { id: 'gpt-image-2' }],
+    }).map((model) => [model.id, model.capabilities]),
+  );
+  assert.deepEqual(capabilities['gemini-3-flash'], ['text', 'vision']);
+  assert.deepEqual(capabilities['gemini-3.5-flash-lite'], ['text', 'vision']);
+  assert.deepEqual(capabilities['emi-2'], ['image-generation']);
+  assert.deepEqual(capabilities['gpt-image-2'], ['image-generation']);
+});

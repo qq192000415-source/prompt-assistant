@@ -2014,7 +2014,7 @@ function assertModelListSettings(settings: AiProviderSettings): void {
 const visionModelPattern =
   /(?:vision|vl|visual|omni|gpt-4o|gpt-4\.1|gpt-5|o3|o4|gemini|pixtral|llava|qwen[^/]*vl|glm-4v|internvl|minicpm-v)/i;
 const imageGenerationModelPattern =
-  /(?:dall-?e|gpt-image|flux|sdxl|stable-diffusion|\bsd[-_]|midjourney|ideogram|playground|recraft|kolors|hidream|cogview|wanxiang|tongyiwan|emi)/i;
+  /(?:dall-?e|gpt-image|flux|sdxl|stable-diffusion|\bsd[-_]|midjourney|ideogram|playground|recraft|kolors|hidream|cogview|wanxiang|tongyiwan|\bemi\b)/i;
 const videoGenerationModelPattern =
   /(?:agnes-video|video|veo|sora|kling|runway|seedance|hailuo|pika|ltx|hunyuanvideo|wan(?:x|\s*)[\d.]*|movie-gen)/i;
 
