@@ -184,6 +184,10 @@ type DocumentViewProps = {
   onSaveInstruction: (id: string, instruction: string) => void;
   onSaveText: (item: PromptItem, text: string) => Promise<boolean>;
   onToggleFavorite: (id: string) => void;
+  // pane：文档库文件夹视图右侧的预览栏，样式更紧凑；不传就是原来的整张卡片。
+  variant?: 'card' | 'pane';
+  // 文件在本机就绪（下载完）时通知外面，文件列表据此允许拖出这一行。
+  onReady?: (sha256: string) => void;
 };
 
 // 文档卡片：主要动作是把文件发出去（复制文件、拖出去），其次是复制文字、打开、另存为。
@@ -196,6 +200,8 @@ export function DocumentView({
   onSaveInstruction,
   onSaveText,
   onToggleFavorite,
+  variant = 'card',
+  onReady,
 }: DocumentViewProps) {
   const file = item.file;
   const api = window.promptAssistantDesktop?.documents;
@@ -217,6 +223,7 @@ export function DocumentView({
         if (canceled) return;
         setText(loadedText);
         setStatus('ready');
+        onReady?.(file.sha256);
       })
       .catch((error) => {
         if (canceled) return;
@@ -251,7 +258,7 @@ export function DocumentView({
   };
 
   return (
-    <article className="full-prompt-card document-card">
+    <article className={`full-prompt-card document-card ${variant === 'pane' ? 'document-pane' : ''}`}>
       <header className="full-prompt-header">
         <div
           className={`full-prompt-title document-title ${ready ? 'is-draggable' : ''}`}

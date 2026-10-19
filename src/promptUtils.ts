@@ -167,7 +167,7 @@ export const formatDate = (value?: string) => {
 // ponytail: 正文最多存 20 万字，防止撑爆 localStorage；更大的文件只能按标题搜到。
 export const SEARCHABLE_TEXT_LIMIT = 200_000;
 
-const getFileExtension = (name: string) => name.toLowerCase().match(/\.([^.]+)$/)?.[1] ?? '';
+export const getFileExtension = (name: string) => name.toLowerCase().match(/\.([^.]+)$/)?.[1] ?? '';
 export const isMarkdownDocument = (name: string) => ['md', 'markdown'].includes(getFileExtension(name));
 export const isTextDocument = (name: string) => isMarkdownDocument(name) || getFileExtension(name) === 'txt';
 

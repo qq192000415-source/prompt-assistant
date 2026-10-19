@@ -311,11 +311,18 @@ type ViewNavItemProps = {
   onClick: () => void;
 };
 
+// 四个视图横排一行，只放图标和数字，名称在悬停提示和读屏文字里，分类树不再被挤到下面。
 function ViewNavItem({ active, icon, label, meta, onClick }: ViewNavItemProps) {
   return (
-    <Button className={`view-nav-item ${active ? 'active' : ''}`} type="button" aria-current={active ? 'page' : undefined} onClick={onClick}>
+    <Button
+      className={`view-nav-item ${active ? 'active' : ''}`}
+      type="button"
+      aria-current={active ? 'page' : undefined}
+      aria-label={`${label}，${meta} 条`}
+      title={label}
+      onClick={onClick}
+    >
       {icon}
-      <span>{label}</span>
       <small>{meta}</small>
     </Button>
   );

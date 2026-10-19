@@ -1,3 +1,18 @@
 {
-  "buildPath": "comp"
+  "buildPath": "comp",
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "src/styles.css"
+        ],
+        "createdAt": "2026-10-19T17:50:09.351Z",
+        "reason": "Claude: only two hits, both false positives — Markdown blockquote's neutral grey left rule (pre-existing quote convention) and the 3px bottom loading line on the canvas detail image (progress indicator, not a side border)"
+      }
+    ]
+  }
 }

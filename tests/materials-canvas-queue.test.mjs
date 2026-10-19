@@ -233,3 +233,39 @@ test('图正在存进历史时点取消：这张照常完成（历史里已有�
   assert.equal(slot.media.sha256, sha(1));
   assert.equal(queue.running(), 0);
 });
+
+test('槽位开始生成时记下开始时间，排队中和重试前清空', async () => {
+  const { queue, calls } = controlledQueue({ concurrency: 1 });
+  queue.submit(meta(), { prompt: '猫', n: 2 }, 2);
+  const [running, queued] = queue.snapshot()[0].slots;
+  assert.ok(!Number.isNaN(Date.parse(running.startedAt)));
+  assert.equal(queued.startedAt, null);
+  calls[0].reject(Object.assign(new Error('状态码 400'), {}));
+  await flush();
+  const id = queue.snapshot()[0].id;
+  queue.retry(id, 0);
+  assert.equal(queue.snapshot()[0].slots[0].startedAt, null);
+});
+
+test('生成历史存参考图：建记录时写入，删任务时参考图和生成的图一起算「还在用」', () => {
+  const now = '2026-10-19T00:00:00.000Z';
+  const media = (n) => ({ sha256: sha(n), ext: '.png', kind: 'image', size: 1, width: 1, height: 1, hasThumb: true });
+  const done = (n) => ({ index: 0, status: 'done', media: media(n), revisedPrompt: null, error: '', attempts: 1, savedToLibrary: false });
+  let history = normalizeHistory(null).history;
+  // t1 用 sha(9) 当参考图生成了 sha(1)；t2 拿 t1 生成的 sha(1) 当参考图（「仅回填参考图」），生成了 sha(2)。
+  history = recordSlot(history, { id: 't1', createdAt: now, ...meta('a'), references: [media(9)], total: 1 }, done(1), now);
+  history = recordSlot(history, { id: 't2', createdAt: now, ...meta('b'), references: [media(1)], total: 1 }, done(2), now);
+  // 之后同一任务的槽位不会把参考图改掉
+  history = recordSlot(history, { id: 't1', createdAt: now, ...meta('a'), references: [], total: 1 }, done(1), now);
+  assert.deepEqual(history.tasks.find((task) => task.id === 't1').references.map((entry) => entry.sha256), [sha(9)]);
+
+  // 删 t1：sha(1) 还是 t2 的参考图，不能删；sha(9) 没人用了
+  const { orphaned } = deleteHistoryTasks(history, ['t1'], now);
+  assert.deepEqual(orphaned.map((entry) => entry.sha256), [sha(9)]);
+  // 两个都删：三个文件都没人用
+  assert.deepEqual(deleteHistoryTasks(history, ['t1', 't2'], now).orphaned.map((entry) => entry.sha256).sort(), [sha(1), sha(2), sha(9)].sort());
+
+  // 读历史：老记录没有 references 时是空数组，坏的参考图条目丢掉
+  const { history: normalized } = normalizeHistory({ tasks: [{ id: 'old', createdAt: now, slots: [] }, { id: 'new', createdAt: now, slots: [], references: [media(3), { sha256: 'x' }] }] });
+  assert.deepEqual(normalized.tasks.map((task) => task.references.length), [0, 1]);
+});

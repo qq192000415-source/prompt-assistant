@@ -3,8 +3,8 @@
 import { useSyncExternalStore } from 'react';
 import { loadMaterialsCanvasDraft, saveMaterialsCanvasDraft, type CanvasSortOrder } from '../localState.ts';
 import type { MaterialItem } from './library.ts';
-import { buildCanvasImageGenerationPayload, normalizeCanvasDraftSettings } from './suyan/canvasGeneration.ts';
-import type { CanvasDraftSettings, CanvasReferenceImage } from './suyan/canvasTypes.ts';
+import { buildCanvasImageGenerationPayload, canvasAspectRatioOptions, normalizeCanvasDraftSettings, resolveCanvasGenerationSize } from './suyan/canvasGeneration.ts';
+import type { CanvasBaseResolution, CanvasDraftSettings, CanvasReferenceImage } from './suyan/canvasTypes.ts';
 
 export type CanvasState = {
   draft: CanvasDraftSettings;
@@ -71,6 +71,34 @@ export function savedInHistory(history: readonly MaterialCanvasTask[], taskId: s
   return Boolean(history.find((task) => task.id === taskId)?.slots.find((slot) => slot.index === index)?.savedToLibrary);
 }
 
+// 「全量恢复」：从历史任务记下的参数反推草稿的尺寸、质量、格式、张数。
+// 尺寸先按「比例 + 分辨率」找回（和提交时算尺寸用的是同一个函数），找不到就当自定义宽高，auto 就是自动。
+const RESOLUTIONS: CanvasBaseResolution[] = ['1k', '2k', '3k', '4k'];
+const QUALITIES = ['auto', 'low', 'medium', 'high'] as const;
+const FORMATS = ['png', 'jpeg', 'webp'] as const;
+export function restoreDraftParams(task: Pick<MaterialCanvasTask, 'params' | 'total'>): Partial<CanvasDraftSettings> {
+  const { params } = task;
+  const patch: Partial<CanvasDraftSettings> = {
+    count: Math.max(1, Math.min(4, task.total || 1)),
+    transparentBackground: params.background === 'transparent',
+  };
+  if ((QUALITIES as readonly string[]).includes(params.quality)) patch.quality = params.quality as CanvasDraftSettings['quality'];
+  if ((FORMATS as readonly string[]).includes(params.outputFormat)) patch.outputFormat = params.outputFormat as CanvasDraftSettings['outputFormat'];
+  const size = params.size.trim().toLowerCase();
+  if (!size || size === 'auto') return { ...patch, sizeMode: 'auto' };
+  // 记下的比例优先，同一个尺寸在别的比例下也凑得出来时不会选错
+  const ratios = [...canvasAspectRatioOptions].sort((a, b) => Number(b.value === params.ratio) - Number(a.value === params.ratio));
+  for (const { value: aspectRatio } of ratios) {
+    for (const baseResolution of RESOLUTIONS) {
+      if (resolveCanvasGenerationSize({ sizeMode: 'ratio', aspectRatio, baseResolution, customWidth: 0, customHeight: 0 }) === size) {
+        return { ...patch, sizeMode: 'ratio', aspectRatio, baseResolution };
+      }
+    }
+  }
+  const [, width, height] = size.match(/^(\d+)x(\d+)$/) ?? [];
+  return width ? { ...patch, sizeMode: 'custom', customWidth: Number(width), customHeight: Number(height) } : { ...patch, sizeMode: 'auto' };
+}
+
 export const canvas = {
   setDraft(patch: Partial<CanvasDraftSettings>) {
     set({ draft: { ...current().draft, ...patch } });
@@ -80,6 +108,17 @@ export const canvas = {
   },
   removeReference(index: number) {
     set({ draft: { ...current().draft, referenceImages: current().draft.referenceImages.filter((_, position) => position !== index) } });
+  },
+  clearReferences() {
+    set({ draft: { ...current().draft, referenceImages: [] } });
+  },
+  // 参考图的顺序就是提交顺序（视频的首帧、尾帧也按这个顺序）。
+  moveReference(from: number, to: number) {
+    const images = [...current().draft.referenceImages];
+    if (from === to || from < 0 || to < 0 || from >= images.length || to >= images.length) return;
+    const [moved] = images.splice(from, 1);
+    images.splice(to, 0, moved);
+    set({ draft: { ...current().draft, referenceImages: images } });
   },
   clearError() {
     set({ error: '' });
@@ -102,6 +141,11 @@ export const canvas = {
   },
   reusePrompt(task: MaterialCanvasTask, slot?: MaterialCanvasSlot) {
     set({ draft: { ...current().draft, prompt: slot?.revisedPrompt || task.prompt, negativePrompt: task.negativePrompt }, origin: task.origin });
+  },
+  // 全量恢复：提示词、负向、尺寸等参数，参考图换成当时用的（取不回来的传空数组）。
+  restoreTask(task: MaterialCanvasTask, references: CanvasReferenceImage[]) {
+    const draft = { ...current().draft, ...restoreDraftParams(task), prompt: task.prompt, negativePrompt: task.negativePrompt, referenceImages: references };
+    set({ draft: { ...draft, negativePromptHidden: draft.negativePromptHidden && !task.negativePrompt }, origin: task.origin });
   },
   // 把当前草稿提交进队列，立刻返回；提示词改过就不算来源组。
   async submit(model: string, request: (input: { payload: ReturnType<typeof buildCanvasImageGenerationPayload>; count: number; origin: MaterialCanvasOrigin | null }) => Promise<string>) {

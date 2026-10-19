@@ -33,7 +33,7 @@ type Options = {
   findItem: (itemId: unknown) => Promise<{ config: DavConfig; library: MaterialLibrary; item: MaterialItem }>;
 };
 
-const taskRecord = (task: QueueTask) => ({
+const taskRecord = (task: QueueTask, references: HistoryMedia[]) => ({
   id: task.id,
   createdAt: task.createdAt,
   model: task.model,
@@ -42,6 +42,7 @@ const taskRecord = (task: QueueTask) => ({
   params: task.params,
   origin: task.origin,
   referenceCount: task.referenceCount,
+  references,
   total: task.total,
 });
 
@@ -90,6 +91,25 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Op
     }
   };
 
+  // 提交时就开始把参考图存进生成历史（按 sha256 只存一份），槽位写记录前等它，「全量恢复」时放回画布。
+  // 只是附带：存不进去就记空的，不影响生成。
+  const referencesByTask = new Map<string, Promise<HistoryMedia[]>>();
+  const referencesOf = (task: QueueTask) => referencesByTask.get(task.id) ?? Promise.resolve([]);
+  const storeReferences = async (dataUrls: string[]) => {
+    try {
+      const config = loadConfig(userDataDir);
+      const stored: HistoryMedia[] = [];
+      for (const dataUrl of dataUrls) {
+        const { buffer, ext } = decodeGeneratedMedia(dataUrl);
+        stored.push(await putHistoryMedia(config, buffer, ext));
+      }
+      return stored;
+    } catch (error) {
+      console.warn('参考图没存进生成历史，这个任务以后不能带参考图全量恢复', error);
+      return [];
+    }
+  };
+
   const queue = createCanvasQueue({
     generate: async (payload) => {
       const generated = await generateMedia(loadAiRuntime(userDataDir), payload);
@@ -106,17 +126,19 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Op
     },
     persist: async (task, slot, generated) => {
       const config = loadConfig(userDataDir);
+      const references = await referencesOf(task);
       const { buffer, ext } = decodeGeneratedMedia(generated.dataUrl);
       const media = await putHistoryMedia(config, buffer, ext);
       await mutateHistory(config, (history) => ({
-        history: recordSlot(history, taskRecord(task), { index: slot.index, status: 'done', media, revisedPrompt: generated.revisedPrompt, error: generated.warning ?? '', attempts: slot.attempts, savedToLibrary: false }, new Date().toISOString()),
+        history: recordSlot(history, taskRecord(task, references), { index: slot.index, status: 'done', media, revisedPrompt: generated.revisedPrompt, error: generated.warning ?? '', attempts: slot.attempts, savedToLibrary: false }, new Date().toISOString()),
         result: null,
       }));
       return media;
     },
     recordFailure: async (task, slot) => {
+      const references = await referencesOf(task);
       await mutateHistory(loadConfig(userDataDir), (history) => ({
-        history: recordSlot(history, taskRecord(task), { index: slot.index, status: 'failed', media: null, revisedPrompt: null, error: slot.error, attempts: slot.attempts, savedToLibrary: false }, new Date().toISOString()),
+        history: recordSlot(history, taskRecord(task, references), { index: slot.index, status: 'failed', media: null, revisedPrompt: null, error: slot.error, attempts: slot.attempts, savedToLibrary: false }, new Date().toISOString()),
         result: null,
       }));
     },
@@ -149,7 +171,7 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Op
     const payload = input?.payload;
     if (!payload?.prompt?.trim()) throw new Error('先写正向提示词');
     // 任务信息由主进程按实际提交的参数记录，不信界面另传的。
-    return queue.submit(
+    const taskId = queue.submit(
       {
         model: runtime.image.model,
         prompt: payload.prompt,
@@ -168,6 +190,9 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Op
       payload,
       Number(input.count ?? payload.n ?? 1),
     );
+    const dataUrls = payload.referenceImageDataUrls ?? [];
+    if (dataUrls.length) referencesByTask.set(taskId, storeReferences(dataUrls));
+    return taskId;
   });
   ipcMain.handle('materials:canvas-queue', () => queue.snapshot());
   ipcMain.handle('materials:canvas-cancel', (_event, taskId) => queue.cancel(String(taskId)));
@@ -234,6 +259,13 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Op
     if (!source) throw new Error('这个视频还没有封面，不能当参考图');
     const bytes = await webdav.readBytes(config, source);
     return { dataUrl: `data:${mimeTypeOf(source)};base64,${Buffer.from(bytes).toString('base64')}`, title: item.title || item.media.name };
+  });
+  // 生成历史里的图转成 data URL：「全量恢复」放回当时的参考图，「仅回填参考图」把生成的图当参考图。
+  ipcMain.handle('materials:canvas-history-image', async (_event, sha256, ext) => {
+    const media = { sha256: String(sha256), ext: String(ext) };
+    if (!/^[0-9a-f]{64}$/.test(media.sha256) || !/^\.(png|jpe?g|webp|gif|bmp)$/i.test(media.ext)) throw new Error('这不是生成历史里的图片');
+    const bytes = await webdav.readBytes(loadConfig(userDataDir), historyMediaPath(media));
+    return `data:${mimeTypeOf(`x${media.ext}`)};base64,${Buffer.from(bytes).toString('base64')}`;
   });
   ipcMain.handle('materials:canvas-clipboard-image', () => {
     const image = clipboard.readImage();

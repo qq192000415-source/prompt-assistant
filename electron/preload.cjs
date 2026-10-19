@@ -54,6 +54,7 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     aiGetSettings: () => ipcRenderer.invoke('materials:ai-get-settings'),
     aiSaveSettings: (settings) => ipcRenderer.invoke('materials:ai-save-settings', settings),
     aiListModels: (slot, input) => ipcRenderer.invoke('materials:ai-list-models', slot, input),
+    aiSetImageModel: (model) => ipcRenderer.invoke('materials:ai-set-image-model', model),
     aiTest: (slot, input) => ipcRenderer.invoke('materials:ai-test', slot, input),
     aiReverse: (id) => ipcRenderer.invoke('materials:ai-reverse', id),
     aiOptimize: (prompt, kind) => ipcRenderer.invoke('materials:ai-optimize', prompt, kind),
@@ -77,6 +78,7 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     },
     canvasReference: (id) => ipcRenderer.invoke('materials:canvas-reference', id),
     canvasClipboardImage: () => ipcRenderer.invoke('materials:canvas-clipboard-image'),
+    canvasHistoryImage: (sha256, ext) => ipcRenderer.invoke('materials:canvas-history-image', sha256, ext),
     onProgress: (callback) => {
       const listener = (_event, progress) => callback(progress);
       ipcRenderer.on('materials:progress', listener);

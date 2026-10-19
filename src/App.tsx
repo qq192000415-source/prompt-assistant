@@ -3,7 +3,7 @@ import { ArrowLeft, Menu } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Toaster } from './components/ui/sonner';
 import { TooltipProvider } from './components/ui/tooltip';
-import { applyTheme, readTheme, type ThemeMode } from './lib/theme';
+import { applyTheme, isDarkTheme, readTheme, type ThemeMode } from './lib/theme';
 import { toast as pushToast } from 'sonner';
 import type { CloudSnapshot } from './cloudSync';
 import {
@@ -75,6 +75,7 @@ import {
   ConfirmDialog,
   type ConfirmDialogState,
 } from './components/Dialogs';
+import { DocumentBrowser } from './components/DocumentBrowser';
 import { DocumentView } from './components/DocumentView';
 import { PromptEditor } from './components/PromptEditor';
 import { PromptList } from './components/PromptList';
@@ -120,6 +121,9 @@ const defaultUpdateStatus: DesktopUpdateStatus = {
   currentVersion: APP_VERSION,
   message: '尚未检查更新',
 };
+
+// 画布里「存为模板」存进提示词库的这个分类。
+const CANVAS_TEMPLATE_CATEGORY = '画布模板';
 
 const FILE_FORMAT_LABELS: Record<FileFormat, string> = {
   json: 'JSON',
@@ -624,6 +628,25 @@ function App() {
   const openEditEditor = (prompt: PromptItem) => {
     setEditorPrompt(prompt);
     setIsEditorOpen(true);
+  };
+
+  // 画布的提示词模板就是提示词库里的提示词（不含文档），云同步照常。「存为模板」存进提示词库的「画布模板」分类。
+  // 直接改 allItems：画布页的 libraryMode 是 canvas，setPrompts 只改当前库那一份，用它会存错地方。
+  const promptTemplates = useMemo(() => allItems.filter((item) => !isDocumentItem(item)), [allItems]);
+  const addCanvasTemplate = (content: string) => {
+    const text = content.trim();
+    if (!text) return;
+    const title = text.split(/\r?\n/)[0].slice(0, 24);
+    if (findDuplicatePrompt(promptTemplates, { title, content: text, category: CANVAS_TEMPLATE_CATEGORY })) {
+      showToast(`提示词库的「${CANVAS_TEMPLATE_CATEGORY}」里已经有这条了`);
+      return;
+    }
+    const now = new Date().toISOString();
+    const template: PromptItem = { id: createId(), title, description: '', content: text, category: CANVAS_TEMPLATE_CATEGORY, tags: [], favorite: false, createdAt: now, updatedAt: now };
+    markLibraryChanged();
+    setAllItems((items) => appendPromptsToCategoryEnd(items, [template]));
+    setPromptCategories((categories) => (categories.includes(CANVAS_TEMPLATE_CATEGORY) ? categories : [...categories, CANVAS_TEMPLATE_CATEGORY]));
+    showToast(`已存为模板，在提示词库的「${CANVAS_TEMPLATE_CATEGORY}」分类里`);
   };
 
   const duplicatePrompt = (prompt: PromptItem) => {
@@ -1167,7 +1190,7 @@ function App() {
         onOpenCloudSettings={() => openSettings('sync')}
         onOpenSettings={() => openSettings()}
         theme={theme}
-        onToggleTheme={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
+        onThemeChange={setTheme}
       />
 
       {settingsSection ? (
@@ -1227,6 +1250,9 @@ function App() {
           onChangeLibraryMode={changeLibraryMode}
           onOpenSettings={openSettings}
           notify={showToast}
+          templates={promptTemplates}
+          templateCategories={library.categories}
+          onSaveTemplate={addCanvasTemplate}
         />
       ) : (
       <>
@@ -1324,6 +1350,33 @@ function App() {
             onDuplicate={duplicatePrompt}
             onEdit={openEditEditor}
             onToggleFavorite={toggleFavorite}
+          />
+        ) : isDocumentMode && visiblePrompts.length > 0 ? (
+          // 文档库用文件夹视图（中间文件列表、右边预览和操作），和提示词库的卡片流区分开；空的时候仍走下面的空状态。
+          <DocumentBrowser
+            key={`${activeView}|${query.trim()}`}
+            title={activeView === 'all' ? '全部文档' : getViewLabel(activeView)}
+            query={query}
+            documents={visiblePrompts}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onNew={() => void addDocuments()}
+            onCopyFile={copyDocumentFile}
+            renderPane={(item, onReady) => (
+              <DocumentView
+                key={item.id}
+                variant="pane"
+                item={item}
+                onReady={onReady}
+                onCopyFile={copyDocumentFile}
+                onCopyText={copyPrompt}
+                onDelete={deletePrompt}
+                onEnsureLocal={cloud.ensureDocumentLocal}
+                onSaveInstruction={updateDocumentInstruction}
+                onSaveText={updateDocumentText}
+                onToggleFavorite={toggleFavorite}
+              />
+            )}
           />
         ) : (
           <PromptList
@@ -1423,7 +1476,7 @@ function App() {
         <ConfirmDialog dialog={confirmDialog} onCancel={closeConfirmDialog} onConfirm={confirmCurrentDialog} />
       )}
 
-      <Toaster theme={theme} />
+      <Toaster theme={isDarkTheme(theme) ? 'dark' : 'light'} />
     </div>
     </TooltipProvider>
   );

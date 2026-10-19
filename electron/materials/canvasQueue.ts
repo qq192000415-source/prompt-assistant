@@ -16,6 +16,8 @@ export type QueueSlot = {
   revisedPrompt: string | null;
   // 生成成功但存进 NAS 历史失败时才有：图还在内存里，界面仍能「存入素材库」或「另存为」，不白花这次的钱。
   dataUrl: string | null;
+  // 开始生成的时间（ISO），界面据此显示「生成中 0:23」；排队中、没开始的是 null。
+  startedAt: string | null;
 };
 export type TaskMeta = { model: string; prompt: string; negativePrompt: string; params: HistoryParams; origin: CanvasOrigin | null; referenceCount: number };
 export type QueueTask = TaskMeta & { id: string; createdAt: string; total: number; slots: QueueSlot[] };
@@ -125,6 +127,7 @@ export function createCanvasQueue(deps: Deps) {
         if (slot.status !== 'queued') continue;
         slot.status = 'running';
         slot.error = '';
+        slot.startedAt = new Date().toISOString();
         const token = {};
         tokens.set(slot, token);
         running += 1;
@@ -151,7 +154,7 @@ export function createCanvasQueue(deps: Deps) {
         id: crypto.randomUUID(),
         createdAt: new Date().toISOString(),
         total,
-        slots: Array.from({ length: total }, (_, index) => ({ index, status: 'queued', attempts: 0, error: '', media: null, revisedPrompt: null, dataUrl: null })),
+        slots: Array.from({ length: total }, (_, index) => ({ index, status: 'queued', attempts: 0, error: '', media: null, revisedPrompt: null, dataUrl: null, startedAt: null })),
       };
       payloads.set(task.id, { ...payload, n: 1 });
       tasks.unshift(task);
@@ -174,7 +177,7 @@ export function createCanvasQueue(deps: Deps) {
     retry(taskId: string, index: number) {
       const slot = find(taskId).slots.find((entry) => entry.index === index);
       if (!slot || (slot.status !== 'failed' && slot.status !== 'canceled')) throw new Error('这张图不需要重试');
-      Object.assign(slot, { status: 'queued', attempts: 0, error: '', media: null, revisedPrompt: null, dataUrl: null });
+      Object.assign(slot, { status: 'queued', attempts: 0, error: '', media: null, revisedPrompt: null, dataUrl: null, startedAt: null });
       deps.onChange();
       pump();
     },

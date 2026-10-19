@@ -19,6 +19,7 @@ import {
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import type { LibraryMode } from '../../localState';
+import type { PromptItem } from '../../types';
 import {
   ALL_CATEGORIES,
   UNCATEGORIZED,
@@ -44,9 +45,13 @@ type MaterialLibraryViewProps = {
   onChangeLibraryMode: (mode: LibraryMode) => void;
   onOpenSettings: (section: 'nas' | 'ai') => void;
   notify: (message: string) => void;
+  // 画布的提示词模板：提示词库里的提示词和分类；存为模板写回提示词库。
+  templates: PromptItem[];
+  templateCategories: string[];
+  onSaveTemplate: (content: string) => void;
 };
 
-export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, onOpenSettings, notify }: MaterialLibraryViewProps) {
+export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, onOpenSettings, notify, templates, templateCategories, onSaveTemplate }: MaterialLibraryViewProps) {
   const controller = useMaterialLibrary(notify);
   const { status, library, busy } = controller;
   const [query, setQuery] = useState('');
@@ -123,9 +128,7 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, onOpenSe
   };
 
   const summary = ready
-    ? onCanvas
-      ? '用 AI 生图，满意的存进素材库'
-      : `${groups.length} 组 · ${library.items.length} 个文件，存放在 NAS`
+    ? `${groups.length} 组 · ${library.items.length} 个文件，存放在 NAS`
     : status === 'unconfigured'
       ? '还没有连接 NAS'
       : status === 'unavailable'
@@ -134,7 +137,7 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, onOpenSe
 
   return (
     <main
-      className={`materials-view ${dragging ? 'is-dragging' : ''}`}
+      className={`materials-view ${onCanvas ? 'is-canvas' : ''} ${dragging ? 'is-dragging' : ''}`}
       onDragOver={(event) => {
         if (!ready || onCanvas || !event.dataTransfer.types.includes('Files')) return;
         event.preventDefault();
@@ -145,54 +148,65 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, onOpenSe
       }}
       onDrop={onDrop}
     >
-      <header className="materials-header">
-        <div className="materials-title">
-          <h1>{onCanvas ? '创作画布' : '素材库'}</h1>
-          <span>{busy || summary}</span>
-        </div>
-        {ready && !onCanvas && (
-          <>
-            <label className="materials-search">
-              <Search size={16} aria-hidden="true" />
-              <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题、提示词、标签" aria-label="搜索素材" />
-              {query && (
-                <Button className="mini-clear" type="button" aria-label="清空搜索" onClick={() => setQuery('')}>
-                  <X size={13} />
+      {/* 画布页不放标题栏：顶部标签已经写着「画布」，省下的高度给三栏；读写进度显示在生成记录的标题下 */}
+      {!onCanvas && (
+        <header className="materials-header">
+          <div className="materials-title">
+            <h1>素材库</h1>
+            <span>{busy || summary}</span>
+          </div>
+          {ready && !onCanvas && (
+            <>
+              <label className="materials-search">
+                <Search size={16} aria-hidden="true" />
+                <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题、提示词、标签" aria-label="搜索素材" />
+                {query && (
+                  <Button className="mini-clear" type="button" aria-label="清空搜索" onClick={() => setQuery('')}>
+                    <X size={13} />
+                  </Button>
+                )}
+              </label>
+              {library.items.length > 0 && (
+                <Button
+                  className={`button ghost ${selecting ? 'accent' : ''}`}
+                  type="button"
+                  aria-pressed={selecting}
+                  onClick={() => (selecting ? exitSelecting() : setSelecting(true))}
+                >
+                  <ListChecks size={16} />
+                  {selecting ? '完成' : '批量管理'}
                 </Button>
               )}
-            </label>
-            {library.items.length > 0 && (
               <Button
-                className={`button ghost ${selecting ? 'accent' : ''}`}
+                className="button ghost"
                 type="button"
-                aria-pressed={selecting}
-                onClick={() => (selecting ? exitSelecting() : setSelecting(true))}
+                disabled={Boolean(busy)}
+                title="粘贴截图、复制的文件、分享链接或提示词（也可以直接按 Ctrl+V）"
+                onClick={() => void controller.importClipboard(importCategory)}
               >
-                <ListChecks size={16} />
-                {selecting ? '完成' : '批量管理'}
+                <ClipboardPaste size={16} />
+                粘贴
               </Button>
-            )}
-            <Button
-              className="button ghost"
-              type="button"
-              disabled={Boolean(busy)}
-              title="粘贴截图、复制的文件、分享链接或提示词（也可以直接按 Ctrl+V）"
-              onClick={() => void controller.importClipboard(importCategory)}
-            >
-              <ClipboardPaste size={16} />
-              粘贴
-            </Button>
-            <ImportMenu
-              disabled={batchBusy}
-              onPickFiles={() => void controller.pickAndImport(importCategory)}
-              onPickWord={() => void controller.importWord(importCategory)}
-              onPickShare={() => void controller.importShare()}
-            />
-          </>
-        )}
-      </header>
+              <ImportMenu
+                disabled={batchBusy}
+                onPickFiles={() => void controller.pickAndImport(importCategory)}
+                onPickWord={() => void controller.importWord(importCategory)}
+                onPickShare={() => void controller.importShare()}
+              />
+            </>
+          )}
+        </header>
+      )}
 
-      {ready && onCanvas && <MaterialCanvas controller={controller} onOpenSettings={() => onOpenSettings('ai')} />}
+      {ready && onCanvas && (
+        <MaterialCanvas
+          controller={controller}
+          onOpenSettings={() => onOpenSettings('ai')}
+          templates={templates}
+          templateCategories={templateCategories}
+          onSaveTemplate={onSaveTemplate}
+        />
+      )}
 
       {ready && !onCanvas && selecting && (
         <div className="materials-batch-bar" role="toolbar" aria-label="批量操作">

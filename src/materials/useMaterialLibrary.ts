@@ -175,6 +175,18 @@ export function useMaterialLibrary(notify: (message: string) => void) {
       return true;
     },
     aiGetSettings: () => api!.aiGetSettings(),
+    // 画布的模型下拉：用生图位置已保存的地址和 Key 查能生图的模型；切换只改模型名。
+    aiListImageModels: async () => {
+      const { image } = await api!.aiGetSettings();
+      if (!image) return [];
+      const models = await run('正在查询模型…', () => api!.aiListModels('image', { provider: image.provider, baseUrl: image.baseUrl, model: image.model, apiKey: '' }));
+      return models ? models.filter((entry) => entry.generation).map((entry) => entry.id) : [];
+    },
+    aiSetImageModel: async (model: string) => {
+      const saved = await run('正在切换模型…', () => api!.aiSetImageModel(model));
+      if (saved?.image) notify(`生图模型换成了 ${saved.image.model}`);
+      return saved?.image?.usable ? saved.image.model : null;
+    },
     // 详情页的单条 AI：结果只回给调用方填进草稿，用户点保存才写入 NAS。
     aiReverse: (id: string) => run('AI 正在看图反推…', () => api!.aiReverse(id)),
     aiOptimize: (prompt: string, kind: 'positive' | 'negative') => run('AI 正在优化…', () => api!.aiOptimize(prompt, kind)),
@@ -225,6 +237,7 @@ export function useMaterialLibrary(notify: (message: string) => void) {
     },
     canvasReference: (id: string) => run('正在读取参考图…', () => api!.canvasReference(id)),
     canvasClipboardImage: () => run('正在读取剪贴板…', () => api!.canvasClipboardImage()),
+    canvasHistoryImage: (media: { sha256: string; ext: string }) => run('正在读取图片…', () => api!.canvasHistoryImage(media.sha256, media.ext)),
     exportItems: async (ids: string[]) => {
       const result = await runBatch('导出', () => api!.exportItems(ids, loadMaterialsExportDir()));
       if (!result) return false;

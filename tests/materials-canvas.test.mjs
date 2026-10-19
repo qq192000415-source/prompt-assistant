@@ -236,3 +236,39 @@ test('模型给的图横竖和选的不一样时给出提示，相近尺寸不�
   assert.equal(sizeMismatchWarning({ size: 'auto' }, pngOf(1024, 1536)), '');
   assert.equal(sizeMismatchWarning({ size: '1312x736' }, Buffer.from('不是图片')), '');
 });
+
+test('全量恢复：从历史参数反推尺寸（比例+分辨率 / 自定义 / 自动）、质量、格式、张数、透明背景，参考图换成当时的', async () => {
+  const { restoreDraftParams } = await import('../src/materials/canvasStore.ts');
+  const task = (size, ratio, total = 2, extra = {}) => ({ params: { size, ratio, quality: 'high', outputFormat: 'webp', background: 'auto', mediaType: 'image', ...extra }, total });
+  assert.deepEqual(restoreDraftParams(task('1312x736', '16:9')), { count: 2, transparentBackground: false, quality: 'high', outputFormat: 'webp', sizeMode: 'ratio', aspectRatio: '16:9', baseResolution: '1k' });
+  assert.equal(restoreDraftParams(task('2048x2048', '1:1')).baseResolution, '2k');
+  assert.deepEqual(restoreDraftParams(task('1000x777', '')), { count: 2, transparentBackground: false, quality: 'high', outputFormat: 'webp', sizeMode: 'custom', customWidth: 1000, customHeight: 777 });
+  assert.equal(restoreDraftParams(task('auto', '')).sizeMode, 'auto');
+  // 认不出的质量和格式不动草稿；张数夹在 1–4
+  const odd = restoreDraftParams(task('auto', '', 9, { quality: 'ultra', outputFormat: 'bmp', background: 'transparent' }));
+  assert.deepEqual([odd.quality, odd.outputFormat, odd.count, odd.transparentBackground], [undefined, undefined, 4, true]);
+
+  const historyTask = { id: 'h', createdAt: '', model: 'm', prompt: '原提示词', negativePrompt: '模糊', params: task('1312x736', '16:9').params, origin: null, referenceCount: 1, total: 3, slots: [] };
+  canvas.addReferences([{ fileName: '', title: '旧的', dataUrl: pngDataUrl }]);
+  canvas.restoreTask(historyTask, [{ fileName: '', title: '当时的参考图', dataUrl: pngDataUrl }]);
+  const { draft } = getCanvasState();
+  assert.deepEqual([draft.prompt, draft.negativePrompt, draft.sizeMode, draft.aspectRatio, draft.count, draft.referenceImages.map((image) => image.title)], ['原提示词', '模糊', 'ratio', '16:9', 3, ['当时的参考图']]);
+});
+
+test('参考图：拖动换顺序（顺序就是提交顺序），一键清空', async () => {
+  canvas.clearReferences();
+  canvas.addReferences(['一', '二', '三'].map((title) => ({ fileName: '', title, dataUrl: `data:image/png;base64,${Buffer.from(title).toString('base64')}` })));
+  const titles = () => getCanvasState().draft.referenceImages.map((image) => image.title);
+  canvas.moveReference(2, 0);
+  assert.deepEqual(titles(), ['三', '一', '二']);
+  canvas.moveReference(0, 2);
+  assert.deepEqual(titles(), ['一', '二', '三']);
+  canvas.moveReference(1, 9); // 越界不动
+  assert.deepEqual(titles(), ['一', '二', '三']);
+  // 提交给接口的参考图顺序和界面上一致
+  const { buildCanvasImageGenerationPayload } = await import('../src/materials/suyan/canvasGeneration.ts');
+  const sent = buildCanvasImageGenerationPayload(getCanvasState().draft).referenceImageDataUrls.map((url) => Buffer.from(url.split(',')[1], 'base64').toString());
+  assert.deepEqual(sent, ['一', '二', '三']);
+  canvas.clearReferences();
+  assert.deepEqual(titles(), []);
+});

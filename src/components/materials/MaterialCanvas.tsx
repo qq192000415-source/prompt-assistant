@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
-import { Check, ChevronLeft, ChevronRight, ClipboardPaste, Copy, Download, ImagePlus, PanelLeftClose, PanelLeftOpen, Play, RotateCcw, Save, Search, Settings, Sparkles, Trash2, TriangleAlert, Wand2, X } from 'lucide-react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { BookOpen, BookmarkPlus, Check, ChevronLeft, ChevronRight, ClipboardPaste, Copy, Download, ImagePlus, PanelLeftClose, PanelLeftOpen, Play, RotateCcw, Save, Search, Settings, Sparkles, Trash2, TriangleAlert, Wand2, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import type { MaterialLibraryController } from '../../materials/useMaterialLibrary';
 import {
@@ -16,6 +16,7 @@ import {
   type CanvasSortOrder,
 } from '../../localState';
 import { copyToClipboard } from '../../promptUtils';
+import type { PromptItem } from '../../types';
 import { canvas, getCanvasState, isActive, isVideoModel, savedInHistory, useCanvasState, visibleTasks } from '../../materials/canvasStore';
 import {
   canvasAspectRatioOptions,
@@ -24,7 +25,7 @@ import {
   maxCanvasPromptLength,
   resolveCanvasGenerationSize,
 } from '../../materials/suyan/canvasGeneration.ts';
-import type { CanvasBaseResolution, CanvasSizeMode } from '../../materials/suyan/canvasTypes.ts';
+import type { CanvasBaseResolution, CanvasReferenceImage, CanvasSizeMode } from '../../materials/suyan/canvasTypes.ts';
 
 const SIZE_MODES: Array<{ value: CanvasSizeMode; label: string }> = [
   { value: 'auto', label: '自动' },
@@ -72,9 +73,12 @@ function Segmented<T extends string>({ value, options, onChange, label }: { valu
 type MaterialCanvasProps = {
   controller: MaterialLibraryController;
   onOpenSettings: () => void;
+  templates: PromptItem[];
+  templateCategories: string[];
+  onSaveTemplate: (content: string) => void;
 };
 
-export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasProps) {
+export function MaterialCanvas({ controller, onOpenSettings, templates, templateCategories, onSaveTemplate }: MaterialCanvasProps) {
   const { draft, error, queue, history, historyLoaded } = useCanvasState();
   const [model, setModel] = useState<string | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
@@ -87,6 +91,10 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
   // 右侧详情栏显示的记录：`任务 id:图序号`，没有图的任务是 `任务 id:`；没选过或选的不见了就显示第一条。
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  // 参考图拖动排序：正在拖的是第几张、要放到第几张的位置。
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const finishedSlots = useRef(-1);
   const busy = Boolean(controller.busy);
@@ -179,6 +187,38 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
     if (!(await controller.canvasSave(task.id, slot.index))) return;
     setSavedNow((keys) => new Set(keys).add(`${task.id}:${slot.index}`));
     void reloadHistory();
+  };
+
+  // 回填前把收起的参数栏展开，不然看不到恢复了什么。
+  const showPanel = () => {
+    if (!panelCollapsed) return;
+    setPanelCollapsed(false);
+    saveCanvasPanelCollapsed(false);
+  };
+
+  // 全量恢复：提示词、参数，以及存在生成历史里的参考图（1.8.6 起才存，更早的任务只能恢复提示词和参数）。
+  const restoreFull = async (task: MaterialCanvasTask) => {
+    const stored = history.find((entry) => entry.id === task.id)?.references ?? task.references ?? [];
+    const references: CanvasReferenceImage[] = [];
+    for (const [index, media] of stored.entries()) {
+      const dataUrl = await controller.canvasHistoryImage(media);
+      if (!dataUrl) return '当时的参考图读不出来，这次没有恢复，可以稍后再试';
+      references.push({ fileName: '', title: `当时的参考图 ${index + 1}`, dataUrl });
+    }
+    canvas.restoreTask(task, references);
+    showPanel();
+    const missing = task.referenceCount - references.length;
+    if (missing > 0) return `已恢复提示词和参数。当时的 ${missing} 张参考图没有保存（1.8.6 以前生成的任务不存参考图），需要重新添加。`;
+    return references.length ? `已恢复提示词、参数和 ${references.length} 张参考图。` : '已恢复提示词和参数。';
+  };
+
+  // 仅回填参考图：把这张生成的图加到参考图末尾，提示词和参数不动。
+  const backfillReference = async (task: MaterialCanvasTask, slot: MaterialCanvasSlot) => {
+    const dataUrl = slot.dataUrl ?? (slot.media ? await controller.canvasHistoryImage(slot.media) : null);
+    if (!dataUrl) return '';
+    canvas.addReferences([{ fileName: '', title: `生成的图 ${formatTime(task.createdAt)}`, dataUrl }]);
+    showPanel();
+    return `已加到参考图（现在共 ${getCanvasState().draft.referenceImages.length} 张）。`;
   };
 
   const removeTask = async (task: MaterialCanvasTask) => {
@@ -303,6 +343,20 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
           <span className="material-field-label">
             正向提示词
             <span className="material-field-tools">
+              <Button className="button ghost compact" type="button" aria-expanded={templatesOpen} title="从提示词库选一条填进来" onClick={() => setTemplatesOpen(!templatesOpen)}>
+                <BookOpen size={13} />
+                模板
+              </Button>
+              <Button
+                className="icon-button compact-icon"
+                type="button"
+                aria-label="存为模板"
+                title="把当前提示词存进提示词库的「画布模板」分类"
+                disabled={!draft.prompt.trim()}
+                onClick={() => onSaveTemplate(draft.prompt)}
+              >
+                <BookmarkPlus size={14} />
+              </Button>
               <Button className="button ghost compact" type="button" disabled={busy || !draft.prompt.trim()} onClick={() => void optimize('prompt')}>
                 <Wand2 size={13} />
                 优化
@@ -312,6 +366,17 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
               </Button>
             </span>
           </span>
+          {templatesOpen && (
+            <TemplatePicker
+              templates={templates}
+              categories={templateCategories}
+              onPick={(content) => {
+                canvas.setDraft({ prompt: content.slice(0, maxCanvasPromptLength) });
+                setTemplatesOpen(false);
+              }}
+              onClose={() => setTemplatesOpen(false)}
+            />
+          )}
           <textarea id="canvas-prompt" value={draft.prompt} maxLength={maxCanvasPromptLength} rows={8} onChange={(event) => canvas.setDraft({ prompt: event.target.value })} placeholder="描述想要的画面" />
           <span className="canvas-count">
             {draft.prompt.length} / {maxCanvasPromptLength}
@@ -330,20 +395,68 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
                 <ClipboardPaste size={13} />
                 粘贴
               </Button>
+              {draft.referenceImages.length > 0 && (
+                <Button className="button ghost compact" type="button" title="移除全部参考图" onClick={() => canvas.clearReferences()}>
+                  清空
+                </Button>
+              )}
             </span>
           </span>
           <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={(event) => void pickReferences(event)} />
           {draft.referenceImages.length > 0 ? (
-            <div className="canvas-references">
-              {draft.referenceImages.map((reference, index) => (
-                <div key={index} className="canvas-reference" title={reference.title}>
-                  <img src={reference.dataUrl} alt={reference.title} />
-                  <button type="button" aria-label={`移除参考图 ${reference.title}`} onClick={() => canvas.removeReference(index)}>
-                    <X size={12} />
-                  </button>
-                </div>
-              ))}
-            </div>
+            <>
+              {/* 顺序就是提交顺序：拖动换位置，或者选中后按左右方向键 */}
+              <div className="canvas-references" role="list" aria-label="参考图，拖动或按左右方向键调整顺序">
+                {draft.referenceImages.map((reference, index) => (
+                  <div
+                    key={index}
+                    role="listitem"
+                    tabIndex={0}
+                    draggable
+                    className={`canvas-reference ${dragIndex === index ? 'is-dragging' : ''} ${dropIndex === index && dragIndex !== null && dragIndex !== index ? 'is-drop-target' : ''}`}
+                    title={`第 ${index + 1} 张：${reference.title}`}
+                    aria-label={`第 ${index + 1} 张参考图 ${reference.title}`}
+                    onDragStart={(event) => {
+                      setDragIndex(index);
+                      event.dataTransfer.effectAllowed = 'move';
+                      event.dataTransfer.setData('text/plain', String(index));
+                    }}
+                    onDragOver={(event) => {
+                      if (dragIndex === null) return;
+                      event.preventDefault();
+                      setDropIndex(index);
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      if (dragIndex !== null) canvas.moveReference(dragIndex, index);
+                      setDragIndex(null);
+                      setDropIndex(null);
+                    }}
+                    onDragEnd={() => {
+                      setDragIndex(null);
+                      setDropIndex(null);
+                    }}
+                    onKeyDown={(event) => {
+                      const step = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0;
+                      if (!step || event.target !== event.currentTarget) return;
+                      event.preventDefault();
+                      canvas.moveReference(index, index + step);
+                      // 按位置渲染（key 是序号），焦点跟到图移过去的那个位置
+                      (event.currentTarget.parentElement?.children[index + step] as HTMLElement | undefined)?.focus();
+                    }}
+                  >
+                    <img src={reference.dataUrl} alt="" draggable={false} />
+                    <span className="canvas-reference-order" aria-hidden="true">
+                      {index + 1}
+                    </span>
+                    <button type="button" aria-label={`移除参考图 ${reference.title}`} onClick={() => canvas.removeReference(index)}>
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {draft.referenceImages.length > 1 && <p className="nas-form-note">按顺序提交，拖动可以调整先后。</p>}
+            </>
           ) : (
             <p className="nas-form-note">有参考图时按图生图。也可以在素材详情里点「发到画布」带图过来。</p>
           )}
@@ -475,7 +588,7 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
               </button>
             </p>
           ) : (
-            model && <p className="nas-form-note">生图模型：{model}{video ? '（生成视频）' : ''}</p>
+            model && <ModelPicker controller={controller} model={model} video={video} onChange={setModel} />
           )}
           {error && (
             <p className="canvas-error" role="alert">
@@ -497,7 +610,8 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
         <div className="canvas-stage-header">
           <div className="canvas-stage-title">
             <strong>生成记录</strong>
-            <span>{historyLoaded || tasks.length ? countLine : '正在读取生成历史…'}</span>
+            {/* 页面标题栏去掉后，存入、读取这类进度显示在这里 */}
+            <span aria-live="polite">{controller.busy || (historyLoaded || tasks.length ? countLine : '正在读取生成历史…')}</span>
           </div>
           <div className="canvas-stage-tools">
             <Segmented value={recordView} options={RECORD_VIEWS} onChange={changeRecordView} label="生成记录的看法" />
@@ -554,7 +668,8 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
             isSaved={slotSaved}
             onSelect={setSelectedKey}
             onOpen={(slot) => setViewing(slotKey(selected.task, slot))}
-            onReuse={(slot) => canvas.reusePrompt(selected.task, slot ?? undefined)}
+            onRestore={() => restoreFull(selected.task)}
+            onBackfill={(slot) => backfillReference(selected.task, slot)}
             onCancel={() => void controller.canvasCancel(selected.task.id)}
             onRetry={(slot) => void controller.canvasRetry(selected.task.id, slot.index)}
             onDelete={() => void removeTask(selected.task)}
@@ -575,7 +690,7 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
           }}
           onClose={() => setViewing(null)}
           onReuse={(task) => {
-            canvas.reusePrompt(task);
+            void restoreFull(task);
             setViewing(null);
           }}
           actions={resultActions}
@@ -607,33 +722,69 @@ const formatTime = (iso: string, withYear = false) =>
 const sizeText = (task: MaterialCanvasTask) => (task.params.size && task.params.size !== 'auto' ? task.params.size.replace('x', '×') : '自动尺寸');
 const QUALITY_LABELS: Record<string, string> = { auto: '自动', low: '低', medium: '中', high: '高' };
 
+// 选的尺寸对应的宽高比：生成中的占位块按这个比例画，等图出来时不跳。auto 时按方形。
+const targetRatio = (task: MaterialCanvasTask) => {
+  const [, width, height] = task.params.size.match(/^(\d+)x(\d+)$/) ?? [];
+  if (width) return Number(width) / Number(height);
+  const [, ratioWidth, ratioHeight] = task.params.ratio.match(/^(\d+):(\d+)$/) ?? [];
+  return ratioWidth ? Number(ratioWidth) / Number(ratioHeight) : 1;
+};
+
+// 每秒走一次的时钟，只在有东西在生成时开着。
+function useNow(active: boolean) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [active]);
+  return now;
+}
+
+function Elapsed({ startedAt }: { startedAt: string | null | undefined }) {
+  const now = useNow(Boolean(startedAt));
+  if (!startedAt) return null;
+  const seconds = Math.max(0, Math.floor((now - Date.parse(startedAt)) / 1000));
+  return (
+    <span className="canvas-elapsed">
+      {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}
+    </span>
+  );
+}
+
 // 缩略图按原图比例完整显示（object-fit: contain），不裁边。比例先用历史里记的宽高，避免加载时跳动；内存里的图没记宽高，加载后再按实际比例排。
-// 读不到（丢了、NAS 暂时连不上）先换原图，原图也读不到就写明，不留破图标。
+// 从 NAS 读完之前显示骨架闪光；读不到（丢了、NAS 暂时连不上）先换原图，原图也读不到就写明，不留破图标。
 function SlotThumb({ slot, isNew, selected, label, onClick }: { slot: MaterialCanvasSlot; isNew: boolean; selected: boolean; label: string; onClick: () => void }) {
   const video = isVideoSlot(slot);
   const [full, setFull] = useState(false);
   const [broken, setBroken] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [natural, setNatural] = useState<number | null>(null);
   const ratio = mediaRatio(slot) ?? natural;
   return (
     <button
       type="button"
-      className={`canvas-result-media ${isNew ? 'is-new' : ''} ${selected ? 'is-selected' : ''}`}
+      className={`canvas-result-media ${isNew ? 'is-new' : ''} ${selected ? 'is-selected' : ''} ${loaded || broken ? '' : 'is-loading'}`}
       style={ratio ? ({ '--media-ratio': ratio } as CSSProperties) : undefined}
       aria-label={label}
       aria-pressed={selected}
+      aria-busy={!loaded && !broken}
       onClick={onClick}
     >
       {broken ? (
         <span className="canvas-media-missing">读不到这张图</span>
       ) : video && !slot.media?.hasThumb ? (
-        <video src={slotSrc(slot, true)} muted playsInline preload="metadata" onError={() => setBroken(true)} />
+        <video src={slotSrc(slot, true)} muted playsInline preload="metadata" onLoadedData={() => setLoaded(true)} onError={() => setBroken(true)} />
       ) : (
         <img
           src={slotSrc(slot, full)}
           alt=""
           loading="lazy"
-          onLoad={(event) => event.currentTarget.naturalHeight && setNatural(event.currentTarget.naturalWidth / event.currentTarget.naturalHeight)}
+          onLoad={(event) => {
+            setLoaded(true);
+            if (event.currentTarget.naturalHeight) setNatural(event.currentTarget.naturalWidth / event.currentTarget.naturalHeight);
+          }}
           onError={() => (full || !slot.media?.hasThumb ? setBroken(true) : setFull(true))}
         />
       )}
@@ -691,12 +842,15 @@ function CanvasGrid({ tasks, newIds, currentKey, isSaved, onSelect }: RecordProp
   );
 }
 
-// 列表的一行：左边时间、模型、尺寸和三行提示词，右边按原比例的缩略图。点哪里都在右侧详情栏打开，操作都在详情栏里。
+// 列表的一行：左边时间、模型、尺寸和三行提示词（双击展开全文），右边按原比例的缩略图。
+// 生成中、排队、失败的槽位只画一个按目标比例的占位块和一句状态，原因、进度、重试都在右侧详情栏，不重复堆在这里。
 function CanvasTaskRow({ task, inQueue, currentKey, isSaved, onSelect }: RecordProps & { task: MaterialCanvasTask; inQueue: boolean }) {
+  const [expanded, setExpanded] = useState(false);
   const active = isActive(task);
   // 历史里没记录的槽位（取消了的，或别的电脑上还没结束的）补成占位，保证张数对得上。
   const slots = Array.from({ length: task.total }, (_, index) => task.slots.find((slot) => slot.index === index) ?? null);
   const selectedTask = currentKey?.startsWith(`${task.id}:`) ?? false;
+  const ratio = targetRatio(task);
 
   return (
     <article className={`canvas-task ${active ? 'is-active' : ''} ${selectedTask ? 'is-selected' : ''}`}>
@@ -705,13 +859,24 @@ function CanvasTaskRow({ task, inQueue, currentKey, isSaved, onSelect }: RecordP
           {formatTime(task.createdAt)} · {task.model} · {sizeText(task)}
           {task.referenceCount ? ` · ${task.referenceCount} 张参考图` : ''}
         </span>
-        <span className="canvas-task-prompt">{task.prompt}</span>
+        <span
+          className={`canvas-task-prompt ${expanded ? 'is-expanded' : ''}`}
+          title={expanded ? '双击收起' : '双击展开全文'}
+          onMouseDown={(event) => {
+            // 双击时不选中文字
+            if (event.detail > 1) event.preventDefault();
+          }}
+          onDoubleClick={() => setExpanded(!expanded)}
+        >
+          {task.prompt}
+        </span>
       </button>
       <div className="canvas-task-slots">
         {slots.map((slot, index) => {
           const key = slot ? slotKey(task, slot) : '';
+          const status = slot?.status ?? (active ? 'queued' : 'missing');
           return (
-            <figure key={index} className={`canvas-slot is-${slot?.status ?? 'missing'}`}>
+            <figure key={index} className={`canvas-slot is-${status}`}>
               {slot?.status === 'done' ? (
                 <>
                   <SlotThumb slot={slot} isNew={inQueue} selected={key === currentKey} label={`查看第 ${index + 1} 张的详情`} onClick={() => onSelect(key)} />
@@ -730,11 +895,29 @@ function CanvasTaskRow({ task, inQueue, currentKey, isSaved, onSelect }: RecordP
                 <button
                   type="button"
                   className={`canvas-slot-placeholder ${key && key === currentKey ? 'is-selected' : ''}`}
+                  style={{ '--media-ratio': ratio } as CSSProperties}
+                  aria-label={`第 ${index + 1} 张：${slot ? STATUS_LABELS[slot.status] : active ? '排队中' : '没有结果'}，查看详情`}
                   onClick={() => onSelect(slot ? key : slotKey(task, null))}
                 >
-                  {slot?.status === 'running' && <span className="canvas-scan" aria-hidden="true" />}
-                  <strong>{slot ? STATUS_LABELS[slot.status] : active ? '排队中' : '没有结果'}</strong>
-                  {slot?.error && <span className="canvas-slot-error">{slot.error}</span>}
+                  {status === 'running' && <span className="canvas-skeleton" aria-hidden="true" />}
+                  <span className="canvas-slot-state">
+                    {status === 'running' ? (
+                      <>
+                        生成中 <Elapsed startedAt={slot?.startedAt} />
+                      </>
+                    ) : status === 'failed' ? (
+                      <>
+                        <TriangleAlert size={13} aria-hidden="true" />
+                        失败
+                      </>
+                    ) : slot ? (
+                      STATUS_LABELS[slot.status]
+                    ) : active ? (
+                      '排队中'
+                    ) : (
+                      '没有结果'
+                    )}
+                  </span>
                 </button>
               )}
             </figure>
@@ -767,6 +950,38 @@ function CopyButton({ text, label = '复制' }: { text: string; label?: string }
   );
 }
 
+// 详情栏里的长提示词默认收成 6 行，真的被截断时才出现「展开全文」；双击文字也能展开、收起。
+function CollapsibleText({ text }: { text: string }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (element && !expanded) setOverflowing(element.scrollHeight > element.clientHeight + 1);
+  }, [text, expanded]);
+  const toggle = () => setExpanded(!expanded);
+  return (
+    <>
+      <p
+        ref={ref}
+        className={`canvas-detail-text ${expanded ? 'is-expanded' : ''}`}
+        title={overflowing && !expanded ? '双击展开全文' : undefined}
+        onMouseDown={(event) => {
+          if (event.detail > 1 && (overflowing || expanded)) event.preventDefault();
+        }}
+        onDoubleClick={() => (overflowing || expanded) && toggle()}
+      >
+        {text}
+      </p>
+      {(overflowing || expanded) && (
+        <button type="button" className="canvas-text-toggle" aria-expanded={expanded} onClick={toggle}>
+          {expanded ? '收起' : '展开全文'}
+        </button>
+      )}
+    </>
+  );
+}
+
 type CanvasDetailProps = {
   task: MaterialCanvasTask;
   slot: MaterialCanvasSlot | null;
@@ -775,7 +990,9 @@ type CanvasDetailProps = {
   isSaved: (task: MaterialCanvasTask, slot: MaterialCanvasSlot) => boolean;
   onSelect: (key: string) => void;
   onOpen: (slot: MaterialCanvasSlot) => void;
-  onReuse: (slot: MaterialCanvasSlot | null) => void;
+  // 两种回填：全量恢复（提示词 + 参数 + 当时的参考图），仅回填参考图（把这张生成的图加成参考图）。返回给用户看的结果说明。
+  onRestore: () => Promise<string>;
+  onBackfill: (slot: MaterialCanvasSlot) => Promise<string>;
   onCancel: () => void;
   onRetry: (slot: MaterialCanvasSlot) => void;
   onDelete: () => void;
@@ -783,15 +1000,18 @@ type CanvasDetailProps = {
 };
 
 // 右侧详情栏：大图、同一任务的其他图、参数、完整提示词和全部操作。点大图进全屏。
-function CanvasDetail({ task, slot, inQueue, busy, isSaved, onSelect, onOpen, onReuse, onCancel, onRetry, onDelete, actions }: CanvasDetailProps) {
+function CanvasDetail({ task, slot, inQueue, busy, isSaved, onSelect, onOpen, onRestore, onBackfill, onCancel, onRetry, onDelete, actions }: CanvasDetailProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [broken, setBroken] = useState<string | null>(null);
-  const [natural, setNatural] = useState<{ key: string; size: string } | null>(null);
+  const [loaded, setLoaded] = useState<string | null>(null);
+  const [natural, setNatural] = useState<{ key: string; size: string; ratio: number } | null>(null);
+  const [note, setNote] = useState('');
   const active = isActive(task);
   const keywords = useMemo(() => extractPromptKeywords(task.prompt, 3), [task.prompt]);
   const key = slotKey(task, slot);
   const done = task.slots.filter((entry) => entry.status === 'done').length;
   const actual = slot?.media?.width && slot.media.height ? `${slot.media.width}×${slot.media.height}` : natural?.key === key ? natural.size : '';
+  const ratio = (slot && mediaRatio(slot)) ?? (natural?.key === key ? natural.ratio : null) ?? targetRatio(task);
   const status = active ? (task.slots.some((entry) => entry.status === 'running') ? '生成中' : '排队中') : `${done}/${task.total} 张生成好`;
   const rows: Array<[string, string]> = [
     ['时间', formatTime(task.createdAt, true)],
@@ -804,37 +1024,66 @@ function CanvasDetail({ task, slot, inQueue, busy, isSaved, onSelect, onOpen, on
     ['参考图', task.referenceCount ? `${task.referenceCount} 张` : ''],
   ];
   const slots = Array.from({ length: task.total }, (_, index) => task.slots.find((entry) => entry.index === index) ?? null);
+  const mediaStyle = { '--media-ratio': ratio } as CSSProperties;
+  const run = (action: () => Promise<string>) => void action().then((message) => message && setNote(message));
 
   return (
     <div className="canvas-detail-body">
       {slot?.status === 'done' ? (
         broken === key ? (
-          <p className="canvas-media-missing canvas-detail-media">读不到这张图：文件可能被删了，或者 NAS 暂时连不上</p>
+          <p className="canvas-media-missing canvas-detail-media" style={mediaStyle}>
+            读不到这张图：文件可能被删了，或者 NAS 暂时连不上
+          </p>
         ) : isVideoSlot(slot) ? (
-          <video key={key} className="canvas-detail-media" src={slotSrc(slot, true)} controls playsInline onError={() => setBroken(key)} />
+          <video key={key} className="canvas-detail-media" style={mediaStyle} src={slotSrc(slot, true)} controls playsInline onError={() => setBroken(key)} />
         ) : (
-          <button type="button" className="canvas-detail-media" aria-label="全屏查看" title="点开全屏查看，左右方向键翻页" onClick={() => onOpen(slot)}>
+          // 先垫缩略图（列表里已经读过，几乎立刻出来）加骨架闪光，原图从 NAS 读完再盖上去，不再出现空白灰框。
+          <button
+            type="button"
+            className={`canvas-detail-media ${loaded === key ? '' : 'is-loading'}`}
+            style={mediaStyle}
+            aria-label="全屏查看"
+            aria-busy={loaded !== key}
+            title="点开全屏查看，左右方向键翻页"
+            onClick={() => onOpen(slot)}
+          >
+            {loaded !== key && slot.media?.hasThumb && <img className="canvas-detail-thumb" src={slotSrc(slot)} alt="" aria-hidden="true" />}
             <img
               key={key}
+              className="canvas-detail-full"
               src={slotSrc(slot, true)}
               alt="生成结果"
-              onLoad={(event) => setNatural({ key, size: `${event.currentTarget.naturalWidth}×${event.currentTarget.naturalHeight}` })}
+              onLoad={(event) => {
+                const { naturalWidth: width, naturalHeight: height } = event.currentTarget;
+                setLoaded(key);
+                if (height) setNatural({ key, size: `${width}×${height}`, ratio: width / height });
+              }}
               onError={() => setBroken(key)}
             />
           </button>
         )
       ) : (
-        <div className="canvas-detail-media is-placeholder">
-          {slot?.status === 'running' && <span className="canvas-scan" aria-hidden="true" />}
-          <strong>{slot ? STATUS_LABELS[slot.status] || '排队中' : active ? '排队中' : '没有结果'}</strong>
-          {slot?.status === 'running' && (
-            <span className="canvas-keywords">
-              {keywords.map((keyword, position) => (
-                <span key={keyword} style={{ animationDelay: `${position * 0.6}s` }}>
-                  {keyword}
-                </span>
-              ))}
-            </span>
+        <div className={`canvas-detail-media is-placeholder is-${slot?.status ?? (active ? 'queued' : 'missing')}`} style={mediaStyle}>
+          {slot?.status === 'running' ? (
+            <>
+              <span className="canvas-skeleton" aria-hidden="true" />
+              <strong>
+                生成中 · 已用 <Elapsed startedAt={slot.startedAt} />
+              </strong>
+              <span className="canvas-progress" role="progressbar" aria-label="正在生成，进度没法预估">
+                <span />
+              </span>
+              <span className="canvas-detail-attempt">{slot.attempts > 1 ? `第 ${slot.attempts} 次尝试` : '一般要几十秒，取决于模型和尺寸'}</span>
+              <span className="canvas-keywords">
+                {keywords.map((keyword, position) => (
+                  <span key={keyword} style={{ animationDelay: `${position * 0.6}s` }}>
+                    {keyword}
+                  </span>
+                ))}
+              </span>
+            </>
+          ) : (
+            <strong>{slot?.status === 'failed' ? '没生成出来' : slot ? STATUS_LABELS[slot.status] || '排队中' : active ? '排队中，等前面的图生成完就开始' : '没有结果'}</strong>
           )}
         </div>
       )}
@@ -859,7 +1108,7 @@ function CanvasDetail({ task, slot, inQueue, busy, isSaved, onSelect, onOpen, on
         </div>
       )}
 
-      {slot?.error && <p className={slot.status === 'done' ? 'canvas-slot-warning' : 'canvas-detail-error'}>{slot.error}</p>}
+      {slot?.error && <p className={slot.status === 'done' ? 'canvas-slot-warning' : slot.status === 'running' ? 'canvas-detail-note' : 'canvas-detail-error'}>{slot.error}</p>}
 
       <dl className="canvas-detail-meta">
         {rows
@@ -877,7 +1126,7 @@ function CanvasDetail({ task, slot, inQueue, busy, isSaved, onSelect, onOpen, on
           <strong>提示词</strong>
           <CopyButton text={task.prompt} />
         </header>
-        <p>{task.prompt}</p>
+        <CollapsibleText text={task.prompt} />
       </section>
       {task.negativePrompt && (
         <section className="canvas-detail-section">
@@ -885,7 +1134,7 @@ function CanvasDetail({ task, slot, inQueue, busy, isSaved, onSelect, onOpen, on
             <strong>负向提示词</strong>
             <CopyButton text={task.negativePrompt} />
           </header>
-          <p>{task.negativePrompt}</p>
+          <CollapsibleText text={task.negativePrompt} />
         </section>
       )}
       {slot?.revisedPrompt && (
@@ -894,15 +1143,21 @@ function CanvasDetail({ task, slot, inQueue, busy, isSaved, onSelect, onOpen, on
             <strong>模型改写后的提示词</strong>
             <CopyButton text={slot.revisedPrompt} />
           </header>
-          <p>{slot.revisedPrompt}</p>
+          <CollapsibleText text={slot.revisedPrompt} />
         </section>
       )}
 
       <div className="canvas-detail-actions">
-        <Button className="button primary compact" type="button" title="把这个任务的提示词和负向提示词放回左边" onClick={() => onReuse(null)}>
+        <Button className="button primary compact" type="button" disabled={busy} title="提示词、负向提示词、尺寸、质量、格式、张数和当时的参考图都放回左边" onClick={() => run(onRestore)}>
           <RotateCcw size={13} />
-          复用提示词
+          全量恢复
         </Button>
+        {slot?.status === 'done' && !isVideoSlot(slot) && (
+          <Button className="button ghost compact" type="button" disabled={busy} title="把这张图加到左边的参考图，接着图生图；提示词和参数不动" onClick={() => run(() => onBackfill(slot))}>
+            <ImagePlus size={13} />
+            仅回填参考图
+          </Button>
+        )}
         {slot?.status === 'done' && actions(task, slot)}
         {slot && (slot.status === 'failed' || slot.status === 'canceled') && inQueue && (
           <Button className="button ghost compact" type="button" onClick={() => onRetry(slot)}>
@@ -911,7 +1166,12 @@ function CanvasDetail({ task, slot, inQueue, busy, isSaved, onSelect, onOpen, on
           </Button>
         )}
       </div>
-      {slot && (slot.status === 'failed' || slot.status === 'canceled') && !inQueue && <p className="canvas-slot-hint">这张没生成出来。要重新生成，点「复用提示词」再生成。</p>}
+      {note && (
+        <p className="canvas-detail-note" role="status">
+          {note}
+        </p>
+      )}
+      {slot && (slot.status === 'failed' || slot.status === 'canceled') && !inQueue && <p className="canvas-slot-hint">这张没生成出来。要重新生成，点「全量恢复」再生成。</p>}
 
       <div className="canvas-detail-danger">
         {active ? (
@@ -938,6 +1198,100 @@ function CanvasDetail({ task, slot, inQueue, busy, isSaved, onSelect, onOpen, on
       </div>
       {slot?.status === 'done' && isSaved(task, slot) && <p className="canvas-detail-note">这张已存入素材库。</p>}
     </div>
+  );
+}
+
+// 提示词模板：就是提示词库里的提示词（不含文档），按分类筛、按标题和内容搜，点一条填进正向提示词。
+function TemplatePicker({ templates, categories, onPick, onClose }: { templates: PromptItem[]; categories: string[]; onPick: (content: string) => void; onClose: () => void }) {
+  const [category, setCategory] = useState('');
+  const [query, setQuery] = useState('');
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const used = categories.filter((name) => templates.some((template) => template.category === name));
+  const list = templates.filter(
+    (template) => (!category || template.category === category) && words.every((word) => `${template.title}\n${template.content}\n${template.tags.join(' ')}`.toLowerCase().includes(word)),
+  );
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="canvas-templates" role="dialog" aria-label="从提示词库选模板">
+      <div className="canvas-templates-head">
+        <label className="materials-search canvas-search">
+          <Search size={14} aria-hidden="true" />
+          <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索提示词库" aria-label="搜索提示词库" />
+        </label>
+        <Button className="icon-button compact-icon" type="button" aria-label="关闭模板" onClick={onClose}>
+          <X size={14} />
+        </Button>
+      </div>
+      {used.length > 0 && (
+        <div className="canvas-template-chips" role="radiogroup" aria-label="按分类筛">
+          {['', ...used].map((name) => (
+            <button key={name || '全部'} type="button" role="radio" aria-checked={category === name} className={category === name ? 'is-active' : ''} onClick={() => setCategory(name)}>
+              {name || '全部'}
+            </button>
+          ))}
+        </div>
+      )}
+      {list.length > 0 ? (
+        <ul className="canvas-template-list">
+          {list.slice(0, 200).map((template) => (
+            <li key={template.id}>
+              <button type="button" title={template.content} onClick={() => onPick(template.content)}>
+                <strong>{template.title}</strong>
+                <span>{template.content}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="nas-form-note">{templates.length ? '没有匹配的提示词。' : '提示词库还是空的。写好提示词后点「存为模板」就会存进去。'}</p>
+      )}
+    </div>
+  );
+}
+
+// 生图模型快捷切换：列表用生图位置已保存的地址和 Key 查（只查模型列表，不扣费），换模型只改模型名，完整配置还在设置里。
+function ModelPicker({ controller, model, video, onChange }: { controller: MaterialLibraryController; model: string; video: boolean; onChange: (model: string) => void }) {
+  const [options, setOptions] = useState<string[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void controller.aiListImageModels().then((list) => alive && setOptions(list));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const list = [model, ...(options ?? []).filter((id) => id !== model)];
+  return (
+    <label className="canvas-model-picker">
+      <span>生图模型{video ? '（生成视频）' : ''}</span>
+      <select
+        value={model}
+        aria-label="生图模型"
+        onChange={(event) => void controller.aiSetImageModel(event.target.value).then((saved) => saved && onChange(saved))}
+      >
+        {list.map((id) => (
+          <option key={id} value={id}>
+            {id}
+          </option>
+        ))}
+        {options === null && (
+          <option disabled value="">
+            正在查询可用模型…
+          </option>
+        )}
+        {options?.length === 0 && (
+          <option disabled value="">
+            没查到别的生图模型（可在设置里查看）
+          </option>
+        )}
+      </select>
+    </label>
   );
 }
 
@@ -1046,9 +1400,9 @@ function CanvasViewer({
               {copied ? <Check size={13} /> : <Copy size={13} />}
               {copied ? '已复制' : '复制提示词'}
             </Button>
-            <Button className="button ghost compact" type="button" title="把这张图的提示词放回左边" onClick={() => onReuse(entry.task)}>
+            <Button className="button ghost compact" type="button" title="提示词、参数和当时的参考图都放回左边" onClick={() => onReuse(entry.task)}>
               <RotateCcw size={13} />
-              复用提示词
+              全量恢复
             </Button>
           </div>
           {actions(entry.task, entry.slot)}

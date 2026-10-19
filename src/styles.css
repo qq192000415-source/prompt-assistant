@@ -96,6 +96,52 @@ html.dark {
   --shadow-soft: 0 10px 28px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
+/* 米白：Claude 桌面端的暖米底、暖墨色字、赭橙强调（加深到和白字对比 ≥4.5:1）。全局搜索的青绿不变。 */
+html[data-theme="cream"] {
+  color: #1f1e1d;
+  background: #faf9f5;
+  --sidebar: #f0eee6;
+  --surface: #fdfcf9;
+  --surface-quiet: #faf9f5;
+  --surface-raised: rgba(253, 252, 249, 0.94);
+  --surface-muted: #f3f1ea;
+  --overlay-surface: #fdfcf9;
+  --hover: rgba(61, 57, 41, 0.05);
+  --border: #e8e5da;
+  --border-strong: #d8d4c6;
+  --text: #1f1e1d;
+  --muted: #6b6860;
+  --faint: #a19d92;
+  --accent: #b4532f;
+  --accent-hover: #9c4527;
+  --accent-weak: #f6e8e0;
+  --on-accent: #ffffff;
+  --shadow: 0 18px 40px rgba(61, 57, 41, 0.1), 0 0 0 1px rgba(61, 57, 41, 0.05);
+  --shadow-soft: 0 10px 28px rgba(61, 57, 41, 0.08), 0 0 0 1px rgba(61, 57, 41, 0.05);
+}
+
+/* 暖夜：Claude 深色的暖灰底；强调色提亮，按钮上用深色字 */
+html.dark[data-theme="ember"] {
+  color: #faf9f5;
+  background: #262624;
+  --sidebar: #1f1e1d;
+  --surface: #30302e;
+  --surface-quiet: #262624;
+  --surface-raised: rgba(48, 48, 46, 0.94);
+  --surface-muted: #383835;
+  --overlay-surface: #30302e;
+  --hover: rgba(250, 249, 245, 0.06);
+  --border: rgba(250, 249, 245, 0.09);
+  --border-strong: rgba(250, 249, 245, 0.17);
+  --text: #faf9f5;
+  --muted: #a6a39a;
+  --faint: #78756d;
+  --accent: #d97757;
+  --accent-hover: #e3896b;
+  --accent-weak: rgba(217, 119, 87, 0.18);
+  --on-accent: #1f1e1d;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -475,7 +521,7 @@ body.resizing-sidebar * {
 }
 
 .mini-clear:hover {
-  background: rgba(37, 99, 235, 0.1);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--text);
 }
 
@@ -781,7 +827,7 @@ body.resizing-sidebar * {
 }
 
 .mini-action:hover {
-  background: rgba(37, 99, 235, 0.1);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent);
 }
 
@@ -1881,7 +1927,7 @@ h2 {
 
 .update-status-card.available,
 .update-status-card.downloaded {
-  border-color: rgba(37, 99, 235, 0.32);
+  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
   background: #edf6ff;
 }
 
@@ -2335,7 +2381,7 @@ h2 {
 }
 
 .combo-toggle:hover {
-  background: rgba(37, 99, 235, 0.08);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--text);
 }
 
@@ -4302,17 +4348,6 @@ h2 {
   line-height: 1.5;
 }
 
-.canvas-scan {
-  position: absolute;
-  inset-inline: 0;
-  top: 0;
-  z-index: -1;
-  height: 32%;
-  border-bottom: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
-  background: linear-gradient(180deg, transparent, var(--accent-weak) 70%, color-mix(in srgb, var(--accent) 35%, transparent));
-  animation: canvas-scan 2.6s ease-in-out infinite;
-}
-
 .canvas-keywords {
   display: flex;
   flex-wrap: wrap;
@@ -4448,11 +4483,6 @@ h2 {
   }
 }
 
-@keyframes canvas-scan {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(320%); }
-}
-
 @keyframes canvas-keyword {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: none; }
@@ -4464,7 +4494,6 @@ h2 {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .canvas-scan { animation: none; opacity: 0.4; }
   .canvas-keywords span { animation: none; opacity: 1; }
   .canvas-result-media.is-new img,
   .canvas-result-media.is-new video { animation: none; }
@@ -4578,25 +4607,29 @@ h2 {
   left: auto;
 }
 
+/* 全部 / 收藏 / 最近使用 / 删除记录：一行四格，图标加数字（1.8.6） */
 .view-nav {
-  gap: 2px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
 }
 
 .view-nav-item {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
+  display: flex;
   width: 100%;
-  min-height: 32px;
+  min-width: 0;
+  min-height: 34px;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 5px;
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--text);
   cursor: pointer;
-  padding: 0 8px;
+  padding: 0 6px;
   font-size: 13px;
-  text-align: left;
+  font-variant-numeric: tabular-nums;
 }
 
 .view-nav-item:hover {
@@ -4910,14 +4943,33 @@ h2 {
   object-fit: contain;
 }
 
+/* 没出图的槽位按选的比例画占位块（出图时不跳），里面只有一句状态，原因和进度在详情栏 */
 .canvas-task-slots .canvas-slot-placeholder {
-  width: 120px;
+  width: auto;
   height: 120px;
+  max-width: 240px;
   min-height: 0;
+  aspect-ratio: var(--media-ratio, 1);
   cursor: pointer;
   font: inherit;
   font-size: 12px;
-  padding: 8px;
+  padding: 6px;
+}
+
+.canvas-slot-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.canvas-slot.is-running .canvas-slot-state {
+  color: var(--text);
+}
+
+.canvas-slot.is-failed .canvas-slot-state {
+  color: var(--danger);
 }
 
 .canvas-task-slots .canvas-slot-error {
@@ -5075,15 +5127,19 @@ body.resizing-canvas {
   padding: 14px;
 }
 
+/* 大图框按图的比例定大小（宽不超过这一栏，高不超过 --detail-media-max），缩略图和原图叠在同一格，原图读完再显出来 */
 .canvas-detail-media {
+  --detail-media-max: 46vh;
   position: relative;
   display: grid;
-  width: 100%;
-  min-height: 160px;
-  max-height: 46vh;
+  width: min(100%, calc(var(--detail-media-max) * var(--media-ratio, 1)));
+  min-height: 0;
+  aspect-ratio: var(--media-ratio, 1);
   overflow: hidden;
   isolation: isolate;
+  justify-self: center;
   margin: 0;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   place-items: center;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -5092,11 +5148,31 @@ body.resizing-canvas {
   padding: 0;
 }
 
-.canvas-detail-media img {
-  display: block;
-  max-width: 100%;
-  max-height: calc(46vh - 2px);
+.canvas-detail-media > img {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
+}
+
+.canvas-detail-full {
+  transition: opacity 220ms ease-out;
+}
+
+.canvas-detail-media.is-loading .canvas-detail-full {
+  opacity: 0;
+}
+
+/* 原图还在从 NAS 读：底边一条流动的细线，缩略图照常看得见 */
+.canvas-detail-media.is-loading::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent) 0 0 / 50% 100% no-repeat;
+  content: '';
+  animation: canvas-loading-line 1.2s linear infinite;
 }
 
 video.canvas-detail-media {
@@ -5106,11 +5182,15 @@ video.canvas-detail-media {
 
 .canvas-detail-media.is-placeholder,
 .canvas-detail-media.canvas-media-missing {
-  min-height: 200px;
+  min-width: min(100%, 220px);
+  grid-template: none;
+  grid-auto-rows: auto;
   align-content: center;
   gap: 10px;
   color: var(--muted);
   cursor: default;
+  padding: 16px;
+  text-align: center;
 }
 
 .canvas-detail-media.is-placeholder strong {
@@ -5304,9 +5384,8 @@ video.canvas-detail-media {
     display: none;
   }
 
-  .canvas-detail-media,
-  .canvas-detail-media img {
-    max-height: 30vh;
+  .canvas-detail-media {
+    --detail-media-max: 30vh;
   }
 }
 
@@ -5333,5 +5412,726 @@ video.canvas-detail-media {
 
   .canvas-panel-rail span {
     writing-mode: horizontal-tb;
+  }
+}
+
+/* 外观主题（1.8.6）：顶部栏的主题菜单和设置页的主题选择，色块是这套主题的底色加强调色 */
+.theme-menu {
+  position: relative;
+  -webkit-app-region: no-drag;
+}
+
+.theme-menu .top-dropdown-menu {
+  right: 0;
+  left: auto;
+  width: 232px;
+}
+
+.theme-menu .top-dropdown-item {
+  min-height: 44px;
+}
+
+.theme-swatch {
+  position: relative;
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+}
+
+.theme-swatch > span {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
+  border-top-left-radius: 10px;
+}
+
+.theme-menu-text {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.theme-menu-text strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.theme-menu-text span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.theme-menu-check {
+  color: var(--accent);
+}
+
+.theme-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.theme-picker-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.theme-picker-option:hover {
+  border-color: var(--border-strong);
+}
+
+.theme-picker-option[aria-checked="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-weak) 60%, var(--surface));
+}
+
+.theme-picker-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 画布 1.8.6：去掉页面标题栏、收窄边距；参数栏分组线；骨架和生成中；提示词展开；参考图拖动排序；模板和模型下拉 */
+.materials-view.is-canvas {
+  gap: 12px;
+  padding: 12px 16px 20px;
+}
+
+.materials-view.is-canvas .canvas-panel,
+.materials-view.is-canvas .canvas-detail {
+  max-height: calc(100vh - var(--topbar-height) - 32px);
+}
+
+.materials-view.is-canvas .canvas-layout {
+  width: 100%;
+}
+
+/* 窄窗口时详情栏在生成记录上面，限高别把记录挤到屏幕外（上面那条选择器更具体，要在这里再写一次） */
+@media (max-width: 1080px) {
+  .materials-view.is-canvas .canvas-detail {
+    max-height: 60vh;
+  }
+}
+
+@media (max-width: 960px) {
+  .materials-view.is-canvas .canvas-panel {
+    max-height: none;
+  }
+}
+
+/* 参数栏里每一组之间一条细线，参考图、负向提示词、尺寸、高级设置不再粘在一起 */
+.canvas-panel > .canvas-section,
+.canvas-panel > .canvas-advanced {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.icon-button.compact-icon {
+  width: 28px;
+  height: 28px;
+}
+
+/* 骨架闪光：缩略图从 NAS 读完之前、正在生成的占位块里 */
+.canvas-skeleton,
+.canvas-result-media.is-loading::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 25%, color-mix(in srgb, var(--surface) 75%, transparent) 50%, transparent 75%) 0 0 / 220% 100%;
+  content: '';
+  animation: canvas-shimmer 1.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.canvas-skeleton {
+  z-index: -1;
+  background-color: var(--surface-muted);
+}
+
+.canvas-elapsed {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 生成中：进度没法预估，用来回走的不定进度条，不编百分比 */
+.canvas-progress {
+  position: relative;
+  display: block;
+  width: min(220px, 70%);
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface-muted));
+}
+
+.canvas-progress > span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 40%;
+  border-radius: inherit;
+  background: var(--accent);
+  animation: canvas-indeterminate 1.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+.canvas-detail-attempt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.canvas-detail-media.is-placeholder strong .canvas-elapsed {
+  color: var(--accent);
+}
+
+/* 提示词：列表里双击展开，详情栏默认 6 行，「展开全文」或双击展开 */
+.canvas-task-info .canvas-task-prompt.is-expanded {
+  display: block;
+  overflow: visible;
+  white-space: pre-wrap;
+}
+
+/* 下边距换成透明边框：overflow 只裁到内边距外沿，留着下内边距的话第 7 行会露出半截 */
+.canvas-detail-text:not(.is-expanded) {
+  display: -webkit-box;
+  overflow: hidden;
+  border-bottom: 10px solid transparent;
+  padding-bottom: 0;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+}
+
+.canvas-text-toggle {
+  justify-self: start;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 0;
+}
+
+.canvas-text-toggle:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.canvas-text-toggle:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 参考图：左上角是提交顺序，拖动时原位置变淡、目标位置前面一条蓝线 */
+.canvas-reference {
+  cursor: grab;
+}
+
+.canvas-reference:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.canvas-reference.is-dragging {
+  opacity: 0.4;
+}
+
+.canvas-reference.is-drop-target {
+  box-shadow: -4px 0 0 var(--accent);
+}
+
+.canvas-reference-order {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  display: grid;
+  min-width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(24, 24, 27, 0.72);
+  color: #fff;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding: 0 4px;
+  pointer-events: none;
+}
+
+/* 模板：就在提示词框上面展开，不盖住输入框 */
+.canvas-templates {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-quiet);
+  padding: 8px;
+}
+
+.canvas-templates-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.canvas-templates-head .canvas-search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.canvas-template-chips {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.canvas-template-chips button {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 10px;
+}
+
+.canvas-template-chips button.is-active {
+  border-color: var(--accent);
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.canvas-template-list {
+  display: grid;
+  max-height: 260px;
+  gap: 2px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.canvas-template-list button {
+  display: grid;
+  width: 100%;
+  gap: 2px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.canvas-template-list button:hover,
+.canvas-template-list button:focus-visible {
+  background: var(--hover);
+  outline: none;
+}
+
+.canvas-template-list strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-template-list span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-model-picker {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.canvas-model-picker select {
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  padding: 0 8px;
+}
+
+.canvas-model-picker select:focus-visible {
+  border-color: var(--accent);
+  outline: 3px solid var(--accent-weak);
+}
+
+@keyframes canvas-shimmer {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
+}
+
+@keyframes canvas-indeterminate {
+  from { left: -40%; }
+  to { left: 100%; }
+}
+
+@keyframes canvas-loading-line {
+  from { background-position: -50% 0; }
+  to { background-position: 150% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-skeleton,
+  .canvas-result-media.is-loading::after,
+  .canvas-detail-media.is-loading::after {
+    animation: none;
+  }
+
+  .canvas-progress > span {
+    left: 0;
+    width: 100%;
+    opacity: 0.5;
+    animation: none;
+  }
+}
+
+/* 文档库文件夹视图（1.8.6）：中间文件列表，右边预览和操作，和提示词库的「整条展开」卡片流区分开。
+   类型色块用 --doc-* 令牌（深色主题提亮），底色是同色 14% 混进卡片底，四套主题都能看清。 */
+:root {
+  --doc-word: #1d4ed8;
+  --doc-pdf: #b42318;
+  --doc-sheet: #166534;
+  --doc-slide: #9a3412;
+  --doc-markdown: #6d28d9;
+  --doc-other: #4b5563;
+}
+
+html.dark {
+  --doc-word: #93b8ff;
+  --doc-pdf: #ffa197;
+  --doc-sheet: #6fdc8c;
+  --doc-slide: #ffae70;
+  --doc-markdown: #c5b0ff;
+  --doc-other: #b4b8c0;
+}
+
+.document-browser {
+  display: grid;
+  width: min(100%, 1400px);
+  min-width: 0;
+  gap: 12px;
+  margin: 0 auto;
+}
+
+.document-browser-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.document-browser-title {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 260px;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.document-browser-title h1 {
+  overflow: hidden;
+  margin: 0;
+  font-size: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-browser-title span {
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.document-sort {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.document-sort select {
+  min-height: 32px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  padding: 0 8px;
+}
+
+.document-sort select:focus-visible {
+  border-color: var(--accent);
+  outline: 3px solid var(--accent-weak);
+}
+
+.document-kind-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.document-kind-filter button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  padding: 3px 12px;
+}
+
+.document-kind-filter button small {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.document-kind-filter button.is-active {
+  border-color: var(--accent);
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.document-kind-filter button.is-active small {
+  color: var(--accent);
+}
+
+.document-kind-filter button:focus-visible,
+.document-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.document-browser-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
+  align-items: start;
+  gap: 16px;
+}
+
+.document-list-scroll {
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.document-list {
+  display: grid;
+  min-width: 520px;
+}
+
+/* 表头 4 列（名称列从色块右边对齐），行 5 列：类型色块 | 名称和配套指令 | 大小 | 添加 | 复制 */
+.document-list-header,
+.document-row {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+}
+
+.document-list-header {
+  grid-template-columns: minmax(0, 1fr) 76px 52px 36px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding-left: 66px;
+}
+
+.document-list-header span:nth-child(2) {
+  text-align: right;
+}
+
+.document-row {
+  position: relative;
+  grid-template-columns: 40px minmax(0, 1fr) 76px 52px 36px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.document-row:last-child {
+  border-bottom: 0;
+}
+
+.document-row:hover {
+  background: var(--hover);
+}
+
+.document-row.is-draggable {
+  cursor: grab;
+}
+
+/* 选中：浅强调色底加一圈强调色细线（用内阴影，不改行高、不挤动别的行） */
+.document-row.is-selected {
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.document-kind {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.document-row-main {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.document-row-main strong,
+.document-row-main span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-row-main strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.document-row-main span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* 「没有配套指令」也要读得清，用次要字色（DESIGN：faint 不用于需要阅读的文字） */
+.document-row-main span.is-empty {
+  color: var(--muted);
+}
+
+/* 选中行底色带一点强调色，次要文字再压深一点，保证 ≥4.5:1 */
+.document-row.is-selected .document-row-main span {
+  color: color-mix(in srgb, var(--muted) 72%, var(--text));
+}
+
+.document-row-size,
+.document-row-date {
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.document-row-size {
+  text-align: right;
+}
+
+.document-row-copy.icon-button {
+  width: 32px;
+  height: 32px;
+}
+
+.document-kind.is-word { background: color-mix(in srgb, var(--doc-word) 14%, var(--surface)); color: var(--doc-word); }
+.document-kind.is-pdf { background: color-mix(in srgb, var(--doc-pdf) 14%, var(--surface)); color: var(--doc-pdf); }
+.document-kind.is-sheet { background: color-mix(in srgb, var(--doc-sheet) 14%, var(--surface)); color: var(--doc-sheet); }
+.document-kind.is-slide { background: color-mix(in srgb, var(--doc-slide) 14%, var(--surface)); color: var(--doc-slide); }
+.document-kind.is-markdown { background: color-mix(in srgb, var(--doc-markdown) 14%, var(--surface)); color: var(--doc-markdown); }
+.document-kind.is-text,
+.document-kind.is-other { background: var(--surface-muted); color: var(--doc-other); }
+
+.document-browser-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* 右边预览栏：复用 DocumentView（所有操作、配套指令、预览和编辑都在），改成紧凑的一栏，正文在栏里滚动 */
+.document-browser-pane {
+  position: sticky;
+  top: 0;
+  min-width: 0;
+}
+
+.document-card.document-pane {
+  max-height: calc(100vh - var(--topbar-height) - 120px);
+  overflow-y: auto;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: 16px;
+}
+
+.document-pane .full-prompt-header {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.document-pane .preview-actions {
+  justify-content: flex-start;
+}
+
+.document-pane .full-prompt-title h2 {
+  font-size: 16px;
+}
+
+.document-pane .full-prompt-content pre,
+.document-pane .markdown-body {
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  line-height: 1.7;
+  padding: 12px 14px;
+}
+
+@media (max-width: 900px) {
+  .document-browser-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .document-browser-pane {
+    position: static;
+  }
+
+  .document-card.document-pane {
+    max-height: none;
   }
 }

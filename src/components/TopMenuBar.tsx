@@ -1,8 +1,8 @@
-import { Moon, Settings, Sun } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Check, Moon, Palette, Settings, Sun } from 'lucide-react';
 import { LibrarySwitch } from './LibrarySwitch';
 import { Button } from './ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
-import type { ThemeMode } from '../lib/theme';
+import { isDarkTheme, THEMES, type ThemeMode } from '../lib/theme';
 import type { LibraryMode } from '../localState';
 
 type TopMenuBarProps = {
@@ -15,10 +15,10 @@ type TopMenuBarProps = {
   onOpenCloudSettings: () => void;
   onOpenSettings: () => void;
   theme: ThemeMode;
-  onToggleTheme: () => void;
+  onThemeChange: (theme: ThemeMode) => void;
 };
 
-// 顶部栏是主导航：左边切换提示词、文档、素材、画布，右边是云同步状态、深浅色和设置。
+// 顶部栏是主导航：左边切换提示词、文档、素材、画布，右边是云同步状态、外观主题和设置。
 export function TopMenuBar({
   libraryMode,
   settingsActive,
@@ -28,7 +28,7 @@ export function TopMenuBar({
   onOpenCloudSettings,
   onOpenSettings,
   theme,
-  onToggleTheme,
+  onThemeChange,
 }: TopMenuBarProps) {
   return (
     <header className="top-menu-bar">
@@ -48,19 +48,7 @@ export function TopMenuBar({
           <span className="cloud-dot" aria-hidden="true" />
           {cloudStatus}
         </Button>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              className="top-menu-button theme-toggle"
-              type="button"
-              aria-label={theme === 'dark' ? '切换到浅色外观' : '切换到深色外观'}
-              onClick={onToggleTheme}
-            >
-              {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{theme === 'dark' ? '浅色外观' : '深色外观'}</TooltipContent>
-        </Tooltip>
+        <ThemeMenu theme={theme} onChange={onThemeChange} />
         <Button
           className={`top-menu-button top-settings-button ${settingsActive ? 'is-active' : ''}`}
           type="button"
@@ -74,5 +62,70 @@ export function TopMenuBar({
 
       <div className="top-window-controls-reserve" aria-hidden="true" />
     </header>
+  );
+}
+
+// 外观主题菜单：四套主题，带色块预览；点外面或按 Esc 关。
+function ThemeMenu({ theme, onChange }: { theme: ThemeMode; onChange: (theme: ThemeMode) => void }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const current = THEMES.find((entry) => entry.value === theme) ?? THEMES[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div className="theme-menu" ref={menuRef}>
+      <Button
+        className="top-menu-button theme-toggle"
+        type="button"
+        aria-label={`外观主题：${current.label}`}
+        title={`外观主题：${current.label}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        {theme === 'light' ? <Sun size={15} /> : isDarkTheme(theme) ? <Moon size={15} /> : <Palette size={15} />}
+      </Button>
+      {open && (
+        <div className="top-dropdown-menu theme-menu-list" role="menu" aria-label="外观主题">
+          {THEMES.map((entry) => (
+            <Button
+              key={entry.value}
+              className="top-dropdown-item"
+              type="button"
+              role="menuitemradio"
+              aria-checked={entry.value === theme}
+              onClick={() => {
+                onChange(entry.value);
+                setOpen(false);
+              }}
+            >
+              <span className="theme-swatch" style={{ background: entry.swatch[0] }} aria-hidden="true">
+                <span style={{ background: entry.swatch[1] }} />
+              </span>
+              <span className="theme-menu-text">
+                <strong>{entry.label}</strong>
+                <span>{entry.note}</span>
+              </span>
+              {entry.value === theme && <Check size={14} className="theme-menu-check" />}
+            </Button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

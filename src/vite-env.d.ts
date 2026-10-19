@@ -112,6 +112,7 @@ type DesktopMaterialsApi = {
   aiGetSettings: () => Promise<MaterialAiSettings>;
   aiSaveSettings: (settings: MaterialAiSettingsInput) => Promise<MaterialAiSettings>;
   aiListModels: (slot: MaterialAiSlotName, input: MaterialAiSlotInput) => Promise<Array<{ id: string; vision: boolean; generation: boolean }>>;
+  aiSetImageModel: (model: string) => Promise<MaterialAiSettings>;
   aiTest: (slot: MaterialAiSlotName, input: MaterialAiSlotInput) => Promise<void>;
   aiReverse: (id: string) => Promise<string>;
   aiOptimize: (prompt: string, kind: 'positive' | 'negative') => Promise<string>;
@@ -131,6 +132,7 @@ type DesktopMaterialsApi = {
   onCanvasQueue: (callback: (tasks: MaterialCanvasTask[]) => void) => () => void;
   canvasReference: (id: string) => Promise<{ dataUrl: string; title: string }>;
   canvasClipboardImage: () => Promise<string>;
+  canvasHistoryImage: (sha256: string, ext: string) => Promise<string>;
   onProgress: (callback: (progress: MaterialBatchProgress) => void) => () => void;
 };
 
@@ -169,6 +171,8 @@ type MaterialCanvasSlot = {
   revisedPrompt: string | null;
   dataUrl?: string | null;
   savedToLibrary?: boolean;
+  // 队列里正在生成的槽位才有：开始生成的时间。
+  startedAt?: string | null;
 };
 type MaterialCanvasTask = {
   id: string;
@@ -179,6 +183,8 @@ type MaterialCanvasTask = {
   params: MaterialCanvasParams;
   origin: MaterialCanvasOrigin | null;
   referenceCount: number;
+  // 生成历史里存的参考图（1.8.6 起）；队列快照和更早的任务没有。
+  references?: MaterialCanvasMedia[];
   total: number;
   slots: MaterialCanvasSlot[];
 };

@@ -2,9 +2,8 @@ import { useEffect, useState } from 'react';
 import { Check, Cloud, Download, LogIn, LogOut, RotateCcw } from 'lucide-react';
 import { Button } from './ui/button';
 import { Separator } from './ui/separator';
-import { Switch } from './ui/switch';
 import { MaterialSettingsSection } from './materials/NasSettings';
-import type { ThemeMode } from '../lib/theme';
+import { THEMES, type ThemeMode } from '../lib/theme';
 import type { CloudSettings } from '../cloudSync';
 import type { ExportSettings } from '../librarySync';
 import { type DesktopSettingsInput, normalizeDesktopSettings } from '../desktopSettings';
@@ -158,16 +157,29 @@ export function SettingsPage({
             {section === 'general' && (
               <>
                 <section className="settings-section" aria-labelledby="appearance-settings-title">
-                  <div className="settings-section-title">
-                    <div>
-                      <h3 id="appearance-settings-title">外观</h3>
-                      <p>浅色适合长时间阅读，深色适合弱光环境。这个选择只保存在本机。</p>
-                    </div>
-                    <Switch
-                      checked={theme === 'dark'}
-                      aria-label="深色模式"
-                      onCheckedChange={(checked) => onThemeChange(checked ? 'dark' : 'light')}
-                    />
+                  <div>
+                    <h3 id="appearance-settings-title">外观</h3>
+                    <p>选一套主题，马上生效，只保存在本机。顶部栏的主题按钮也能切换。</p>
+                  </div>
+                  <div className="theme-picker" role="radiogroup" aria-labelledby="appearance-settings-title">
+                    {THEMES.map((entry) => (
+                      <button
+                        key={entry.value}
+                        type="button"
+                        role="radio"
+                        className="theme-picker-option"
+                        aria-checked={theme === entry.value}
+                        onClick={() => onThemeChange(entry.value)}
+                      >
+                        <span className="theme-swatch" style={{ background: entry.swatch[0] }} aria-hidden="true">
+                          <span style={{ background: entry.swatch[1] }} />
+                        </span>
+                        <span className="theme-menu-text">
+                          <strong>{entry.label}</strong>
+                          <span>{entry.note}</span>
+                        </span>
+                      </button>
+                    ))}
                   </div>
                   <Separator />
                 </section>

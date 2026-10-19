@@ -126,6 +126,16 @@ function slotFromInput(userDataDir: string, name: SlotName, input: SlotInput | n
 
 export const loadCanvasOptions = (userDataDir: string) => readStored(userDataDir).canvas;
 
+// 画布上的模型下拉：只换生图位置的模型名，地址、Key、规则、并发都原样保留（整份保存会把没传的规则和并发重置掉）。
+export function setImageModel(userDataDir: string, model: unknown) {
+  const name = asText(model).trim();
+  if (!name) throw new Error('模型名不能为空');
+  const stored = readStored(userDataDir);
+  if (!stored.image) throw new Error('还没有设置生图模型，请先在设置的 AI 助手里填写');
+  fs.writeFileSync(settingsPath(userDataDir), JSON.stringify({ ...stored, image: { ...stored.image, model: name } }, null, 2));
+  return getPublicAiSettings(userDataDir);
+}
+
 export function saveAiSettings(userDataDir: string, input: { text?: SlotInput | null; vision?: SlotInput | null; image?: SlotInput | null; canvas?: unknown; actions?: Record<string, { rulePresetIds?: unknown; customInstructions?: unknown }> }) {
   const text = slotFromInput(userDataDir, 'text', input.text);
   const vision = slotFromInput(userDataDir, 'vision', input.vision);

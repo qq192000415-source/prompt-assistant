@@ -1,5 +1,6 @@
 import { cleanSyncRecords, defaultExportSettings, isExportMode, isFreshRecord, isValidDateString, type ExportSettings } from './librarySync.ts';
 import type { DeletedPromptRecord, SyncRecord } from './types';
+import type { DocumentSort } from './documentBrowser.ts';
 
 // 本机界面状态和记录在 localStorage 里的读写。条目和分类的读写在 promptStorage.ts。
 const SIDEBAR_WIDTH_KEY = 'prompt-library.sidebarWidth.v1';
@@ -224,6 +225,14 @@ export const loadCanvasDetailWidth = () => {
   return Number.isFinite(saved) ? clampCanvasDetailWidth(saved) : 400;
 };
 export const saveCanvasDetailWidth = (width: number) => writeKey(CANVAS_DETAIL_WIDTH_KEY, String(clampCanvasDetailWidth(width)));
+
+// 文档库文件夹视图的排序：最近添加（默认）、名称、大小。
+const DOCUMENT_SORT_KEY = 'prompt-library.documentSort.v1';
+export const loadDocumentSort = (): DocumentSort => {
+  const saved = readKey(DOCUMENT_SORT_KEY);
+  return saved === 'name' || saved === 'size' ? saved : 'recent';
+};
+export const saveDocumentSort = (order: DocumentSort) => writeKey(DOCUMENT_SORT_KEY, order);
 
 export const loadCanvasPanelCollapsed = () => readKey(CANVAS_PANEL_COLLAPSED_KEY) === '1';
 export const saveCanvasPanelCollapsed = (collapsed: boolean) => writeKey(CANVAS_PANEL_COLLAPSED_KEY, collapsed ? '1' : '0');

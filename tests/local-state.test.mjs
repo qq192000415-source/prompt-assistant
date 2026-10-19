@@ -89,3 +89,14 @@ test('桌面设置：透明度夹在 0.25–1，非法关闭行为沿用原值�
 
   assert.deepEqual(settings, { closeBehavior: 'tray', floatingIcon: { enabled: false, opacity: 0.25, x: 10, y: null } });
 });
+
+test('外观主题：四套（浅色、深色、米白、暖夜），深色的两套加 dark 类，乱写的值退回浅色', async () => {
+  const { THEMES, isDarkTheme, normalizeTheme, readTheme } = await import('../src/lib/theme.ts');
+  assert.deepEqual(THEMES.map((theme) => theme.value), ['light', 'dark', 'cream', 'ember']);
+  assert.deepEqual(THEMES.map((theme) => isDarkTheme(theme.value)), [false, true, false, true]);
+  assert.deepEqual([normalizeTheme('cream'), normalizeTheme('sepia'), normalizeTheme(null)], ['cream', 'light', 'light']);
+  store.set('prompt-library.theme', 'ember');
+  assert.equal(readTheme(), 'ember');
+  store.set('prompt-library.theme', 'purple');
+  assert.equal(readTheme(), 'light');
+});

@@ -23,6 +23,8 @@ export type HistoryTask = {
   params: HistoryParams;
   origin: CanvasOrigin | null;
   referenceCount: number;
+  // 当时用的参考图（1.8.6 起存，按 sha256 存在 media/ 下），「全量恢复」时放回画布；更早的任务是空的。
+  references: HistoryMedia[];
   total: number;
   slots: HistorySlot[];
 };
@@ -87,6 +89,7 @@ function normalizeTask(raw: unknown): HistoryTask | null {
     },
     origin,
     referenceCount: typeof raw.referenceCount === 'number' ? raw.referenceCount : 0,
+    references: (Array.isArray(raw.references) ? raw.references : []).map(normalizeMedia).filter((media): media is HistoryMedia => media !== null),
     total: typeof raw.total === 'number' ? raw.total : slots.length,
     slots,
   };
@@ -146,6 +149,7 @@ export function recordSlot(history: CanvasHistory, task: Omit<HistoryTask, 'slot
   const updated: HistoryTask = {
     ...base,
     model: task.model || base.model,
+    references: base.references?.length ? base.references : (task.references ?? []),
     updatedAt: now,
     slots: [...base.slots.filter((entry) => entry.index !== slot.index), slot].sort((left, right) => left.index - right.index),
   };
@@ -162,16 +166,19 @@ export function markSavedToLibrary(history: CanvasHistory, taskId: string, index
   };
 }
 
+// 一个任务用到的所有文件：生成的图和参考图（同一张图可能既是某个任务的结果，又是另一个任务的参考图）。
+const taskMedia = (task: HistoryTask) => [...task.slots.flatMap((slot) => (slot.media ? [slot.media] : [])), ...(task.references ?? [])];
+
 // 删任务；orphaned 是删完后没有别的历史任务再用的文件，调用方据此删 NAS 上的原图和缩略图。
 export function deleteHistoryTasks(history: CanvasHistory, ids: readonly string[], now: string) {
   const removing = new Set(ids);
   const tasks = history.tasks.filter((task) => !removing.has(task.id));
-  const stillUsed = new Set(tasks.flatMap((task) => task.slots.map((slot) => slot.media?.sha256)).filter(Boolean));
+  const stillUsed = new Set(tasks.flatMap(taskMedia).map((media) => media.sha256));
   const orphaned = new Map<string, HistoryMedia>();
   for (const task of history.tasks) {
     if (!removing.has(task.id)) continue;
-    for (const slot of task.slots) {
-      if (slot.media && !stillUsed.has(slot.media.sha256)) orphaned.set(slot.media.sha256, slot.media);
+    for (const media of taskMedia(task)) {
+      if (!stillUsed.has(media.sha256)) orphaned.set(media.sha256, media);
     }
   }
   return { history: { ...history, updatedAt: now, tasks }, orphaned: [...orphaned.values()] };
