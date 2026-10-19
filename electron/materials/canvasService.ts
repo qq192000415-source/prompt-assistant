@@ -6,7 +6,7 @@ import { clipboard, dialog, nativeImage, type BrowserWindow, type IpcMain } from
 import { mediaPath, thumbPath, type MaterialItem, type MaterialLibrary } from '../../src/materials/library.ts';
 import { mimeTypeOf } from '../../src/materials/mediaFileTypes.ts';
 import { loadAiRuntime, loadCanvasOptions } from './aiSettings.ts';
-import { CANVAS_CATEGORY, decodeGeneratedMedia, generateMedia, savedItemText, type CanvasOrigin } from './canvas.ts';
+import { CANVAS_CATEGORY, decodeGeneratedMedia, generateMedia, savedItemText, sizeMismatchWarning, type CanvasOrigin } from './canvas.ts';
 import {
   HISTORY_DIR,
   deleteHistoryTasks,
@@ -81,19 +81,35 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Op
     }, 150);
   };
 
+  // 只是提醒：读不出尺寸时不提醒，不能因为检查失败把生成好的图当成失败（存图时会再按格式校验）。
+  const mismatchOf = (payload: Parameters<typeof sizeMismatchWarning>[0], dataUrl: string) => {
+    try {
+      return sizeMismatchWarning(payload, decodeGeneratedMedia(dataUrl).buffer);
+    } catch {
+      return '';
+    }
+  };
+
   const queue = createCanvasQueue({
     generate: async (payload) => {
       const generated = await generateMedia(loadAiRuntime(userDataDir), payload);
       const [image] = generated.images;
       if (!image) throw new Error('模型没有返回图片');
-      return { dataUrl: image.dataUrl, revisedPrompt: image.revisedPrompt ?? null, mediaType: image.mediaType ?? generated.mediaType ?? 'image', model: generated.model };
+      const mediaType = image.mediaType ?? generated.mediaType ?? 'image';
+      return {
+        dataUrl: image.dataUrl,
+        revisedPrompt: image.revisedPrompt ?? null,
+        mediaType,
+        model: generated.model,
+        warning: mediaType === 'image' ? mismatchOf(payload, image.dataUrl) : '',
+      };
     },
     persist: async (task, slot, generated) => {
       const config = loadConfig(userDataDir);
       const { buffer, ext } = decodeGeneratedMedia(generated.dataUrl);
       const media = await putHistoryMedia(config, buffer, ext);
       await mutateHistory(config, (history) => ({
-        history: recordSlot(history, taskRecord(task), { index: slot.index, status: 'done', media, revisedPrompt: generated.revisedPrompt, error: '', attempts: slot.attempts, savedToLibrary: false }, new Date().toISOString()),
+        history: recordSlot(history, taskRecord(task), { index: slot.index, status: 'done', media, revisedPrompt: generated.revisedPrompt, error: generated.warning ?? '', attempts: slot.attempts, savedToLibrary: false }, new Date().toISOString()),
         result: null,
       }));
       return media;

@@ -9,7 +9,7 @@ window.localStorage = {
   removeItem: (key) => store.delete(key),
 };
 
-const { loadDeletedRecords, loadExportSettings, loadLibraryMode, loadSidebarWidth, loadSyncRecords, saveDeletedRecords } = await import(
+const { loadCanvasRecordView, loadDeletedRecords, loadExportSettings, loadLibraryMode, loadSidebarWidth, loadSyncRecords, saveCanvasRecordView, saveDeletedRecords } = await import(
   '../src/localState.ts'
 );
 const { normalizeDesktopSettings } = await import('../src/desktopSettings.ts');
@@ -56,6 +56,15 @@ test('本机设置读坏了或越界时退回默认值', () => {
   assert.equal(loadLibraryMode(), 'materials');
   store.set('prompt-library.libraryMode.v1', 'canvas');
   assert.equal(loadLibraryMode(), 'canvas');
+});
+
+test('画布生成记录的看法：默认按任务，存过图片墙就记住，乱写的值退回按任务', () => {
+  store.delete('prompt-library.canvasRecordView.v1');
+  assert.equal(loadCanvasRecordView(), 'tasks');
+  saveCanvasRecordView('wall');
+  assert.equal(loadCanvasRecordView(), 'wall');
+  store.set('prompt-library.canvasRecordView.v1', 'grid');
+  assert.equal(loadCanvasRecordView(), 'tasks');
 });
 
 test('桌面设置：透明度夹在 0.25–1，非法关闭行为沿用原值，坐标缺失时保留原坐标', () => {

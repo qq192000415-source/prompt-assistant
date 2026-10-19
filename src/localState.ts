@@ -10,10 +10,13 @@ const CLOUD_REMEMBERED_LOGIN_KEY = 'prompt-library.cloudRememberedLogin.v1';
 const LIBRARY_MODE_KEY = 'prompt-library.libraryMode.v1';
 const MATERIALS_EXPORT_DIR_KEY = 'prompt-library.materialsExportDir.v1';
 const MATERIALS_CANVAS_DRAFT_KEY = 'prompt-library.materialsCanvasDraft.v1';
+const CANVAS_RECORD_VIEW_KEY = 'prompt-library.canvasRecordView.v1';
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 420;
 
 export type LibraryMode = 'prompts' | 'documents' | 'materials' | 'canvas';
+// 画布生成记录的看法：按任务分组，或所有图平铺成图片墙。
+export type CanvasRecordView = 'tasks' | 'wall';
 
 export type RememberedCloudLogin = {
   email: string;
@@ -171,6 +174,22 @@ export const saveMaterialsCanvasDraft = (draft: unknown) => {
     window.localStorage.setItem(MATERIALS_CANVAS_DRAFT_KEY, JSON.stringify(draft));
   } catch {
     // 记不住草稿不影响生图。
+  }
+};
+
+export const loadCanvasRecordView = (): CanvasRecordView => {
+  try {
+    return window.localStorage.getItem(CANVAS_RECORD_VIEW_KEY) === 'wall' ? 'wall' : 'tasks';
+  } catch {
+    return 'tasks';
+  }
+};
+
+export const saveCanvasRecordView = (view: CanvasRecordView) => {
+  try {
+    window.localStorage.setItem(CANVAS_RECORD_VIEW_KEY, view);
+  } catch {
+    // 记不住看法不影响使用。
   }
 };
 

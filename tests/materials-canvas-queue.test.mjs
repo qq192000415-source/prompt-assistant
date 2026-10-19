@@ -198,3 +198,14 @@ test('生成历史存在 NAS：两台电脑同时写入两边都保留，锁最�
     nas.server.close();
   }
 });
+
+test('生成好但有提醒（比如横竖不对）：槽位照常完成，提醒显示在图下面并写进历史', async () => {
+  const { queue, calls, persisted } = controlledQueue();
+  queue.submit(meta('横图'), { prompt: '横图', n: 1 }, 1);
+  calls[0].resolve({ dataUrl: 'data:image/png;base64,AA==', revisedPrompt: null, mediaType: 'image', warning: '比例不对：选的是 16:9 横版' });
+  await flush();
+  const [slot] = queue.snapshot()[0].slots;
+  assert.equal(slot.status, 'done');
+  assert.equal(slot.error, '比例不对：选的是 16:9 横版');
+  assert.equal(persisted.length, 1);
+});

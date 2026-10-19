@@ -20,7 +20,8 @@ export type QueueSlot = {
 export type TaskMeta = { model: string; prompt: string; negativePrompt: string; params: HistoryParams; origin: CanvasOrigin | null; referenceCount: number };
 export type QueueTask = TaskMeta & { id: string; createdAt: string; total: number; slots: QueueSlot[] };
 // model 是实际生成这张图的模型：重试前改了设置时，和提交时记下的不一样。
-export type Generated = { dataUrl: string; revisedPrompt: string | null; mediaType: 'image' | 'video'; model?: string };
+// warning：图生成好了但有要提醒的地方（比如横竖和选的不一样），显示在这张图下面。
+export type Generated = { dataUrl: string; revisedPrompt: string | null; mediaType: 'image' | 'video'; model?: string; warning?: string };
 
 type Deps = {
   generate: (payload: AiImageGenerationPayload) => Promise<Generated>;
@@ -89,10 +90,10 @@ export function createCanvasQueue(deps: Deps) {
         try {
           slot.media = await deps.persist(task, slot, generated);
           slot.dataUrl = null;
-          slot.error = '';
+          slot.error = generated.warning ?? '';
         } catch (error) {
           slot.dataUrl = generated.dataUrl;
-          slot.error = `图生成好了，但没存进 NAS 的生成历史：${reason(error)}。可以先存入素材库或另存为`;
+          slot.error = [generated.warning, `图生成好了，但没存进 NAS 的生成历史：${reason(error)}。可以先存入素材库或另存为`].filter(Boolean).join('。');
         }
         if (!alive()) return;
         slot.revisedPrompt = generated.revisedPrompt;

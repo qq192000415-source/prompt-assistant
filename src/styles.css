@@ -4731,3 +4731,193 @@ h2 {
     flex: 0 0 auto;
   }
 }
+
+/* 画布生成记录：紧凑任务行和图片墙（1.8.3）。缩略图固定大小，一屏能看到更多图，大图到全屏里看。 */
+/* 切换和搜索框始终在一行；窄窗口时整组换到标题下面 */
+.canvas-stage-header > .canvas-stage-tools {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.canvas-stage-tools .canvas-segmented {
+  min-width: 150px;
+}
+
+.canvas-task {
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.canvas-task-prompt {
+  -webkit-line-clamp: 1;
+}
+
+.canvas-task-slots,
+.canvas-task-slots.is-count-1,
+.canvas-task-slots.is-count-2,
+.canvas-task-slots.is-count-3,
+.canvas-task-slots.is-count-4 {
+  grid-template-columns: repeat(auto-fill, 150px);
+  gap: 10px;
+}
+
+.canvas-task-slots .canvas-result-media,
+.canvas-task-slots .canvas-slot-placeholder {
+  width: 150px;
+  height: 150px;
+  min-height: 0;
+}
+
+.canvas-task-slots .canvas-slot-placeholder {
+  padding: 8px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.canvas-task-slots .canvas-slot-error,
+.canvas-task-slots .canvas-slot-warning {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.canvas-result-media {
+  position: relative;
+}
+
+.canvas-task-slots .canvas-result-media img,
+.canvas-task-slots .canvas-result-media video,
+.canvas-wall-item .canvas-result-media img,
+.canvas-wall-item .canvas-result-media video {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  object-fit: cover;
+}
+
+.canvas-play-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+}
+
+.canvas-thumb-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.canvas-thumb-actions .icon-button {
+  width: 28px;
+  height: 28px;
+}
+
+.canvas-wall {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.canvas-wall-item {
+  position: relative;
+  margin: 0;
+}
+
+.canvas-wall-item .canvas-result-media {
+  width: 100%;
+  aspect-ratio: 1;
+}
+
+.canvas-saved-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--success);
+  color: #fff;
+  pointer-events: none;
+}
+
+/* 悬停或键盘聚焦时才出现提示词和按钮，平时只看图 */
+.canvas-wall-caption {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  left: 1px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+  color: #fff;
+  font-size: 12px;
+  opacity: 0;
+  padding: 18px 6px 6px;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.canvas-wall-item:hover .canvas-wall-caption,
+.canvas-wall-item:focus-within .canvas-wall-caption {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.canvas-wall-caption > span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-wall-caption .icon-button {
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.92);
+  color: #18181b;
+}
+
+/* 生成好但有提醒（比如横竖和选的不一样）：左上角小三角，悬停看原因（视频不会有这个提醒，不和播放图标冲突） */
+.canvas-warning-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--warning);
+  color: #fff;
+}
+
+.canvas-wall-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.canvas-viewer-bar > .canvas-viewer-prompt {
+  min-width: 0;
+  flex: 1 1 200px;
+  margin-right: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

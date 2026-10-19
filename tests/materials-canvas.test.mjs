@@ -183,3 +183,46 @@ test('画布状态：提交只带一次来源组（提示词改过就不算）�
   assert.equal(getCanvasState().draft.prompt, '原提示词');
   assert.deepEqual([isVideoModel('agnes-video-2.5'), isVideoModel('grok-imagine-image')], [true, false]);
 });
+
+// 主人反馈：选 16:9 出来竖图。实测网关不认 size 参数，只按提示词决定横竖，所以比例也要写进生成规则。
+test('选了固定尺寸时，生成规则里写明比例和横竖；自动尺寸不写', async () => {
+  const { aspectRatioRule } = await import('../electron/materials/canvas.ts');
+  const landscape = aspectRatioRule({ size: '1312x736', ratio: '16:9' });
+  assert.match(landscape, /16:9 横版（1312×736）/);
+  assert.match(landscape, /16:9 landscape/);
+  assert.match(aspectRatioRule({ size: '832x1248', ratio: '2:3' }), /2:3 竖版/);
+  assert.match(aspectRatioRule({ size: '800x1200' }), /画面比例必须是 竖版（800×1200）/);
+  assert.match(aspectRatioRule({ size: '1024x1024', ratio: '1:1' }), /1:1 方形/);
+  assert.equal(aspectRatioRule({ size: 'auto' }), '');
+  assert.equal(aspectRatioRule({}), '');
+});
+
+test('生图请求的提示词里带上比例规则，和用户自己的生成规则一起发', async () => {
+  const api = await startFakeImageApi();
+  try {
+    await generateMedia(runtimeWith({ provider: 'openai-compatible', baseUrl: api.baseUrl, apiKey: 'k', model: 'gpt-image-2.5-sunburst' }), { prompt: '窗边的女孩', size: '1312x736', ratio: '16:9', n: 1 });
+    const body = JSON.parse(api.requests.at(-1).body);
+    assert.equal(body.size, '1312x736');
+    assert.match(body.prompt, /窗边的女孩/);
+    assert.match(body.prompt, /画面比例必须是 16:9 横版（1312×736）/);
+  } finally {
+    api.server.close();
+  }
+});
+
+test('模型给的图横竖和选的不一样时给出提示，相近尺寸不算不对', async () => {
+  const { sizeMismatchWarning } = await import('../electron/materials/canvas.ts');
+  const pngOf = (width, height) => {
+    const png = Buffer.from(PNG);
+    png.writeUInt32BE(width, 16);
+    png.writeUInt32BE(height, 20);
+    return png;
+  };
+  const warning = sizeMismatchWarning({ size: '1312x736', ratio: '16:9' }, pngOf(1024, 1536));
+  assert.match(warning, /选的是 16:9 横版，模型给的是 1024×1536 竖版/);
+  assert.equal(sizeMismatchWarning({ size: '1312x736', ratio: '16:9' }, pngOf(1536, 1024)), '');
+  assert.equal(sizeMismatchWarning({ size: '1312x736', ratio: '16:9' }, pngOf(1673, 940)), '');
+  assert.equal(sizeMismatchWarning({ size: '1024x1024' }, pngOf(1050, 1000)), '');
+  assert.equal(sizeMismatchWarning({ size: 'auto' }, pngOf(1024, 1536)), '');
+  assert.equal(sizeMismatchWarning({ size: '1312x736' }, Buffer.from('不是图片')), '');
+});

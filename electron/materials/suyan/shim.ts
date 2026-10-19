@@ -47,7 +47,7 @@ export async function readCanvasReferenceImage(_fileName: string): Promise<{ dat
 // 尺寸和通道读文件头，纯 JS，Node 测试也能用；透明度和转 JPEG 要解码像素，用 Electron 的 nativeImage。
 type ImageHeader = { format: 'png' | 'jpeg' | 'webp'; width: number; height: number; channels: number; hasAlpha: boolean };
 
-function readImageHeader(bytes: Buffer): ImageHeader | null {
+export function readImageHeader(bytes: Buffer): ImageHeader | null {
   if (bytes.length > 26 && bytes.readUInt32BE(0) === 0x89504e47) {
     const colorType = bytes[25];
     const channels = colorType === 6 ? 4 : colorType === 4 ? 2 : colorType === 0 ? 1 : 3;
