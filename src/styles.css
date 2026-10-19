@@ -5943,7 +5943,8 @@ html.dark {
 
 .document-browser-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--document-pane-width, 400px);
+  /* 预览栏按存的宽度，但至少给文件列表留 320px（再窄复制、打开按钮就放不下） */
+  grid-template-columns: minmax(0, 1fr) min(var(--document-pane-width, 400px), calc(100% - 336px));
   align-items: start;
   gap: 16px;
 }
@@ -6090,7 +6091,7 @@ html.dark {
   }
 }
 
-@container (max-width: 360px) {
+@container (max-width: 400px) {
   .document-list-header {
     grid-template-columns: minmax(0, 1fr) 68px;
   }

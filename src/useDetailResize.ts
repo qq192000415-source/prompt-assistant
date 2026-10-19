@@ -8,7 +8,8 @@ export function useDetailResize(load: () => number, save: (width: number) => voi
   const onPointerDown = (event: PointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
     const startX = event.clientX;
-    const startWidth = width;
+    // 从实际显示的宽度起拖：栏被 CSS 压窄时（存的比显示的宽），往回拖不会先空拖一段。
+    const startWidth = clampCanvasDetailWidth(event.currentTarget.parentElement?.getBoundingClientRect().width ?? width);
     let latest = startWidth;
     document.body.classList.add('resizing-detail');
     const move = (moveEvent: globalThis.PointerEvent) => {
