@@ -52,6 +52,8 @@ export function createCanvasQueue(deps: Deps) {
   const payloads = new Map<string, AiImageGenerationPayload>();
   // 每次开跑一个槽位发一个令牌；取消或重试后令牌变了，迟到的结果直接丢掉。
   const tokens = new Map<QueueSlot, object>();
+  // 图已经生成好、正在存进 NAS 历史的槽位：这时钱已经花了、历史马上就有，取消不再作用于它，否则队列显示「已取消」而历史里是好图。
+  const saving = new Set<QueueSlot>();
   let running = 0;
 
   const find = (taskId: string) => {
@@ -87,6 +89,7 @@ export function createCanvasQueue(deps: Deps) {
         }
         if (!alive()) return;
         if (generated.model) task.model = generated.model;
+        saving.add(slot);
         try {
           slot.media = await deps.persist(task, slot, generated);
           slot.dataUrl = null;
@@ -94,10 +97,14 @@ export function createCanvasQueue(deps: Deps) {
         } catch (error) {
           slot.dataUrl = generated.dataUrl;
           slot.error = [generated.warning, `图生成好了，但没存进 NAS 的生成历史：${reason(error)}。可以先存入素材库或另存为`].filter(Boolean).join('。');
+        } finally {
+          saving.delete(slot);
         }
         if (!alive()) return;
         slot.revisedPrompt = generated.revisedPrompt;
         slot.status = 'done';
+        // 全部成功的任务不会再重试，请求参数（图生图时含参考图的 base64，可能几 MB）不用再留在内存里。
+        if (task.slots.every((entry) => entry.status === 'done')) payloads.delete(task.id);
         deps.onChange();
         return;
       }
@@ -155,7 +162,7 @@ export function createCanvasQueue(deps: Deps) {
     cancel(taskId: string) {
       const task = find(taskId);
       for (const slot of task.slots) {
-        if (slot.status !== 'queued' && slot.status !== 'running') continue;
+        if ((slot.status !== 'queued' && slot.status !== 'running') || saving.has(slot)) continue;
         release(slot);
         slot.status = 'canceled';
         slot.error = '';

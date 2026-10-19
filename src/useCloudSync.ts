@@ -84,8 +84,9 @@ export function useCloudSync({ library, syncRecords, applySnapshot, addSyncRecor
 
   // 登录和手动同步共用：拉云端、合并、应用到本机、写回云端。
   const reconcileAndSave = async (uid: string, settings: CloudSettings, action: 'login' | 'manual', isCanceled = () => false) => {
-    const localSnapshot = latestSnapshotRef.current ?? { ...library, syncRecords };
     const cloudSnapshot = await loadCloudSnapshot(uid, settings);
+    // 拉云端之后再取本机快照：网慢时用户在「正在同步」期间做的修改也算进去，不会被合并结果盖掉。
+    const localSnapshot = latestSnapshotRef.current ?? { ...library, syncRecords };
     const { snapshot, pullCloudOnly } = reconcileWithCloud(localSnapshot, cloudSnapshot);
     if (isCanceled()) return null;
 

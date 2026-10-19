@@ -4398,18 +4398,23 @@ h2 {
   justify-self: center;
 }
 
+/* 全屏查看：左边大图，右边信息栏。列宽写死 minmax(0, 1fr)，长提示词撑不宽图片列 */
 .canvas-viewer-body {
   position: relative;
   display: grid;
-  width: min(96vw, 1400px);
+  width: min(96vw, 1600px);
   height: min(92vh, 1000px);
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 12px;
 }
 
+/* 行列也写死，图片的 max-width / max-height: 100% 才有确定的参照，竖图不会超出窗口 */
 .canvas-viewer-media {
   display: grid;
+  min-width: 0;
   min-height: 0;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   place-items: center;
 }
 
@@ -4420,21 +4425,59 @@ h2 {
   object-fit: contain;
 }
 
-.canvas-viewer-bar {
+.canvas-viewer-info {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
   border-radius: var(--radius-md);
   background: var(--surface);
-  padding: 8px 12px;
+  padding: 12px;
 }
 
-.canvas-viewer-bar > span {
+.canvas-viewer-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.canvas-viewer-head > span {
   margin-right: auto;
   color: var(--muted);
   font-size: 13px;
+}
+
+.canvas-viewer-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.canvas-viewer-prompt {
+  flex: 0 1 auto;
+  min-height: 3em;
+  overflow-y: auto;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.canvas-viewer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+@media (max-width: 760px) {
+  .canvas-viewer-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .canvas-viewer-info {
+    max-height: 40vh;
+  }
 }
 
 @keyframes canvas-scan {
@@ -4911,13 +4954,74 @@ h2 {
   font-size: 12px;
 }
 
-.canvas-viewer-bar > .canvas-viewer-prompt {
-  min-width: 0;
-  flex: 1 1 200px;
-  margin-right: 0;
-  overflow: hidden;
+/* 图读不到时的占位：缩略图格子里和全屏查看里都用 */
+.canvas-media-missing {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  place-items: center;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.canvas-viewer-media > .canvas-media-missing {
+  width: auto;
+  height: auto;
+  padding: 16px 20px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
   color: var(--text);
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 14px;
+}
+
+/* 按任务：左边时间、提示词和操作，右边缩略图（1.8.4）。生成记录区窄于 560px 时上下排 */
+.canvas-stage {
+  container-type: inline-size;
+}
+
+.canvas-task {
+  grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: start;
+  column-gap: 16px;
+}
+
+.canvas-task-info {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 8px;
+}
+
+.canvas-task-info .canvas-task-prompt {
+  -webkit-line-clamp: 5;
+}
+
+.canvas-task-slots,
+.canvas-task-slots.is-count-1,
+.canvas-task-slots.is-count-2,
+.canvas-task-slots.is-count-3,
+.canvas-task-slots.is-count-4 {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.canvas-task-slots .canvas-slot {
+  width: 150px;
+}
+
+@container (max-width: 560px) {
+  .canvas-task {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .canvas-task-slots,
+  .canvas-task-slots.is-count-1,
+  .canvas-task-slots.is-count-2,
+  .canvas-task-slots.is-count-3,
+  .canvas-task-slots.is-count-4 {
+    justify-content: flex-start;
+  }
 }

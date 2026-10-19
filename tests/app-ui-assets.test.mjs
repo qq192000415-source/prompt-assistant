@@ -389,3 +389,12 @@ test('桌面、托盘、悬浮窗图标资源使用新的 PNG 图案', () => {
   assert.match(floatingHtml, /box-shadow:\s*none;/);
   assert.equal(packageJson.build.win.icon, 'assets/icon.ico');
 });
+
+// 1.8.3 的回归：全屏查看的图片列没写宽度时，会被长提示词撑到几千像素，图被挤出窗口；行没写死时竖图超出窗口高度。
+test('画布全屏查看的图片区行列宽度固定，不被内容撑开', () => {
+  const styles = readText('src', 'styles.css');
+  const rule = (selector) => styles.match(new RegExp(`\\n${escapeRegExp(selector)} \\{([^}]*)\\}`))?.[1] ?? '';
+  assert.match(rule('.canvas-viewer-body'), /grid-template-columns:\s*minmax\(0, 1fr\)/);
+  assert.match(rule('.canvas-viewer-media'), /grid-template:\s*minmax\(0, 1fr\) \/ minmax\(0, 1fr\)/);
+  assert.match(rule('.canvas-viewer-prompt'), /white-space:\s*pre-wrap/);
+});

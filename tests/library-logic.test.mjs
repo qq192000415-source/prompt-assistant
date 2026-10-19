@@ -290,3 +290,59 @@ test('写回云端前记一条同步记录放最前，并清掉过期记录和�
   assert.deepEqual(stamped.prompts.map((item) => item.id), ['keep']);
   assert.ok(Date.parse(stamped.updatedAt) >= Date.now() - 1000);
 });
+
+const deletion = (id, item, minutes, extra = {}) => ({ id, prompt: item, deletedAt: ago(minutes), source: 'prompt', sourceName: '写作', ...extra });
+
+test('云端合并：两台设备各删一条，两边的删除都生效，删除记录都保留', () => {
+  // A 删了 x（5 分钟前）已写到云端；B 没拉取就删了 y（2 分钟前），保存冲突后合并。
+  const cloud = snapshot({
+    prompts: [prompt('y'), prompt('keep')],
+    deletedRecords: [deletion('rx', prompt('x'), 5)],
+    exportSettings: { libraryUpdatedAt: ago(5), deletedRecordsUpdatedAt: ago(5) },
+  });
+  const local = snapshot({
+    prompts: [prompt('x'), prompt('keep')],
+    deletedRecords: [deletion('ry', prompt('y'), 2)],
+    exportSettings: { libraryUpdatedAt: ago(2), deletedRecordsUpdatedAt: ago(2) },
+  });
+
+  const merged = mergeCloudSnapshot(local, cloud);
+  assert.deepEqual(merged.prompts.map((item) => item.id), ['keep']);
+  assert.deepEqual(merged.deletedRecords.map((record) => record.id).sort(), ['rx', 'ry']);
+});
+
+test('云端合并：这台删除时，另一台同时新增的提示词不会被顺带删掉', () => {
+  const cloud = snapshot({
+    prompts: [prompt('x'), prompt('keep'), prompt('n', { createdAt: ago(10), updatedAt: ago(10) })],
+    exportSettings: { libraryUpdatedAt: ago(10) },
+  });
+  const local = snapshot({
+    prompts: [prompt('keep')],
+    deletedRecords: [deletion('rx', prompt('x'), 2)],
+    exportSettings: { libraryUpdatedAt: ago(2), deletedRecordsUpdatedAt: ago(2) },
+  });
+
+  assert.deepEqual(mergeCloudSnapshot(local, cloud).prompts.map((item) => item.id).sort(), ['keep', 'n']);
+});
+
+test('云端合并：一台移除或清空了删除记录（隐藏），另一台的旧副本不会把记录带回列表，也不会复活提示词', () => {
+  const gone = prompt('gone');
+  const local = snapshot({ prompts: [prompt('keep')], deletedRecords: [deletion('r1', gone, 10, { hidden: true })] });
+  const staleCloud = snapshot({ prompts: [prompt('keep'), gone], deletedRecords: [deletion('r1', gone, 10)] });
+
+  for (const merged of [mergeCloudSnapshot(local, staleCloud), mergeCloudSnapshot(staleCloud, local)]) {
+    assert.deepEqual(merged.prompts.map((item) => item.id), ['keep']);
+    assert.equal(merged.deletedRecords.length, 1);
+    assert.equal(merged.deletedRecords[0].hidden, true);
+  }
+});
+
+test('云端合并：恢复过的提示词（记录已隐藏、提示词更新过）在另一台设备上也保留', () => {
+  const restored = prompt('back', { updatedAt: ago(1) });
+  const local = snapshot({ prompts: [restored], deletedRecords: [deletion('r1', prompt('back'), 10, { hidden: true })] });
+  const cloud = snapshot({ deletedRecords: [deletion('r1', prompt('back'), 10)] });
+
+  const merged = mergeCloudSnapshot(cloud, local);
+  assert.deepEqual(merged.prompts.map((item) => item.id), ['back']);
+  assert.equal(merged.deletedRecords[0].hidden, true);
+});

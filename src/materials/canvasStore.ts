@@ -80,6 +80,9 @@ export const canvas = {
   clearError() {
     set({ error: '' });
   },
+  showError(error: string) {
+    set({ error });
+  },
   setQueue(queue: MaterialCanvasTask[]) {
     set({ queue });
   },

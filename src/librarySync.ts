@@ -185,9 +185,9 @@ const mergeDeletedRecords = (localRecords: DeletedPromptRecord[], cloudRecords: 
 
   for (const record of localRecords.filter((item) => isFreshRecord(item.deletedAt))) {
     const existing = merged.get(record.id);
-    if (!existing || Date.parse(record.deletedAt) >= Date.parse(existing.deletedAt)) {
-      merged.set(record.id, record);
-    }
+    const winner = !existing || Date.parse(record.deletedAt) >= Date.parse(existing.deletedAt) ? record : existing;
+    // 任何一边隐藏过（恢复、移除、清空），合并后都保持隐藏。
+    merged.set(record.id, existing?.hidden || record.hidden ? { ...winner, hidden: true } : winner);
   }
 
   return Array.from(merged.values()).sort((a, b) => Date.parse(b.deletedAt) - Date.parse(a.deletedAt));
@@ -244,21 +244,6 @@ const getSnapshotSyncStateTime = (snapshot: CloudSnapshot) => {
   const settings = normalizeExportSettings(snapshot.exportSettings);
   const explicitTime = Date.parse(settings.syncRecordsUpdatedAt ?? '');
   return Number.isFinite(explicitTime) ? explicitTime : getLatestSyncRecordTime(snapshot.syncRecords ?? []);
-};
-
-const chooseDeletedRecords = (localSnapshot: CloudSnapshot, cloudSnapshot: CloudSnapshot) => {
-  const localTime = getSnapshotDeletedStateTime(localSnapshot);
-  const cloudTime = getSnapshotDeletedStateTime(cloudSnapshot);
-
-  if (localTime > cloudTime) {
-    return localSnapshot.deletedRecords.filter((record) => isFreshRecord(record.deletedAt));
-  }
-
-  if (cloudTime > localTime) {
-    return cloudSnapshot.deletedRecords.filter((record) => isFreshRecord(record.deletedAt));
-  }
-
-  return mergeDeletedRecords(localSnapshot.deletedRecords, cloudSnapshot.deletedRecords);
 };
 
 const chooseSyncRecords = (localSnapshot: CloudSnapshot, cloudSnapshot: CloudSnapshot) => {
@@ -323,23 +308,16 @@ const mergeSubcategoryMap = (localMap: Record<string, string[]>, cloudMap: Recor
 };
 
 export const mergeCloudSnapshot = (localSnapshot: CloudSnapshot, cloudSnapshot: CloudSnapshot): CloudSnapshot => {
-  const deletedRecords = chooseDeletedRecords(localSnapshot, cloudSnapshot);
+  // 删除记录两边取并集：以前谁新整份用谁的，两台设备各删一条时其中一台的删除会被撤销、那条提示词复活。
+  const deletedRecords = mergeDeletedRecords(localSnapshot.deletedRecords, cloudSnapshot.deletedRecords);
   const syncRecords = chooseSyncRecords(localSnapshot, cloudSnapshot);
-  const localPromptIds = new Set(localSnapshot.prompts.map((prompt) => prompt.id));
   const localLibraryTime = getSnapshotLibraryTime(localSnapshot);
   const cloudLibraryTime = getSnapshotLibraryTime(cloudSnapshot);
   const preferLocalLibrary = localLibraryTime >= cloudLibraryTime;
   const localLibraryIsNewerAndEmpty = localLibraryTime > cloudLibraryTime && localSnapshot.prompts.length === 0;
-  const localDeletedTime = getSnapshotDeletedStateTime(localSnapshot);
-  const cloudDeletedTime = getSnapshotDeletedStateTime(cloudSnapshot);
-  let prompts = localLibraryIsNewerAndEmpty
-    ? []
-    : mergePrompts(localSnapshot.prompts, cloudSnapshot.prompts, deletedRecords);
-
-  if (localDeletedTime > cloudDeletedTime) {
-    prompts = prompts.filter((prompt) => localPromptIds.has(prompt.id) || getPromptTime(prompt) > localDeletedTime);
-  }
-  prompts = dedupePrompts(prompts);
+  // 删掉的条目只靠删除记录挡住（mergePrompts 里过滤）。以前这里还会把「本机没有、又比本机删除时间早」的云端条目一并去掉，
+  // 另一台设备同时新增的提示词会被误删。
+  const prompts = localLibraryIsNewerAndEmpty ? [] : mergePrompts(localSnapshot.prompts, cloudSnapshot.prompts, deletedRecords);
 
   const pickList = (local: string[], cloud: string[]) => (preferLocalLibrary ? local : mergeStringList(cloud, local));
   const pickMap = (local: Record<string, string[]>, cloud: Record<string, string[]>) =>

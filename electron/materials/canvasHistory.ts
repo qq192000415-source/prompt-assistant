@@ -92,11 +92,21 @@ function normalizeTask(raw: unknown): HistoryTask | null {
   };
 }
 
-// 读不懂的任务跳过并计数，和素材库的 normalizeLibrary 一样。
+// 读不懂的任务和槽位跳过并计数，和素材库的 normalizeLibrary 一样，界面会提示下次写入时它们不会被保留。
 export function normalizeHistory(raw: unknown): { history: CanvasHistory; dropped: number } {
   const source = isRecord(raw) && Array.isArray(raw.tasks) ? raw.tasks : [];
-  const tasks = source.map(normalizeTask).filter((task): task is HistoryTask => task !== null);
-  return { history: { schemaVersion: 1, updatedAt: isRecord(raw) ? text(raw.updatedAt) : '', tasks }, dropped: source.length - tasks.length };
+  const tasks: HistoryTask[] = [];
+  let dropped = 0;
+  for (const entry of source) {
+    const task = normalizeTask(entry);
+    if (!task) {
+      dropped += 1;
+      continue;
+    }
+    dropped += (isRecord(entry) && Array.isArray(entry.slots) ? entry.slots.length : 0) - task.slots.length;
+    tasks.push(task);
+  }
+  return { history: { schemaVersion: 1, updatedAt: isRecord(raw) ? text(raw.updatedAt) : '', tasks }, dropped };
 }
 
 function parseHistory(content: string | null) {

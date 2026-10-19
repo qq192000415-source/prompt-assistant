@@ -153,6 +153,10 @@ function App() {
   // 素材库和创作画布共用素材库视图（画布生成的图存进素材库，参考图也从素材库来）。
   const isMaterialsMode = libraryMode === 'materials' || libraryMode === 'canvas';
   const [deletedRecords, setDeletedRecords] = useState<DeletedPromptRecord[]>(() => loadDeletedRecords());
+  // 恢复、移除、清空过的记录只隐藏不删（见 DeletedPromptRecord.hidden），列表和计数只算看得见的。
+  const visibleDeletedRecords = deletedRecords.filter((record) => !record.hidden);
+  const hideDeletedRecords = (shouldHide: (record: DeletedPromptRecord) => boolean) =>
+    setDeletedRecords((items) => items.map((item) => (shouldHide(item) ? { ...item, hidden: true } : item)));
   const [syncRecords, setSyncRecords] = useState<SyncRecord[]>(() => loadSyncRecords());
   const [promptCategories, setPromptCategories] = useState<string[]>(() => loadCategories());
   const [promptSubcategories, setPromptSubcategories] = useState<Record<string, string[]>>(() => loadSubcategories());
@@ -731,7 +735,7 @@ function App() {
   };
 
   const restoreDeletedRecord = (recordId: string) => {
-    const record = deletedRecords.find((item) => item.id === recordId);
+    const record = visibleDeletedRecords.find((item) => item.id === recordId);
     if (!record) return;
 
     const existingIds = new Set(allItems.map((prompt) => prompt.id));
@@ -758,7 +762,7 @@ function App() {
     }
     markDeletedRecordsChanged();
     setPrompts((items) => appendPromptsToCategoryEnd(items, [restoredPrompt]));
-    setDeletedRecords((items) => items.filter((item) => item.id !== recordId));
+    hideDeletedRecords((item) => item.id === recordId);
     setLibraryMode(restoreIntoDocuments ? 'documents' : 'prompts');
     setActiveView(`category:${restoredPrompt.category}`);
     setDisplayMode('single');
@@ -768,7 +772,7 @@ function App() {
   };
 
   const removeDeletedRecord = (recordId: string) => {
-    const record = deletedRecords.find((item) => item.id === recordId);
+    const record = visibleDeletedRecords.find((item) => item.id === recordId);
     if (!record) return;
 
     askConfirm({
@@ -777,25 +781,25 @@ function App() {
       confirmLabel: '确认移除',
       onConfirm: () => {
         markDeletedRecordsChanged();
-        setDeletedRecords((items) => items.filter((item) => item.id !== recordId));
+        hideDeletedRecords((item) => item.id === recordId);
         showToast('删除记录已移除');
       },
     });
   };
 
   const clearDeletedRecords = () => {
-    if (!deletedRecords.length) {
+    if (!visibleDeletedRecords.length) {
       showToast('暂无删除记录');
       return;
     }
 
     askConfirm({
       title: '清空删除记录',
-      message: `确认清空全部 ${deletedRecords.length} 条删除记录？清空后不能恢复。`,
+      message: `确认清空全部 ${visibleDeletedRecords.length} 条删除记录？清空后不能恢复。`,
       confirmLabel: '清空全部',
       onConfirm: () => {
         markDeletedRecordsChanged();
-        setDeletedRecords([]);
+        hideDeletedRecords(() => true);
         showToast('删除记录已清空');
       },
     });
@@ -1232,7 +1236,7 @@ function App() {
         cloudEmail={cloud.cloudEmail}
         cloudEnabled={cloud.cloudEnabled}
         cloudStatus={cloud.cloudStatus}
-        deletedCount={deletedRecords.length}
+        deletedCount={visibleDeletedRecords.length}
         exportFormat={exportFormat}
         favoriteCount={prompts.filter((prompt) => prompt.favorite).length}
         importFormat={importFormat}
@@ -1296,7 +1300,7 @@ function App() {
 
         {activeView === 'trash' ? (
           <DeletedRecordsView
-            records={deletedRecords}
+            records={visibleDeletedRecords}
             onClearAll={clearDeletedRecords}
             onRemove={removeDeletedRecord}
             onRestore={restoreDeletedRecord}

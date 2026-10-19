@@ -152,12 +152,14 @@ function writeSettings(settings) {
   return nextSettings;
 }
 
-function isAllowedNavigation(url) {
+// 只放行软件自己的页面（当前已加载的那一页）。以前放行所有 file://，把文件拖进窗口时 Chromium 会直接打开这个文件，整个软件界面就没了。
+function isAllowedNavigation(url, currentUrl) {
   if (isDev && devServerUrl && url.startsWith(devServerUrl)) {
     return true;
   }
 
-  return url.startsWith('file://');
+  const withoutHash = (value) => value.split(/[?#]/)[0];
+  return url.startsWith('file://') && withoutHash(url) === withoutHash(currentUrl);
 }
 
 // 只把网页链接交给系统浏览器，file:、自定义协议等一律忽略。
@@ -661,7 +663,7 @@ function createWindow() {
   });
 
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (isAllowedNavigation(url)) return;
+    if (isAllowedNavigation(url, mainWindow.webContents.getURL())) return;
 
     event.preventDefault();
     openExternalWebUrl(url);

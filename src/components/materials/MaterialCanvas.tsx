@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { Check, ChevronLeft, ChevronRight, ClipboardPaste, Download, ImagePlus, Play, RotateCcw, Save, Search, Settings, Sparkles, Trash2, TriangleAlert, Wand2, X } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, ClipboardPaste, Copy, Download, ImagePlus, Play, RotateCcw, Save, Search, Settings, Sparkles, Trash2, TriangleAlert, Wand2, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import type { MaterialLibraryController } from '../../materials/useMaterialLibrary';
 import { loadCanvasRecordView, saveCanvasRecordView, type CanvasRecordView } from '../../localState';
+import { copyToClipboard } from '../../promptUtils';
 import { canvas, getCanvasState, isActive, isVideoModel, savedInHistory, useCanvasState, visibleTasks } from '../../materials/canvasStore';
 import {
   canvasAspectRatioOptions,
@@ -85,7 +86,10 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
   const reloadHistory = () =>
     controller
       .canvasHistory()
-      .then(({ history: loaded }) => canvas.setHistory(loaded.tasks))
+      .then(({ history: loaded, dropped }) => {
+        canvas.setHistory(loaded.tasks);
+        if (dropped) canvas.showError(`生成历史里有 ${dropped} 条记录读不懂（可能是别的电脑上更新的版本写的），已跳过；下次生成时它们不会被保留`);
+      })
       .catch((loadError) => {
         // 读不到（比如 NAS 暂时连不上）时保留已有的，界面不卡在「正在读取」。
         console.warn('读取生成历史失败', loadError);
@@ -111,7 +115,10 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
       if (target?.closest('input, textarea, [contenteditable="true"]') || viewing) return;
       if (!event.clipboardData?.types.some((type) => type.startsWith('image/') || type === 'Files')) return;
       event.preventDefault();
-      void pasteReference();
+      // 在资源管理器里复制的图片文件只在 clipboardData.files 里，主进程 readImage 读不到，所以先用这里的文件。
+      const images = [...event.clipboardData.files].filter((file) => file.type.startsWith('image/'));
+      if (images.length) void addReferenceFiles(images);
+      else void pasteReference();
     };
     document.addEventListener('paste', onPaste);
     return () => document.removeEventListener('paste', onPaste);
@@ -122,10 +129,13 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
     if (dataUrl) canvas.addReferences([{ fileName: '', title: '剪贴板图片', dataUrl }]);
   };
 
+  const addReferenceFiles = async (files: File[]) =>
+    canvas.addReferences(await Promise.all(files.map(async (file) => ({ fileName: '', title: file.name, dataUrl: await readAsDataUrl(file) }))));
+
   const pickReferences = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = [...(event.target.files ?? [])];
     event.target.value = '';
-    canvas.addReferences(await Promise.all(files.map(async (file) => ({ fileName: '', title: file.name, dataUrl: await readAsDataUrl(file) }))));
+    await addReferenceFiles(files);
   };
 
   const optimize = async (key: 'prompt' | 'negativePrompt') => {
@@ -141,8 +151,12 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
     setSubmitting(false);
   };
 
+  // 本次打开画布后存过的：没存进生成历史、只在内存里的图没有历史标记可读，靠这里记住，按钮才会变成「已存入」。
+  const [savedNow, setSavedNow] = useState<ReadonlySet<string>>(new Set());
   const save = async (task: MaterialCanvasTask, slot: MaterialCanvasSlot) => {
-    if (await controller.canvasSave(task.id, slot.index)) void reloadHistory();
+    if (!(await controller.canvasSave(task.id, slot.index))) return;
+    setSavedNow((keys) => new Set(keys).add(`${task.id}:${slot.index}`));
+    void reloadHistory();
   };
 
   const removeTask = async (task: MaterialCanvasTask) => {
@@ -151,7 +165,8 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
   };
 
   const viewerEntries = tasks.flatMap((task) => task.slots.filter((slot) => slot.status === 'done').map((slot) => ({ task, slot })));
-  const slotSaved = (task: MaterialCanvasTask, slot: MaterialCanvasSlot) => Boolean(slot.savedToLibrary) || savedInHistory(history, task.id, slot.index);
+  const slotSaved = (task: MaterialCanvasTask, slot: MaterialCanvasSlot) =>
+    Boolean(slot.savedToLibrary) || savedNow.has(`${task.id}:${slot.index}`) || savedInHistory(history, task.id, slot.index);
   const resultActions = (task: MaterialCanvasTask, slot: MaterialCanvasSlot, compact = false) => {
     const saved = slotSaved(task, slot);
     // 缩略图下面地方小，只放两个图标按钮；改写后的提示词在全屏查看里复用。
@@ -495,14 +510,19 @@ const slotSrc = (slot: MaterialCanvasSlot, full = false) => {
 const isVideoSlot = (slot: MaterialCanvasSlot) => slot.media?.kind === 'video' || Boolean(slot.dataUrl?.startsWith('data:video/'));
 
 // 列表里只放缩略图（视频用封面，没有封面时显示第一帧），点开到全屏里看大图、播视频。
+// 缩略图读不到（丢了、NAS 暂时连不上）先换原图，原图也读不到就写明，不留破图标。
 function SlotThumb({ slot, isNew, onView }: { slot: MaterialCanvasSlot; isNew: boolean; onView: () => void }) {
   const video = isVideoSlot(slot);
+  const [full, setFull] = useState(false);
+  const [broken, setBroken] = useState(false);
   return (
     <button type="button" className={`canvas-result-media ${isNew ? 'is-new' : ''}`} aria-label="全屏查看" onClick={onView}>
-      {video && !slot.media?.hasThumb ? (
-        <video src={slotSrc(slot, true)} muted playsInline preload="metadata" />
+      {broken ? (
+        <span className="canvas-media-missing">读不到这张图</span>
+      ) : video && !slot.media?.hasThumb ? (
+        <video src={slotSrc(slot, true)} muted playsInline preload="metadata" onError={() => setBroken(true)} />
       ) : (
-        <img src={slotSrc(slot)} alt="生成结果" loading="lazy" />
+        <img src={slotSrc(slot, full)} alt="生成结果" loading="lazy" onError={() => (full || !slot.media?.hasThumb ? setBroken(true) : setFull(true))} />
       )}
       {video && (
         <span className="canvas-play-badge" aria-hidden="true">
@@ -580,11 +600,15 @@ function CanvasTaskCard({ task, inQueue, busy, onView, onRetry, onCancel, onDele
 
   return (
     <article className={`canvas-task ${active ? 'is-active' : ''}`}>
-      <header className="canvas-task-header">
+      {/* 左边提示词和操作，右边结果图；窄的时候上下排 */}
+      <div className="canvas-task-info">
         <span className="canvas-task-meta">
           {time} · {task.model} · {size}
           {task.referenceCount ? ` · ${task.referenceCount} 张参考图` : ''}
         </span>
+        <p className="canvas-task-prompt" title={task.prompt}>
+          {task.prompt}
+        </p>
         <span className="canvas-task-actions">
           <Button className="button ghost compact" type="button" title="把这个任务的提示词放回左边" onClick={onReuse}>
             <RotateCcw size={13} />
@@ -611,10 +635,7 @@ function CanvasTaskCard({ task, inQueue, busy, onView, onRetry, onCancel, onDele
             </Button>
           )}
         </span>
-      </header>
-      <p className="canvas-task-prompt" title={task.prompt}>
-        {task.prompt}
-      </p>
+      </div>
       <div className={`canvas-task-slots is-count-${Math.min(task.total, 4)}`}>
         {slots.map((slot, index) => (
           <figure key={index} className={`canvas-slot is-${slot?.status ?? 'missing'}`}>
@@ -685,6 +706,13 @@ function CanvasViewer({
   const index = Math.max(0, entries.findIndex((entry) => key(entry) === currentId));
   const entry = entries[index];
   const [size, setSize] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [broken, setBroken] = useState(false);
+  // 换了一张就清掉上一张的尺寸和「读不到」状态。
+  useEffect(() => {
+    setSize('');
+    setBroken(false);
+  }, [currentId]);
   const go = (step: number) => onChange(key(entries[(index + step + entries.length) % entries.length]));
 
   useEffect(() => {
@@ -698,46 +726,77 @@ function CanvasViewer({
   });
 
   if (!entry) return null;
+  const time = new Date(entry.task.createdAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const copyPrompt = async () => {
+    try {
+      await copyToClipboard(entry.task.prompt);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  };
   return (
     <div className="modal-shell canvas-viewer" role="dialog" aria-modal="true" aria-label="全屏查看">
       <Button className="modal-backdrop" type="button" aria-label="关闭" onClick={onClose} />
+      {/* 左边大图，右边完整提示词和操作。图片列用 minmax(0, 1fr)，不会被长提示词撑宽把图挤出窗口。 */}
       <div className="canvas-viewer-body">
         <div
           className="canvas-viewer-media"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) onClose();
+          }}
           onLoadCapture={(event) => {
             const target = event.target as HTMLImageElement;
             if (target.naturalWidth) setSize(`${target.naturalWidth} × ${target.naturalHeight}`);
           }}
+          onErrorCapture={() => setBroken(true)}
         >
-          {isVideoSlot(entry.slot) ? <video src={slotSrc(entry.slot, true)} controls playsInline /> : <img src={slotSrc(entry.slot, true)} alt="生成结果" />}
+          {broken ? (
+            <p className="canvas-media-missing">读不到这张图：文件可能被删了，或者 NAS 暂时连不上</p>
+          ) : isVideoSlot(entry.slot) ? (
+            <video key={currentId} src={slotSrc(entry.slot, true)} controls playsInline />
+          ) : (
+            <img key={currentId} src={slotSrc(entry.slot, true)} alt="生成结果" />
+          )}
         </div>
-        <div className="canvas-viewer-bar">
-          <span>
-            {index + 1} / {entries.length} · {entry.task.model}
+        <aside className="canvas-viewer-info">
+          <div className="canvas-viewer-head">
+            <span>
+              {index + 1} / {entries.length}
+            </span>
+            {entries.length > 1 && (
+              <>
+                <Button className="icon-button" type="button" aria-label="上一张" title="上一张（←）" onClick={() => go(-1)}>
+                  <ChevronLeft size={18} />
+                </Button>
+                <Button className="icon-button" type="button" aria-label="下一张" title="下一张（→）" onClick={() => go(1)}>
+                  <ChevronRight size={18} />
+                </Button>
+              </>
+            )}
+            <Button className="icon-button" type="button" aria-label="关闭" title="关闭（Esc）" onClick={onClose}>
+              <X size={18} />
+            </Button>
+          </div>
+          <span className="canvas-viewer-meta">
+            {time} · {entry.task.model}
             {size && !isVideoSlot(entry.slot) ? ` · ${size}` : ''}
           </span>
-          <span className="canvas-viewer-prompt" title={entry.task.prompt}>
-            {entry.task.prompt}
-          </span>
-          <Button className="button ghost compact" type="button" title="把这张图的提示词放回左边" onClick={() => onReuse(entry.task)}>
-            <RotateCcw size={13} />
-            复用提示词
-          </Button>
+          {entry.slot.error && <p className="canvas-slot-warning">{entry.slot.error}</p>}
+          <p className="canvas-viewer-prompt">{entry.task.prompt}</p>
+          <div className="canvas-viewer-actions">
+            <Button className="button ghost compact" type="button" onClick={() => void copyPrompt()}>
+              {copied ? <Check size={13} /> : <Copy size={13} />}
+              {copied ? '已复制' : '复制提示词'}
+            </Button>
+            <Button className="button ghost compact" type="button" title="把这张图的提示词放回左边" onClick={() => onReuse(entry.task)}>
+              <RotateCcw size={13} />
+              复用提示词
+            </Button>
+          </div>
           {actions(entry.task, entry.slot)}
-          {entries.length > 1 && (
-            <>
-              <Button className="icon-button" type="button" aria-label="上一张" onClick={() => go(-1)}>
-                <ChevronLeft size={18} />
-              </Button>
-              <Button className="icon-button" type="button" aria-label="下一张" onClick={() => go(1)}>
-                <ChevronRight size={18} />
-              </Button>
-            </>
-          )}
-          <Button className="icon-button" type="button" aria-label="关闭" onClick={onClose}>
-            <X size={18} />
-          </Button>
-        </div>
+        </aside>
       </div>
     </div>
   );

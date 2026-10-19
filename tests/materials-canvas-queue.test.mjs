@@ -179,9 +179,9 @@ test('生成历史：槽位逐个写进同一个任务（重试覆盖），存�
   assert.deepEqual(orphaned.map((entry) => entry.sha256), [sha(1)]);
 
   const { history: normalized, dropped } = normalizeHistory({ tasks: [{ id: 'ok', createdAt: now, slots: [{ index: 0, status: 'done' }] }, { nope: true }] });
-  assert.equal(dropped, 1);
-  // 声称生成好了却没有文件的槽位读不懂，丢掉。
+  // 声称生成好了却没有文件的槽位读不懂，丢掉；读不懂的任务和槽位都计数，界面会提示。
   assert.deepEqual(normalized.tasks[0].slots, []);
+  assert.equal(dropped, 2);
 });
 
 test('生成历史存在 NAS：两台电脑同时写入两边都保留，锁最后都释放', async () => {
@@ -208,4 +208,28 @@ test('生成好但有提醒（比如横竖不对）：槽位照常完成，提�
   assert.equal(slot.status, 'done');
   assert.equal(slot.error, '比例不对：选的是 16:9 横版');
   assert.equal(persisted.length, 1);
+});
+
+test('图正在存进历史时点取消：这张照常完成（历史里已有），没生成好的才取消', async () => {
+  let finishPersist;
+  const calls = [];
+  const queue = createCanvasQueue({
+    generate: (payload) => new Promise((resolve) => calls.push(resolve)),
+    persist: () => new Promise((resolve) => (finishPersist = () => resolve({ sha256: sha(1), ext: '.png', kind: 'image', size: 1, width: 1, height: 1, hasThumb: true }))),
+    recordFailure: async () => {},
+    limits: () => ({ concurrency: 2, retries: 0 }),
+    onChange: () => {},
+    wait: async () => {},
+  });
+  const id = queue.submit(meta(), { prompt: '猫', n: 2 }, 2);
+  calls[0]({ dataUrl: 'data:image/png;base64,AA==', revisedPrompt: null, mediaType: 'image' });
+  await flush();
+  queue.cancel(id);
+  assert.deepEqual(statuses(queue), ['running,canceled']);
+  finishPersist();
+  await flush();
+  const [slot] = queue.snapshot()[0].slots;
+  assert.equal(slot.status, 'done');
+  assert.equal(slot.media.sha256, sha(1));
+  assert.equal(queue.running(), 0);
 });
