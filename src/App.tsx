@@ -79,7 +79,7 @@ import { DocumentView } from './components/DocumentView';
 import { PromptEditor } from './components/PromptEditor';
 import { PromptList } from './components/PromptList';
 import { PromptDetail } from './components/PromptView';
-import { SettingsPanel } from './components/SettingsPanel';
+import { SettingsPage, type SettingsSection } from './components/SettingsPage';
 import { type MoveDirection, Sidebar } from './components/Sidebar';
 import { TopMenuBar } from './components/TopMenuBar';
 import { MaterialLibraryView } from './components/materials/MaterialLibraryView';
@@ -187,8 +187,8 @@ function App() {
   const [exportSettings, setExportSettings] = useState<ExportSettings>(() => loadExportSettings());
   const [desktopSettings, setDesktopSettings] = useState<DesktopRuntimeSettings>(defaultDesktopSettings);
   const [updateStatus, setUpdateStatus] = useState<DesktopUpdateStatus>(defaultUpdateStatus);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsAboutInitiallyOpen, setSettingsAboutInitiallyOpen] = useState(false);
+  // 不为 null 时内容区显示设置页的这一类。
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
   const [closeRequestOpen, setCloseRequestOpen] = useState(false);
@@ -203,9 +203,9 @@ function App() {
     applyTheme(theme);
   }, [theme]);
 
-  const openSettingsPanel = (options?: { about?: boolean }) => {
-    setSettingsAboutInitiallyOpen(Boolean(options?.about));
-    setIsSettingsOpen(true);
+  const openSettings = (section: SettingsSection = 'general') => {
+    setSettingsSection(section);
+    setSidebarOpen(false);
 
     const desktopApi = window.promptAssistantDesktop;
     if (!desktopApi) return;
@@ -1121,7 +1121,7 @@ function App() {
   const manualCloudSync = async () => {
     if (!cloud.cloudEnabled) {
       showToast('请先在设置里配置云端');
-      openSettingsPanel();
+      openSettings('sync');
       return;
     }
 
@@ -1144,42 +1144,86 @@ function App() {
   return (
     <TooltipProvider delayDuration={400}>
     <div className="app-shell">
-      <Button className="mobile-menu" type="button" aria-label="打开导航" onClick={() => setSidebarOpen(true)}>
-        <Menu size={18} />
-      </Button>
+      {!settingsSection && !isMaterialsMode && (
+        <Button className="mobile-menu" type="button" aria-label="打开导航" onClick={() => setSidebarOpen(true)}>
+          <Menu size={18} />
+        </Button>
+      )}
 
       <TopMenuBar
-        activeView={activeView}
-        deletedCount={deletedRecords.length}
-        exportFormat={exportFormat}
-        favoriteCount={prompts.filter((prompt) => prompt.favorite).length}
-        importFormat={importFormat}
-        promptCount={prompts.length}
-        query={query}
-        showSearch={!isMaterialsMode}
-        searchLabel={isDocumentMode ? '文档' : '提示词'}
-        recentCount={prompts.filter((prompt) => prompt.lastUsedAt).length}
-        onChangeView={
-          isMaterialsMode
-            ? (view) => {
-                changeLibraryMode('prompts');
-                changeView(view);
-              }
-            : changeView
-        }
-        onExport={exportPrompts}
-        onExportFormatChange={setExportFormat}
-        onImport={() => fileInputRef.current?.click()}
-        onAddDocuments={() => void addDocuments()}
-        onImportFormatChange={setImportFormat}
-        onOpenSettings={openSettingsPanel}
-        setQuery={setQuery}
+        libraryMode={settingsSection ? null : libraryMode}
+        settingsActive={Boolean(settingsSection)}
+        cloudEmail={cloud.cloudEmail}
+        cloudStatus={cloud.cloudStatus}
+        onChangeLibraryMode={(nextMode) => {
+          // 从设置页回到原来的库时保留之前看的视图和选中项。
+          setSettingsSection(null);
+          if (nextMode !== libraryMode || !settingsSection) changeLibraryMode(nextMode);
+        }}
+        onOpenCloudSettings={() => openSettings('sync')}
+        onOpenSettings={() => openSettings()}
         theme={theme}
         onToggleTheme={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
       />
 
-      {isMaterialsMode ? (
-        <MaterialLibraryView libraryMode={libraryMode} onChangeLibraryMode={changeLibraryMode} notify={showToast} />
+      {settingsSection ? (
+        <SettingsPage
+          section={settingsSection}
+          canManageCloud={cloud.canManageCloudSettings}
+          cloudEmail={cloud.cloudEmail}
+          cloudEnabled={cloud.cloudEnabled}
+          cloudSettings={cloud.cloudSettings}
+          cloudStatus={cloud.cloudStatus}
+          desktopAvailable={Boolean(window.promptAssistantDesktop)}
+          desktopSettings={desktopSettings}
+          exportSettings={exportSettings}
+          syncRecords={syncRecords}
+          updateStatus={updateStatus}
+          notify={showToast}
+          onSectionChange={setSettingsSection}
+          onClearSyncRecords={clearSyncRecords}
+          onCheckUpdate={() => runDesktopUpdateAction('checkForUpdates', '更新检查失败')}
+          onDownloadUpdate={() => runDesktopUpdateAction('downloadUpdate', '更新下载失败')}
+          onInstallUpdate={() => runDesktopUpdateAction('installUpdate', '更新安装失败')}
+          onManualSync={manualCloudSync}
+          onOpenAuth={() => setIsAuthOpen(true)}
+          onSignOut={cloud.signOut}
+          theme={theme}
+          onThemeChange={setTheme}
+          onSave={(settings, nextCloudSettings, nextDesktopSettings) => {
+            cloud.updateCloudSettings(nextCloudSettings);
+            const normalizedExportSettings = normalizeExportSettings(settings, exportSettings);
+            if (JSON.stringify(normalizedExportSettings) !== JSON.stringify(normalizeExportSettings(exportSettings))) {
+              setExportSettings(normalizedExportSettings);
+            }
+            const normalizedDesktopSettings = normalizeDesktopSettings(nextDesktopSettings, desktopSettings);
+            const desktopApi = window.promptAssistantDesktop;
+
+            if (!desktopApi) {
+              setDesktopSettings(normalizedDesktopSettings);
+              showToast('设置已保存');
+              return;
+            }
+
+            void desktopApi
+              .updateSettings(normalizedDesktopSettings)
+              .then((savedDesktopSettings) => {
+                setDesktopSettings(normalizeDesktopSettings(savedDesktopSettings, normalizedDesktopSettings));
+                showToast('设置已保存');
+              })
+              .catch((error) => {
+                const message = error instanceof Error ? error.message : '桌面设置保存失败';
+                showToast(message);
+              });
+          }}
+        />
+      ) : isMaterialsMode ? (
+        <MaterialLibraryView
+          libraryMode={libraryMode}
+          onChangeLibraryMode={changeLibraryMode}
+          onOpenSettings={openSettings}
+          notify={showToast}
+        />
       ) : (
       <>
       <Sidebar
@@ -1188,13 +1232,23 @@ function App() {
         cloudEmail={cloud.cloudEmail}
         cloudEnabled={cloud.cloudEnabled}
         cloudStatus={cloud.cloudStatus}
+        deletedCount={deletedRecords.length}
+        exportFormat={exportFormat}
+        favoriteCount={prompts.filter((prompt) => prompt.favorite).length}
+        importFormat={importFormat}
+        query={query}
+        recentCount={prompts.filter((prompt) => prompt.lastUsedAt).length}
+        setQuery={setQuery}
+        onExport={exportPrompts}
+        onExportFormatChange={setExportFormat}
+        onImport={() => fileInputRef.current?.click()}
+        onImportFormatChange={setImportFormat}
         onAddCategory={openCategoryCreator}
         onAddSubcategory={isDocumentMode ? (category) => void addDocuments(category) : openNewEditorInCategory}
         onChangeView={changeView}
         onClose={() => setSidebarOpen(false)}
         onCreatePrompt={isDocumentMode ? () => void addDocuments() : openNewEditor}
         libraryMode={libraryMode}
-        onChangeLibraryMode={changeLibraryMode}
         onDeleteCategory={deleteCategory}
         onDeletePrompt={deletePrompt}
         onManualSync={manualCloudSync}
@@ -1339,59 +1393,6 @@ function App() {
             upsertPrompt(draft);
             setIsEditorOpen(false);
             setEditorInitialCategory(null);
-          }}
-        />
-      )}
-
-      {isSettingsOpen && (
-        <SettingsPanel
-          canManageCloud={cloud.canManageCloudSettings}
-          cloudSettings={cloud.cloudSettings}
-          desktopAvailable={Boolean(window.promptAssistantDesktop)}
-          desktopSettings={desktopSettings}
-          exportSettings={exportSettings}
-          initialAboutOpen={settingsAboutInitiallyOpen}
-          syncRecords={syncRecords}
-          updateStatus={updateStatus}
-          onClearSyncRecords={clearSyncRecords}
-          onClose={() => {
-            setIsSettingsOpen(false);
-            setSettingsAboutInitiallyOpen(false);
-          }}
-          onCheckUpdate={() => runDesktopUpdateAction('checkForUpdates', '更新检查失败')}
-          onDownloadUpdate={() => runDesktopUpdateAction('downloadUpdate', '更新下载失败')}
-          onInstallUpdate={() => runDesktopUpdateAction('installUpdate', '更新安装失败')}
-          theme={theme}
-          onThemeChange={setTheme}
-          onSave={(settings, nextCloudSettings, nextDesktopSettings) => {
-            cloud.updateCloudSettings(nextCloudSettings);
-            const normalizedExportSettings = normalizeExportSettings(settings, exportSettings);
-            if (JSON.stringify(normalizedExportSettings) !== JSON.stringify(normalizeExportSettings(exportSettings))) {
-              setExportSettings(normalizedExportSettings);
-            }
-            const normalizedDesktopSettings = normalizeDesktopSettings(nextDesktopSettings, desktopSettings);
-            const desktopApi = window.promptAssistantDesktop;
-
-            if (!desktopApi) {
-              setDesktopSettings(normalizedDesktopSettings);
-              setIsSettingsOpen(false);
-              setSettingsAboutInitiallyOpen(false);
-              showToast('设置已保存');
-              return;
-            }
-
-            void desktopApi
-              .updateSettings(normalizedDesktopSettings)
-              .then((savedDesktopSettings) => {
-                setDesktopSettings(normalizeDesktopSettings(savedDesktopSettings, normalizedDesktopSettings));
-                setIsSettingsOpen(false);
-                setSettingsAboutInitiallyOpen(false);
-                showToast('设置已保存');
-              })
-              .catch((error) => {
-                const message = error instanceof Error ? error.message : '桌面设置保存失败';
-                showToast(message);
-              });
           }}
         />
       )}

@@ -1,6 +1,7 @@
 import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
   useEffect,
   useRef,
   useState,
@@ -9,23 +10,39 @@ import { createPortal } from 'react-dom';
 import {
   ArrowDown,
   ArrowUp,
+  ChevronDown,
   ChevronRight,
+  Clock3,
   Cloud,
+  Download,
   FilePlus,
   Folder,
+  Import,
+  LayoutList,
   LogIn,
   LogOut,
   MoreHorizontal,
   Pencil,
   Plus,
+  RotateCcw,
+  Search,
+  Star,
   Trash2,
+  X,
 } from 'lucide-react';
-import { LibrarySwitch } from './LibrarySwitch';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
+import { Input } from './ui/input';
 import type { LibraryMode } from '../localState';
+import type { FileFormat } from '../promptStorage';
 import { parseSubcategoryView } from '../promptUtils';
 import type { PromptItem, ViewKey } from '../types';
+
+const FILE_FORMAT_OPTIONS: Array<{ label: string; value: FileFormat }> = [
+  { label: 'JSON', value: 'json' },
+  { label: '记事本', value: 'txt' },
+  { label: '表格', value: 'csv' },
+];
 
 const ROW_ACTION_MENU_WIDTH = 132;
 const ROW_ACTION_MENU_EDGE_GAP = 8;
@@ -60,9 +77,14 @@ type SidebarProps = {
   cloudEmail: string | null;
   cloudEnabled: boolean;
   cloudStatus: string;
+  deletedCount: number;
+  exportFormat: FileFormat;
+  favoriteCount: number;
+  importFormat: FileFormat;
   isGlobalSearchActive: boolean;
   libraryMode: LibraryMode;
-  onChangeLibraryMode: (mode: LibraryMode) => void;
+  query: string;
+  recentCount: number;
   onAddCategory: () => void;
   onAddSubcategory: (category: string) => void;
   onChangeView: (view: ViewKey) => void;
@@ -70,6 +92,10 @@ type SidebarProps = {
   onCreatePrompt: () => void;
   onDeleteCategory: (category: string) => void;
   onDeletePrompt: (id: string) => void;
+  onExport: (format: FileFormat) => void | Promise<void>;
+  onExportFormatChange: (format: FileFormat) => void;
+  onImport: () => void;
+  onImportFormatChange: (format: FileFormat) => void;
   onManualSync: () => void | Promise<void>;
   onMoveCategory: (category: string, direction: MoveDirection) => void;
   onMovePrompt: (id: string, direction: MoveDirection) => void;
@@ -82,6 +108,7 @@ type SidebarProps = {
   open: boolean;
   prompts: PromptItem[];
   selectedId: string | null;
+  setQuery: (query: string) => void;
   width: number;
 };
 
@@ -91,9 +118,14 @@ export function Sidebar({
   cloudEmail,
   cloudEnabled,
   cloudStatus,
+  deletedCount,
+  exportFormat,
+  favoriteCount,
+  importFormat,
   isGlobalSearchActive,
   libraryMode,
-  onChangeLibraryMode,
+  query,
+  recentCount,
   onAddCategory,
   onAddSubcategory,
   onChangeView,
@@ -101,6 +133,10 @@ export function Sidebar({
   onCreatePrompt,
   onDeleteCategory,
   onDeletePrompt,
+  onExport,
+  onExportFormatChange,
+  onImport,
+  onImportFormatChange,
   onManualSync,
   onMoveCategory,
   onMovePrompt,
@@ -113,8 +149,10 @@ export function Sidebar({
   open,
   prompts,
   selectedId,
+  setQuery,
   width,
 }: SidebarProps) {
+  const libraryLabel = libraryMode === 'documents' ? '文档' : '提示词';
   const categoryCount = (category: string) => prompts.filter((prompt) => prompt.category === category).length;
   const activeSubcategory = parseSubcategoryView(activeView);
   const activeCategory = activeView.startsWith('category:') ? activeView.slice('category:'.length) : activeSubcategory?.category ?? null;
@@ -130,7 +168,17 @@ export function Sidebar({
     <>
       {open && <Button className="sidebar-scrim" type="button" aria-label="关闭导航" onClick={onClose} />}
       <aside className={`sidebar ${open ? 'open' : ''}`} style={{ flexBasis: width, width }}>
-        <LibrarySwitch libraryMode={libraryMode} onChange={onChangeLibraryMode} />
+        <div className="sidebar-header">
+          <strong>{libraryLabel}</strong>
+          <LibraryFileMenu
+            exportFormat={exportFormat}
+            importFormat={importFormat}
+            onExport={onExport}
+            onExportFormatChange={onExportFormatChange}
+            onImport={onImport}
+            onImportFormatChange={onImportFormatChange}
+          />
+        </div>
 
         <div className="sidebar-primary-actions">
           <Button className="button ghost sidebar-action-button" type="button" onClick={onAddCategory}>
@@ -143,6 +191,25 @@ export function Sidebar({
           </Button>
         </div>
 
+        <label className={`library-search-box ${query.trim() ? 'is-global-search' : ''}`}>
+          <Search size={15} />
+          <span className="search-scope-chip">全局</span>
+          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`搜索全部${libraryLabel}`} aria-label={`搜索${libraryLabel}`} />
+          {query && (
+            <Button className="mini-clear" type="button" aria-label="清空搜索" onClick={() => setQuery('')}>
+              <X size={13} />
+            </Button>
+          )}
+        </label>
+
+        <nav className="nav-group view-nav" aria-label="视图">
+          <ViewNavItem active={activeView === 'all'} icon={<LayoutList size={15} />} label="全部" meta={prompts.length} onClick={() => onChangeView('all')} />
+          <ViewNavItem active={activeView === 'favorites'} icon={<Star size={15} />} label="收藏" meta={favoriteCount} onClick={() => onChangeView('favorites')} />
+          <ViewNavItem active={activeView === 'recent'} icon={<Clock3 size={15} />} label="最近使用" meta={recentCount} onClick={() => onChangeView('recent')} />
+          <ViewNavItem active={activeView === 'trash'} icon={<RotateCcw size={15} />} label="删除记录" meta={deletedCount} onClick={() => onChangeView('trash')} />
+        </nav>
+
+        <div className="sidebar-section-label">分类</div>
         <nav className="nav-group categories" aria-label="分类">
           {categories.map((category, categoryIndex) => {
             const categoryView = `category:${category}` as ViewKey;
@@ -233,6 +300,117 @@ export function Sidebar({
         />
       </aside>
     </>
+  );
+}
+
+type ViewNavItemProps = {
+  active: boolean;
+  icon: ReactNode;
+  label: string;
+  meta: number;
+  onClick: () => void;
+};
+
+function ViewNavItem({ active, icon, label, meta, onClick }: ViewNavItemProps) {
+  return (
+    <Button className={`view-nav-item ${active ? 'active' : ''}`} type="button" aria-current={active ? 'page' : undefined} onClick={onClick}>
+      {icon}
+      <span>{label}</span>
+      <small>{meta}</small>
+    </Button>
+  );
+}
+
+type LibraryFileMenuProps = {
+  exportFormat: FileFormat;
+  importFormat: FileFormat;
+  onExport: (format: FileFormat) => void | Promise<void>;
+  onExportFormatChange: (format: FileFormat) => void;
+  onImport: () => void;
+  onImportFormatChange: (format: FileFormat) => void;
+};
+
+// 导入导出不常用，收进侧栏标题旁的小菜单。
+function LibraryFileMenu({ exportFormat, importFormat, onExport, onExportFormatChange, onImport, onImportFormatChange }: LibraryFileMenuProps) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  const runMenuAction = (action: () => void | Promise<void>) => {
+    setOpen(false);
+    void action();
+  };
+
+  return (
+    <div className="library-file-menu" ref={menuRef}>
+      <Button className="button ghost compact" type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+        导入 / 导出
+        <ChevronDown size={13} />
+      </Button>
+      {open && (
+        <div className="top-dropdown-menu" role="menu">
+          <Button className="top-dropdown-item" type="button" role="menuitem" onClick={() => runMenuAction(onImport)}>
+            <Import size={15} />
+            导入文件
+          </Button>
+          <label className="top-format-row">
+            <span>导入格式</span>
+            <select
+              className="format-select"
+              aria-label="选择导入格式"
+              value={importFormat}
+              onChange={(event) => onImportFormatChange(event.target.value as FileFormat)}
+            >
+              {FILE_FORMAT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Button className="top-dropdown-item" type="button" role="menuitem" onClick={() => runMenuAction(() => onExport(exportFormat))}>
+            <Download size={15} />
+            导出文件
+          </Button>
+          <label className="top-format-row">
+            <span>导出格式</span>
+            <select
+              className="format-select"
+              aria-label="选择导出格式"
+              value={exportFormat}
+              onChange={(event) => onExportFormatChange(event.target.value as FileFormat)}
+            >
+              {FILE_FORMAT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+    </div>
   );
 }
 

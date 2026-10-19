@@ -49,12 +49,10 @@ function Segmented<T extends string>({ value, options, onChange, label }: { valu
 
 type MaterialCanvasProps = {
   controller: MaterialLibraryController;
-  // 设置弹窗关掉时重新读一次生图模型。
-  settingsOpen: boolean;
   onOpenSettings: () => void;
 };
 
-export function MaterialCanvas({ controller, settingsOpen, onOpenSettings }: MaterialCanvasProps) {
+export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasProps) {
   const { draft, error, queue, history, historyLoaded } = useCanvasState();
   const [model, setModel] = useState<string | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
@@ -70,13 +68,13 @@ export function MaterialCanvas({ controller, settingsOpen, onOpenSettings }: Mat
   const queueIds = useMemo(() => new Set(queue.map((task) => task.id)), [queue]);
   const activeCount = queue.filter(isActive).length;
 
+  // 去设置页改完回来时画布会重新挂载，再读一次生图模型。
   useEffect(() => {
-    if (settingsOpen) return;
     void controller
       .aiGetSettings()
       .then((settings) => setModel(settings.image?.usable ? settings.image.model : ''))
       .catch(() => setModel(''));
-  }, [settingsOpen]);
+  }, []);
 
   const reloadHistory = () =>
     controller

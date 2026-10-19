@@ -194,10 +194,10 @@ test('设置页提供软件说明入口', () => {
   const styles = readText('src', 'styles.css');
 
   assert.match(appSource, /软件说明/);
-  assert.match(appSource, /aria-controls="software-about-panel"/);
+  assert.match(appSource, /\{ key: 'about', label: '关于与更新' \}/);
   assert.match(appSource, /TypeScript 和 React 负责界面与状态/);
-  assert.match(appSource, /顶部菜单栏负责筛选、导入导出、设置和搜索/);
-  assert.match(appSource, /左侧是分类树、创建入口和云端状态/);
+  assert.match(appSource, /顶部是主导航，在提示词、文档、素材、画布之间切换/);
+  assert.match(appSource, /左侧是搜索、视图、分类树、创建入口和云端状态/);
   assert.match(styles, /\.about-section/);
   assert.match(styles, /\.about-layout-grid/);
 });
@@ -245,35 +245,39 @@ test('侧栏新增分类按钮使用应用内弹窗创建分类', () => {
   assert.match(styles, /\.category-editor-panel/);
 });
 
-test('顶部菜单栏承载筛选、导入导出、设置和搜索，云端操作放在侧栏底部', () => {
+test('顶部栏是主导航，搜索、视图和导入导出在侧栏，设置是独立页面', () => {
   const appSource = readUiSource();
   const styles = readText('src', 'styles.css');
-  const sidebarSource = appSource.match(/function Sidebar[\s\S]+?type CategoryNavItemProps/)?.[0] ?? '';
-  const topMenuSource = appSource.match(/function TopMenuBar[\s\S]+?type TopViewMenuItemProps/)?.[0] ?? '';
+  const sidebarSource = appSource.match(/function Sidebar[\s\S]+?type ViewNavItemProps/)?.[0] ?? '';
+  const fileMenuSource = appSource.match(/function LibraryFileMenu[\s\S]+?type CategoryNavItemProps/)?.[0] ?? '';
+  const topMenuSource = appSource.match(/function TopMenuBar[\s\S]+?<\/header>/)?.[0] ?? '';
+  const settingsSource = appSource.match(/function SettingsPage[\s\S]+$/)?.[0] ?? '';
   const workspaceHeaderSource = appSource.match(/<main className="workspace">[\s\S]+?<input/s)?.[0] ?? '';
 
+  // 顶部：四个库的标签 + 云同步状态 + 深浅色 + 设置，没有文件/视图菜单和搜索框
   assert.match(appSource, /<TopMenuBar/);
   assert.match(topMenuSource, /className="top-menu-bar"/);
-  assert.match(topMenuSource, /文件/);
-  assert.match(topMenuSource, /视图/);
-  assert.match(topMenuSource, /设置/);
-  assert.doesNotMatch(topMenuSource, /帮助/);
-  assert.match(topMenuSource, /导入文件/);
-  assert.match(topMenuSource, /导出文件/);
-  assert.match(topMenuSource, /选择导入格式/);
-  assert.match(topMenuSource, /选择导出格式/);
-  assert.match(topMenuSource, /label="全部" meta=\{promptCount\}/);
-  assert.match(topMenuSource, /label="收藏" meta=\{favoriteCount\}/);
-  assert.match(topMenuSource, /label="最近使用" meta=\{recentCount\}/);
-  assert.match(topMenuSource, /label="删除记录" meta=\{deletedCount\}/);
-  assert.match(topMenuSource, /onClick=\{\(\) => runMenuAction\(onOpenSettings\)\}/);
-  assert.doesNotMatch(topMenuSource, /top-cloud-status/);
-  assert.doesNotMatch(topMenuSource, /onOpenSoftwareAbout/);
-  assert.match(topMenuSource, /placeholder=\{`搜索全部\$\{searchLabel\}`\}/);
-  assert.match(topMenuSource, /className="search-scope-chip"/);
+  assert.match(topMenuSource, /<LibrarySwitch className="top-tabs"/);
+  assert.match(topMenuSource, /top-sync-pill/);
+  assert.match(topMenuSource, /onClick=\{onOpenSettings\}/);
+  assert.doesNotMatch(topMenuSource, /视图|导入文件|搜索全部|帮助/);
   assert.match(topMenuSource, /className="top-menu-drag-region"/);
   assert.match(topMenuSource, /className="top-window-controls-reserve"/);
-  assert.match(appSource, /initialAboutOpen=\{settingsAboutInitiallyOpen\}/);
+  assert.match(appSource, /libraryMode=\{settingsSection \? null : libraryMode\}/);
+
+  // 侧栏：标题旁导入导出，搜索（全局），四个视图带数量，云端操作在底部
+  assert.match(sidebarSource, /className="sidebar-header"/);
+  assert.match(sidebarSource, /placeholder=\{`搜索全部\$\{libraryLabel\}`\}/);
+  assert.match(sidebarSource, /className="search-scope-chip"/);
+  assert.match(sidebarSource, /label="全部" meta=\{prompts\.length\}/);
+  assert.match(sidebarSource, /label="收藏" meta=\{favoriteCount\}/);
+  assert.match(sidebarSource, /label="最近使用" meta=\{recentCount\}/);
+  assert.match(sidebarSource, /label="删除记录" meta=\{deletedCount\}/);
+  assert.doesNotMatch(sidebarSource, /LibrarySwitch/);
+  assert.match(fileMenuSource, /导入文件/);
+  assert.match(fileMenuSource, /导出文件/);
+  assert.match(fileMenuSource, /选择导入格式/);
+  assert.match(fileMenuSource, /选择导出格式/);
   assert.match(sidebarSource, /className="sidebar-cloud-panel"/);
   assert.match(sidebarSource, /className=\{`sidebar-cloud-status \$\{cloudEmail \? 'is-online' : ''\}`\}/);
   assert.match(sidebarSource, /onClick=\{\(\) => void onManualSync\(\)\}/);
@@ -283,14 +287,26 @@ test('顶部菜单栏承载筛选、导入导出、设置和搜索，云端操�
   assert.doesNotMatch(sidebarSource, /toolsOpen/);
   assert.doesNotMatch(sidebarSource, /sidebar-tools-panel/);
   assert.doesNotMatch(sidebarSource, /utility-menu-toggle/);
+
+  // 设置页：替换内容区，六个分类；素材库设置不再是弹窗
+  assert.match(appSource, /\{settingsSection \? \(\s*<SettingsPage/);
+  for (const label of ['通用', '云同步', '素材库（NAS）', 'AI 助手', '网络', '关于与更新']) {
+    assert.match(appSource, new RegExp(`\\{ key: '\\w+', label: '${escapeRegExp(label)}' \\}`));
+  }
+  assert.match(settingsSource, /<MaterialSettingsSection section=\{section\}/);
+  assert.doesNotMatch(appSource, /NasSettingsDialog|SettingsPanel|isSettingsOpen/);
+  assert.doesNotMatch(appSource, /className="materials-switch"/);
+
   assert.match(workspaceHeaderSource, /\{mode === 'detail' && \(/);
   assert.doesNotMatch(workspaceHeaderSource, /新建提示词/);
   assert.match(styles, /\.top-menu-bar/);
   assert.match(styles, /\.top-dropdown-menu/);
+  assert.match(styles, /\.library-search-box/);
+  assert.match(styles, /\.view-nav-item/);
+  assert.match(styles, /\.settings-page/);
   assert.match(styles, /\.sidebar-cloud-panel/);
   assert.match(styles, /\.sidebar-cloud-status/);
-  assert.doesNotMatch(styles, /\.top-cloud-status/);
-  assert.match(styles, /\.top-search-box/);
+  assert.doesNotMatch(styles, /\.top-search-box|\.top-cloud-status|\.settings-panel\b|\.materials-switch/);
   assert.match(styles, /-webkit-app-region:\s*drag/);
   assert.match(styles, /-webkit-app-region:\s*no-drag/);
   assert.match(styles, /\.top-window-controls-reserve\s*\{[\s\S]+?flex:\s*0 0 142px/);

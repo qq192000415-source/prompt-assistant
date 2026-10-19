@@ -1,16 +1,15 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { X } from 'lucide-react';
 import { Button } from '../ui/button';
+import { useMaterialSettings } from '../../materials/useMaterialLibrary';
 import { AiSettingsForm } from './AiSettings';
 
 type NasSettingsFormProps = {
   config: NasConfig | null;
   busy: boolean;
   onSubmit: (input: { baseUrl: string; username: string; password?: string }) => Promise<boolean>;
-  onSaved?: () => void;
 };
 
-export function NasSettingsForm({ config, busy, onSubmit, onSaved }: NasSettingsFormProps) {
+export function NasSettingsForm({ config, busy, onSubmit }: NasSettingsFormProps) {
   const [baseUrl, setBaseUrl] = useState(config?.baseUrl ?? '');
   const [username, setUsername] = useState(config?.username ?? '');
   const [password, setPassword] = useState('');
@@ -19,7 +18,6 @@ export function NasSettingsForm({ config, busy, onSubmit, onSaved }: NasSettings
     event.preventDefault();
     if (await onSubmit({ baseUrl, username, password: password || undefined })) {
       setPassword('');
-      onSaved?.();
     }
   };
 
@@ -132,35 +130,31 @@ function ProxySettingsForm({ busy, getProxy, saveProxy }: ProxySettingsFormProps
   );
 }
 
-type NasSettingsDialogProps = Omit<NasSettingsFormProps, 'onSaved'> &
-  ProxySettingsFormProps & { ai: Omit<Parameters<typeof AiSettingsForm>[0], 'busy'>; onClose: () => void };
+export type MaterialSettingsSectionName = 'nas' | 'ai' | 'network';
 
-export function NasSettingsDialog({ onClose, getProxy, saveProxy, ai, ...formProps }: NasSettingsDialogProps) {
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
+type MaterialSettingsSectionProps = {
+  section: MaterialSettingsSectionName;
+  notify: (message: string) => void;
+};
 
-  return (
-    <div className="modal-shell" role="dialog" aria-modal="true" aria-labelledby="nas-settings-title">
-      <Button className="modal-backdrop" type="button" aria-label="关闭" onClick={onClose} />
-      <section className="editor-panel category-editor-panel">
-        <div className="editor-header">
-          <h2 id="nas-settings-title">素材库设置</h2>
-          <Button className="icon-button" type="button" aria-label="关闭" onClick={onClose}>
-            <X size={18} />
-          </Button>
-        </div>
-        <h3 className="settings-subheading">NAS 连接</h3>
-        <NasSettingsForm {...formProps} onSaved={onClose} />
-        <h3 className="settings-subheading">网络</h3>
-        <ProxySettingsForm busy={formProps.busy} getProxy={getProxy} saveProxy={saveProxy} />
-        <h3 className="settings-subheading">AI 助手</h3>
-        <AiSettingsForm busy={formProps.busy} {...ai} />
-      </section>
-    </div>
-  );
+// 设置页里素材库相关的三块：NAS 连接、AI 助手、网络。
+export function MaterialSettingsSection({ section, notify }: MaterialSettingsSectionProps) {
+  const settings = useMaterialSettings(notify);
+  const busy = Boolean(settings.busy);
+
+  if (!settings.available) return <p className="settings-note">桌面版运行时可用。</p>;
+  if (section === 'network') return <ProxySettingsForm busy={busy} getProxy={settings.getProxy} saveProxy={settings.saveProxy} />;
+  if (section === 'ai') {
+    return (
+      <AiSettingsForm
+        busy={busy}
+        getSettings={settings.aiGetSettings}
+        saveSettings={settings.aiSaveSettings}
+        listModels={settings.aiListModels}
+        testModel={settings.aiTest}
+      />
+    );
+  }
+  // 等读到已保存的连接再渲染表单：表单只在第一次渲染时取初始值。
+  return settings.config ? <NasSettingsForm config={settings.config} busy={busy} onSubmit={settings.saveConfig} /> : null;
 }

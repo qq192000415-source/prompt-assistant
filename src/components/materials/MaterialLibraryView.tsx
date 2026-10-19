@@ -12,14 +12,12 @@ import {
   Package,
   RefreshCw,
   Search,
-  Server,
   Star,
   Upload,
   X,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { LibrarySwitch } from '../LibrarySwitch';
 import type { LibraryMode } from '../../localState';
 import {
   ALL_CATEGORIES,
@@ -36,7 +34,7 @@ import { canvas } from '../../materials/canvasStore';
 import { MaterialCanvas } from './MaterialCanvas';
 import { BatchProgressPanel, CompressImagesDialog, CompressVideosDialog } from './BatchDialogs';
 import { MaterialDetailDialog } from './MaterialDetailDialog';
-import { NasSettingsDialog, NasSettingsForm } from './NasSettings';
+import { NasSettingsForm } from './NasSettings';
 
 export const mediaSrc = (media: MaterialMedia) => `nas-media://media/${media.sha256}${media.ext}`;
 export const previewSrc = (media: MaterialMedia) => (media.hasThumb ? `nas-media://thumbs/${media.sha256}.jpg` : mediaSrc(media));
@@ -44,16 +42,16 @@ export const previewSrc = (media: MaterialMedia) => (media.hasThumb ? `nas-media
 type MaterialLibraryViewProps = {
   libraryMode: LibraryMode;
   onChangeLibraryMode: (mode: LibraryMode) => void;
+  onOpenSettings: (section: 'nas' | 'ai') => void;
   notify: (message: string) => void;
 };
 
-export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }: MaterialLibraryViewProps) {
+export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, onOpenSettings, notify }: MaterialLibraryViewProps) {
   const controller = useMaterialLibrary(notify);
   const { status, library, busy } = controller;
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState(ALL_CATEGORIES);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
@@ -93,7 +91,7 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
     if (!ready) return undefined;
     const onPaste = (event: ClipboardEvent) => {
       const target = event.target as HTMLElement | null;
-      if (target?.closest('input, textarea, [contenteditable="true"]') || openItemId || settingsOpen || controller.busy || onCanvas) return;
+      if (target?.closest('input, textarea, [contenteditable="true"]') || openItemId || controller.busy || onCanvas) return;
       const paths = [...(event.clipboardData?.files ?? [])].map(controller.pathForFile).filter(Boolean);
       if (paths.length) {
         event.preventDefault();
@@ -105,7 +103,7 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
     };
     document.addEventListener('paste', onPaste);
     return () => document.removeEventListener('paste', onPaste);
-  }, [ready, openItemId, settingsOpen, importCategory, controller, onCanvas]);
+  }, [ready, openItemId, importCategory, controller, onCanvas]);
 
   const onDrop = (event: DragEvent) => {
     event.preventDefault();
@@ -148,7 +146,6 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
       onDrop={onDrop}
     >
       <header className="materials-header">
-        <LibrarySwitch className="materials-switch" libraryMode={libraryMode} onChange={onChangeLibraryMode} />
         <div className="materials-title">
           <h1>{onCanvas ? '创作画布' : '素材库'}</h1>
           <span>{busy || summary}</span>
@@ -193,14 +190,9 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
             />
           </>
         )}
-        {status !== 'unavailable' && status !== 'unconfigured' && (
-          <Button className="icon-button" type="button" aria-label="NAS 连接设置" title="NAS 连接设置" onClick={() => setSettingsOpen(true)}>
-            <Server size={16} />
-          </Button>
-        )}
       </header>
 
-      {ready && onCanvas && <MaterialCanvas controller={controller} settingsOpen={settingsOpen} onOpenSettings={() => setSettingsOpen(true)} />}
+      {ready && onCanvas && <MaterialCanvas controller={controller} onOpenSettings={() => onOpenSettings('ai')} />}
 
       {ready && !onCanvas && selecting && (
         <div className="materials-batch-bar" role="toolbar" aria-label="批量操作">
@@ -338,7 +330,7 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
               <RefreshCw size={14} />
               重试
             </Button>
-            <Button className="button ghost compact" type="button" onClick={() => setSettingsOpen(true)}>
+            <Button className="button ghost compact" type="button" onClick={() => onOpenSettings('nas')}>
               修改 NAS 连接
             </Button>
           </div>
@@ -414,23 +406,6 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, notify }
             onChangeLibraryMode('canvas');
           }}
           onClose={() => setOpenItemId(null)}
-        />
-      )}
-
-      {settingsOpen && (
-        <NasSettingsDialog
-          config={controller.config}
-          busy={Boolean(busy)}
-          getProxy={controller.getProxy}
-          saveProxy={controller.saveProxy}
-          ai={{
-            getSettings: controller.aiGetSettings,
-            saveSettings: controller.aiSaveSettings,
-            listModels: controller.aiListModels,
-            testModel: controller.aiTest,
-          }}
-          onSubmit={controller.saveConfig}
-          onClose={() => setSettingsOpen(false)}
         />
       )}
 

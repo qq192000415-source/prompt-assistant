@@ -9,7 +9,8 @@ const options: Array<{ mode: LibraryMode; label: string; icon: typeof BookOpen }
 ];
 
 type LibrarySwitchProps = {
-  libraryMode: LibraryMode;
+  // null：都不选中（在设置页时）。
+  libraryMode: LibraryMode | null;
   onChange: (mode: LibraryMode) => void;
   className?: string;
 };

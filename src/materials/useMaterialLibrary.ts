@@ -174,19 +174,7 @@ export function useMaterialLibrary(notify: (message: string) => void) {
       notify(result.canceled ? '已取消导出分享包' : `分享包已导出：${result.dir}，包含 ${result.exported} 个文件${failureText(result.failures)}`);
       return true;
     },
-    getProxy: () => api!.getProxy(),
-    saveProxy: (settings: MaterialProxySettings) => run('正在测试网络…', () => api!.saveProxy(settings)),
     aiGetSettings: () => api!.aiGetSettings(),
-    aiSaveSettings: async (settings: MaterialAiSettingsInput) => {
-      const saved = await run('正在保存 AI 设置…', () => api!.aiSaveSettings(settings));
-      if (saved) notify('AI 设置已保存');
-      return saved;
-    },
-    aiListModels: (slot: MaterialAiSlotName, input: MaterialAiSlotInput) => run('正在查询模型…', () => api!.aiListModels(slot, input)),
-    aiTest: async (slot: MaterialAiSlotName, input: MaterialAiSlotInput) => {
-      const done = await run('正在测试连接…', async () => (await api!.aiTest(slot, input), true));
-      if (done) notify(`${SLOT_NAMES[slot]}连接成功`);
-    },
     // 详情页的单条 AI：结果只回给调用方填进草稿，用户点保存才写入 NAS。
     aiReverse: (id: string) => run('AI 正在看图反推…', () => api!.aiReverse(id)),
     aiOptimize: (prompt: string, kind: 'positive' | 'negative') => run('AI 正在优化…', () => api!.aiOptimize(prompt, kind)),
@@ -248,3 +236,52 @@ export function useMaterialLibrary(notify: (message: string) => void) {
 }
 
 export type MaterialLibraryController = ReturnType<typeof useMaterialLibrary>;
+
+// 设置页用：只管 NAS 连接、网络代理和 AI 设置，不读素材库。回到素材页时素材库视图会重新挂载、按新设置重读。
+export function useMaterialSettings(notify: (message: string) => void) {
+  const api = window.promptAssistantDesktop?.materials;
+  const [config, setConfig] = useState<NasConfig | null>(null);
+  const [busy, setBusy] = useState('');
+
+  useEffect(() => {
+    void api?.getConfig().then(setConfig, (error) => notify(messageOf(error)));
+  }, [api]);
+
+  const run = async <T,>(label: string, action: () => Promise<T>): Promise<T | null> => {
+    setBusy(label);
+    try {
+      return await action();
+    } catch (actionError) {
+      notify(messageOf(actionError));
+      return null;
+    } finally {
+      setBusy('');
+    }
+  };
+
+  return {
+    available: Boolean(api),
+    config,
+    busy,
+    saveConfig: async (input: { baseUrl: string; username: string; password?: string }) => {
+      const saved = await run('正在连接 NAS…', () => api!.saveConfig(input));
+      if (!saved) return false;
+      setConfig(saved);
+      notify('NAS 已连接');
+      return true;
+    },
+    getProxy: () => api!.getProxy(),
+    saveProxy: (settings: MaterialProxySettings) => run('正在测试网络…', () => api!.saveProxy(settings)),
+    aiGetSettings: () => api!.aiGetSettings(),
+    aiSaveSettings: async (settings: MaterialAiSettingsInput) => {
+      const saved = await run('正在保存 AI 设置…', () => api!.aiSaveSettings(settings));
+      if (saved) notify('AI 设置已保存');
+      return saved;
+    },
+    aiListModels: (slot: MaterialAiSlotName, input: MaterialAiSlotInput) => run('正在查询模型…', () => api!.aiListModels(slot, input)),
+    aiTest: async (slot: MaterialAiSlotName, input: MaterialAiSlotInput) => {
+      const done = await run('正在测试连接…', async () => (await api!.aiTest(slot, input), true));
+      if (done) notify(`${SLOT_NAMES[slot]}连接成功`);
+    },
+  };
+}
