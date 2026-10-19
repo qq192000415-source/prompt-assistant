@@ -19,8 +19,8 @@ const capabilityLabel = (name: MaterialAiSlotName, model: ModelOption) =>
   name === 'image' ? (model.generation ? '能生图' : '没认出能不能生图') : model.vision ? '能看图' : '没认出能不能看图';
 const capabilityNote = (name: MaterialAiSlotName, models: ModelOption[]) =>
   name === 'image'
-    ? ` 查到 ${models.length} 个模型，其中 ${models.filter((model) => model.generation).length} 个认得出能生图（按模型名推断，没认出的也可能能生图），在模型框里选。`
-    : ` 查到 ${models.length} 个模型，其中 ${models.filter((model) => model.vision).length} 个认得出能看图（按模型名推断，没认出的也可能能看图，用测试连接或直接反推试一下），在模型框里选。`;
+    ? ` 查到 ${models.length} 个模型，其中 ${models.filter((model) => model.generation).length} 个认得出能生图（按模型名推断，没认出的也可能能生图），在「从查到的模型里选」里选。`
+    : ` 查到 ${models.length} 个模型，其中 ${models.filter((model) => model.vision).length} 个认得出能看图（按模型名推断，没认出的也可能能看图，用测试连接或直接反推试一下），在「从查到的模型里选」里选。`;
 
 const URL_PLACEHOLDER: Record<MaterialAiProvider, string> = {
   'openai-compatible': 'https://api.deepseek.com/v1',
@@ -91,7 +91,6 @@ export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, te
     <form className="nas-form" onSubmit={(event) => void submit(event)}>
       {SLOTS.map((name) => {
         const slot = slots[name];
-        const listId = `ai-models-${name}`;
         return (
           <fieldset key={name} className="ai-slot">
             <legend>{SLOT_LABELS[name].title}</legend>
@@ -129,15 +128,26 @@ export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, te
             )}
             <label className="field">
               模型
-              <input value={slot.model} onChange={(event) => setSlot(name, { model: event.target.value })} list={listId} spellCheck={false} />
-              <datalist id={listId}>
-                {models[name].map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {capabilityLabel(name, model)}
-                  </option>
-                ))}
-              </datalist>
+              <input value={slot.model} onChange={(event) => setSlot(name, { model: event.target.value })} spellCheck={false} />
             </label>
+            {/* 不用 datalist：Electron 里它的弹出列表只显示一部分、滚轮滚不动。原生下拉框能完整滚动。 */}
+            {models[name].length > 0 && (
+              <label className="field">
+                从查到的模型里选
+                <select
+                  aria-label={`选择${SLOT_LABELS[name].title}`}
+                  value={models[name].some((model) => model.id === slot.model) ? slot.model : ''}
+                  onChange={(event) => event.target.value && setSlot(name, { model: event.target.value })}
+                >
+                  <option value="">共 {models[name].length} 个，点开选择…</option>
+                  {models[name].map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.id}（{capabilityLabel(name, model)}）
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             {name === 'image' && (
               <div className="canvas-row">
                 <label className="field">
