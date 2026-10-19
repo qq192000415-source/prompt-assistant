@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
-import { Copy, FilePlus } from 'lucide-react';
+import { Copy, ExternalLink, FilePlus } from 'lucide-react';
 import { Button } from './ui/button';
 import { documentKind, documentKindCounts, filterDocumentsByKind, sortDocuments, type DocumentKind, type DocumentSort } from '../documentBrowser';
 import { loadDocumentPaneWidth, loadDocumentSort, saveDocumentPaneWidth, saveDocumentSort } from '../localState';
@@ -15,6 +15,7 @@ type DocumentBrowserProps = {
   onSelect: (id: string) => void;
   onNew: () => void;
   onCopyFile: (item: PromptItem) => Promise<void>;
+  onOpenFile: (item: PromptItem) => Promise<void>;
   // 右侧预览栏：App 传入带全部操作的 DocumentView；onReady 在文件下载到本机后调用，这一行就能拖出去了。
   renderPane: (item: PromptItem, onReady: (sha256: string) => void) => ReactNode;
 };
@@ -32,7 +33,7 @@ const shortDate = (iso: string | undefined) => {
 
 // 文档库的文件夹视图：中间文件列表，右边预览和操作。和提示词库的「整条展开」卡片流区分开：
 // 文档要做的是找到文件、复制文件或拖出去，所以一屏放下尽量多的文件，正文只在右边预览。
-export function DocumentBrowser({ title, query, documents, selectedId, onSelect, onNew, onCopyFile, renderPane }: DocumentBrowserProps) {
+export function DocumentBrowser({ title, query, documents, selectedId, onSelect, onNew, onCopyFile, onOpenFile, renderPane }: DocumentBrowserProps) {
   const api = window.promptAssistantDesktop?.documents;
   const [sort, setSort] = useState<DocumentSort>(loadDocumentSort);
   const [kind, setKind] = useState<DocumentKind | 'all'>('all');
@@ -170,18 +171,32 @@ export function DocumentBrowser({ title, query, documents, selectedId, onSelect,
                   </span>
                   <span className="document-row-size">{file ? formatFileSize(file.size) : ''}</span>
                   <span className="document-row-date">{shortDate(file?.addedAt ?? item.createdAt)}</span>
-                  <Button
-                    className="icon-button document-row-copy"
-                    type="button"
-                    aria-label={`复制文件 ${item.title}`}
-                    title="复制文件"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void onCopyFile(item);
-                    }}
-                  >
-                    <Copy size={15} />
-                  </Button>
+                  <span className="document-row-actions">
+                    <Button
+                      className="icon-button"
+                      type="button"
+                      aria-label={`复制文件 ${item.title}`}
+                      title="复制文件"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void onCopyFile(item);
+                      }}
+                    >
+                      <Copy size={15} />
+                    </Button>
+                    <Button
+                      className="icon-button"
+                      type="button"
+                      aria-label={`打开 ${item.title}`}
+                      title="用系统软件打开"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void onOpenFile(item);
+                      }}
+                    >
+                      <ExternalLink size={15} />
+                    </Button>
+                  </span>
                 </div>
               );
             })}

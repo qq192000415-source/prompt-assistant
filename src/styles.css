@@ -5951,6 +5951,7 @@ html.dark {
 .document-list-scroll {
   min-width: 0;
   overflow-x: auto;
+  container-type: inline-size;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
@@ -5958,10 +5959,9 @@ html.dark {
 
 .document-list {
   display: grid;
-  min-width: 520px;
 }
 
-/* 表头 4 列（名称列从色块右边对齐），行 5 列：类型色块 | 名称和配套指令 | 大小 | 添加 | 复制 */
+/* 表头 4 列（名称列从色块右边对齐），行 5 列：类型色块 | 名称和配套指令 | 大小 | 添加 | 复制和打开 */
 .document-list-header,
 .document-row {
   display: grid;
@@ -5971,7 +5971,7 @@ html.dark {
 }
 
 .document-list-header {
-  grid-template-columns: minmax(0, 1fr) 76px 52px 36px;
+  grid-template-columns: minmax(0, 1fr) 76px 52px 68px;
   border-bottom: 1px solid var(--border);
   color: var(--muted);
   font-size: 12px;
@@ -5985,7 +5985,7 @@ html.dark {
 
 .document-row {
   position: relative;
-  grid-template-columns: 40px minmax(0, 1fr) 76px 52px 36px;
+  grid-template-columns: 40px minmax(0, 1fr) 76px 52px 68px;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
   transition: background-color 120ms ease;
@@ -6064,9 +6064,45 @@ html.dark {
   text-align: right;
 }
 
-.document-row-copy.icon-button {
+.document-row-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.document-row-actions .icon-button {
   width: 32px;
   height: 32px;
+}
+
+/* 列表变窄（预览栏拖宽或窗口小）时先收「添加」列，再收「大小」列，复制和打开按钮一直完整显示，不出横向滚动 */
+@container (max-width: 460px) {
+  .document-list-header {
+    grid-template-columns: minmax(0, 1fr) 76px 68px;
+  }
+
+  .document-row {
+    grid-template-columns: 40px minmax(0, 1fr) 76px 68px;
+  }
+
+  .document-list-header span:nth-child(3),
+  .document-row-date {
+    display: none;
+  }
+}
+
+@container (max-width: 360px) {
+  .document-list-header {
+    grid-template-columns: minmax(0, 1fr) 68px;
+  }
+
+  .document-row {
+    grid-template-columns: 40px minmax(0, 1fr) 68px;
+  }
+
+  .document-list-header span:nth-child(2),
+  .document-row-size {
+    display: none;
+  }
 }
 
 .document-kind.is-word { background: color-mix(in srgb, var(--doc-word) 14%, var(--surface)); color: var(--doc-word); }

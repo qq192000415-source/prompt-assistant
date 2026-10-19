@@ -1021,6 +1021,18 @@ function App() {
     }
   };
 
+  // 列表行里的「打开」：和预览栏的打开一样，云端的文件先下载到本机。
+  const openDocumentFile = async (item: PromptItem) => {
+    if (!documentsApi || !item.file) return;
+
+    try {
+      await cloud.ensureDocumentLocal(item.file);
+      await documentsApi.open(item.file.sha256, item.file.name);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '打开失败');
+    }
+  };
+
   const exportPrompts = async (format: FileFormat) => {
     // ponytail: 文档不进导出文件，文件本体靠本机和云端保存；要整库备份再加打包导出。
     const prompts = allItems.filter((item) => !isDocumentItem(item));
@@ -1362,6 +1374,7 @@ function App() {
             onSelect={setSelectedId}
             onNew={() => void addDocuments()}
             onCopyFile={copyDocumentFile}
+            onOpenFile={openDocumentFile}
             renderPane={(item, onReady) => (
               <DocumentView
                 key={item.id}
