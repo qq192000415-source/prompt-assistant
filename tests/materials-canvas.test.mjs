@@ -184,6 +184,16 @@ test('画布状态：提交只带一次来源组（提示词改过就不算）�
   assert.deepEqual([isVideoModel('agnes-video-2.5'), isVideoModel('grok-imagine-image')], [true, false]);
 });
 
+// 队列和历史按创建时间统一排序：队列里的任务不再总排在前面，另一台电脑同一时段生成的按时间插进来。
+test('生成记录按时间排序：最新优先、最早优先，队列和历史交错', () => {
+  const at = (id, minutes) => ({ id, createdAt: new Date(Date.UTC(2026, 9, 19, 8, minutes)).toISOString(), model: 'm', prompt: id, negativePrompt: '', params: {}, origin: null, referenceCount: 0, total: 1, slots: [] });
+  const queue = [at('q-08:30', 30), at('q-08:10', 10)];
+  const history = [at('h-08:20', 20), at('h-08:40', 40), at('h-08:00', 0)];
+  assert.deepEqual(visibleTasks(queue, history, '').map((task) => task.id), ['h-08:40', 'q-08:30', 'h-08:20', 'q-08:10', 'h-08:00']);
+  assert.deepEqual(visibleTasks(queue, history, '', 'oldest').map((task) => task.id), ['h-08:00', 'q-08:10', 'h-08:20', 'q-08:30', 'h-08:40']);
+  assert.deepEqual(visibleTasks(queue, history, 'q-', 'oldest').map((task) => task.id), ['q-08:10', 'q-08:30']);
+});
+
 // 主人反馈：选 16:9 出来竖图。实测网关不认 size 参数，只按提示词决定横竖，所以比例也要写进生成规则。
 test('选了固定尺寸时，生成规则里写明比例和横竖；自动尺寸不写', async () => {
   const { aspectRatioRule } = await import('../electron/materials/canvas.ts');

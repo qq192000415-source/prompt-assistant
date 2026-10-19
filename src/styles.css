@@ -4215,7 +4215,7 @@ h2 {
   line-height: 1.6;
 }
 
-/* 一个任务一张卡片：头部是时间、模型、操作，下面是 1–4 个图片槽位 */
+/* 生成记录里一个任务一行（布局见文件末尾的 1.8.5 画布三栏） */
 .canvas-task {
   display: grid;
   gap: 10px;
@@ -4228,23 +4228,9 @@ h2 {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
 }
 
-.canvas-task-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
 .canvas-task-meta {
   color: var(--muted);
   font-size: 12px;
-}
-
-.canvas-task-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
 }
 
 .canvas-task-prompt {
@@ -4255,24 +4241,6 @@ h2 {
   line-height: 1.55;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-}
-
-.canvas-task-slots {
-  display: grid;
-  gap: 10px;
-}
-
-.canvas-task-slots.is-count-1 {
-  grid-template-columns: minmax(0, 400px);
-}
-
-.canvas-task-slots.is-count-2,
-.canvas-task-slots.is-count-4 {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.canvas-task-slots.is-count-3 {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .canvas-slot {
@@ -4775,71 +4743,230 @@ h2 {
   }
 }
 
-/* 画布生成记录：紧凑任务行和图片墙（1.8.3）。缩略图固定大小，一屏能看到更多图，大图到全屏里看。 */
-/* 切换和搜索框始终在一行；窄窗口时整组换到标题下面 */
+/* 画布 1.8.5：参数 | 生成记录 | 详情 三栏。参数栏可收起成一条窄边，详情栏左边缘可拖宽（--canvas-detail-width）。
+   记录里的图一律按原比例完整显示（contain），不裁边；选中项用工作蓝描边加浅蓝底，操作都在详情栏里。 */
+.canvas-layout {
+  width: min(100%, 1880px);
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr) var(--canvas-detail-width, 400px);
+}
+
+.canvas-layout.is-panel-collapsed {
+  grid-template-columns: 44px minmax(0, 1fr) var(--canvas-detail-width, 400px);
+}
+
+.canvas-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-block: -4px;
+}
+
+.canvas-panel-head strong {
+  font-size: 15px;
+}
+
+.canvas-panel-rail {
+  position: sticky;
+  top: 0;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: 8px 0 16px;
+}
+
+.canvas-panel-rail span {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  writing-mode: vertical-rl;
+}
+
+/* 标题和计数一行，切换、排序、搜索另起一行，记录区窄也不挤 */
+.canvas-stage {
+  container-type: inline-size;
+}
+
+.canvas-stage-header > .canvas-stage-title span {
+  font-variant-numeric: tabular-nums;
+}
+
 .canvas-stage-header > .canvas-stage-tools {
   display: flex;
-  flex: 0 0 auto;
-  flex-wrap: nowrap;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
 
 .canvas-stage-tools .canvas-segmented {
-  min-width: 150px;
+  flex: 0 0 auto;
+  min-width: 132px;
 }
 
+.canvas-stage-tools .canvas-search {
+  flex: 1 1 160px;
+  min-width: 140px;
+}
+
+/* 列表的一行：左边信息（整块可点），右边按原比例的缩略图 */
 .canvas-task {
+  grid-template-columns: minmax(200px, 1fr) auto;
+  align-items: start;
+  gap: 8px 14px;
+  background: var(--surface);
+  padding: 10px;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.canvas-task:hover {
+  border-color: var(--border-strong);
+}
+
+.canvas-task.is-selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-weak) 60%, var(--surface));
+}
+
+.canvas-task-info {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 2px;
+  text-align: left;
+}
+
+.canvas-task-info:focus-visible,
+.canvas-result-media:focus-visible,
+.canvas-slot-placeholder:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.canvas-task-info .canvas-task-prompt {
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: 3;
+}
+
+.canvas-task-slots {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
-  padding: 10px 12px;
 }
 
-.canvas-task-prompt {
-  -webkit-line-clamp: 1;
+.canvas-task-slots .canvas-slot {
+  position: relative;
 }
 
-.canvas-task-slots,
-.canvas-task-slots.is-count-1,
-.canvas-task-slots.is-count-2,
-.canvas-task-slots.is-count-3,
-.canvas-task-slots.is-count-4 {
-  grid-template-columns: repeat(auto-fill, 150px);
-  gap: 10px;
+/* 行列写死，里面图片的 height: 100% 才有参照（不然竖图按原比例长高、被格子裁掉） */
+.canvas-result-media {
+  position: relative;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  background: var(--surface-muted);
+  cursor: pointer;
+  transition: border-color 120ms ease;
 }
 
-.canvas-task-slots .canvas-result-media,
+.canvas-result-media:hover {
+  border-color: var(--border-strong);
+}
+
+.canvas-result-media.is-selected,
+.canvas-slot-placeholder.is-selected {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* 高度固定、宽度跟原图比例走，横图宽、竖图窄，都不裁 */
+.canvas-task-slots .canvas-result-media {
+  width: auto;
+  height: 120px;
+  max-width: 240px;
+  aspect-ratio: var(--media-ratio, 1);
+}
+
+.canvas-task-slots .canvas-result-media img,
+.canvas-task-slots .canvas-result-media video,
+.canvas-wall-item .canvas-result-media img,
+.canvas-wall-item .canvas-result-media video,
+.canvas-detail-strip .canvas-result-media img,
+.canvas-detail-strip .canvas-result-media video {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  object-fit: contain;
+}
+
 .canvas-task-slots .canvas-slot-placeholder {
-  width: 150px;
-  height: 150px;
+  width: 120px;
+  height: 120px;
   min-height: 0;
-}
-
-.canvas-task-slots .canvas-slot-placeholder {
-  padding: 8px;
+  cursor: pointer;
+  font: inherit;
   font-size: 12px;
-  text-align: center;
+  padding: 8px;
 }
 
-.canvas-task-slots .canvas-slot-error,
-.canvas-task-slots .canvas-slot-warning {
+.canvas-task-slots .canvas-slot-error {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
 }
 
-.canvas-result-media {
-  position: relative;
+@container (max-width: 480px) {
+  .canvas-task {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .canvas-task-slots {
+    justify-content: flex-start;
+  }
 }
 
-.canvas-task-slots .canvas-result-media img,
-.canvas-task-slots .canvas-result-media video,
-.canvas-wall-item .canvas-result-media img,
-.canvas-wall-item .canvas-result-media video {
+/* 网格：正方形格子，图按原比例完整放在里面；格子下面是实际尺寸和时间 */
+.canvas-wall {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px 12px;
+}
+
+.canvas-wall-item {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.canvas-wall-item .canvas-result-media {
   width: 100%;
-  height: 100%;
-  max-height: none;
-  object-fit: cover;
+  aspect-ratio: 1;
+}
+
+.canvas-wall-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.canvas-wall-item.is-selected .canvas-wall-caption {
+  color: var(--accent);
 }
 
 .canvas-play-badge {
@@ -4855,97 +4982,29 @@ h2 {
   color: #fff;
 }
 
-.canvas-thumb-actions {
-  display: flex;
-  gap: 4px;
-}
-
-.canvas-thumb-actions .icon-button {
-  width: 28px;
-  height: 28px;
-}
-
-.canvas-wall {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 10px;
-}
-
-.canvas-wall-item {
-  position: relative;
-  margin: 0;
-}
-
-.canvas-wall-item .canvas-result-media {
-  width: 100%;
-  aspect-ratio: 1;
-}
-
-.canvas-saved-badge {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  display: grid;
-  width: 22px;
-  height: 22px;
-  place-items: center;
-  border-radius: 999px;
-  background: var(--success);
-  color: #fff;
-  pointer-events: none;
-}
-
-/* 悬停或键盘聚焦时才出现提示词和按钮，平时只看图 */
-.canvas-wall-caption {
-  position: absolute;
-  right: 1px;
-  bottom: 1px;
-  left: 1px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
-  color: #fff;
-  font-size: 12px;
-  opacity: 0;
-  padding: 18px 6px 6px;
-  pointer-events: none;
-  transition: opacity 120ms ease;
-}
-
-.canvas-wall-item:hover .canvas-wall-caption,
-.canvas-wall-item:focus-within .canvas-wall-caption {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.canvas-wall-caption > span {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.canvas-wall-caption .icon-button {
-  border-color: transparent;
-  background: rgba(255, 255, 255, 0.92);
-  color: #18181b;
-}
-
-/* 生成好但有提醒（比如横竖和选的不一样）：左上角小三角，悬停看原因（视频不会有这个提醒，不和播放图标冲突） */
+.canvas-saved-badge,
 .canvas-warning-badge {
   position: absolute;
   top: 6px;
-  left: 6px;
   display: grid;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   place-items: center;
   border-radius: 999px;
-  background: var(--warning);
   color: #fff;
+  pointer-events: none;
+}
+
+.canvas-saved-badge {
+  right: 6px;
+  background: var(--success);
+}
+
+/* 生成好但有提醒（比如横竖和选的不一样）：左上角小三角，原因写在详情栏里（视频不会有这个提醒，不和播放图标冲突） */
+.canvas-warning-badge {
+  left: 6px;
+  background: var(--warning);
+  pointer-events: auto;
 }
 
 .canvas-wall-note {
@@ -4954,7 +5013,244 @@ h2 {
   font-size: 12px;
 }
 
-/* 图读不到时的占位：缩略图格子里和全屏查看里都用 */
+/* 详情栏：跟参数栏一样贴顶，自己滚动 */
+.canvas-detail {
+  position: sticky;
+  top: 0;
+  display: flex;
+  min-width: 0;
+  max-height: calc(100vh - var(--topbar-height) - 120px);
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.canvas-detail-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -11px;
+  z-index: 1;
+  width: 10px;
+  border: 0;
+  background: transparent;
+  cursor: col-resize;
+  padding: 0;
+}
+
+.canvas-detail-resizer::after {
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 4px;
+  height: 48px;
+  border-radius: 999px;
+  background: var(--accent);
+  content: '';
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease;
+}
+
+.canvas-detail-resizer:hover::after,
+.canvas-detail-resizer:focus-visible::after,
+body.resizing-canvas .canvas-detail-resizer::after {
+  opacity: 1;
+}
+
+body.resizing-canvas {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* 行高按内容（max-content）：不写的话内容超出时网格会把带 overflow:hidden 的大图压扁，而不是让这一栏滚动 */
+.canvas-detail-body {
+  display: grid;
+  min-height: 0;
+  grid-auto-rows: max-content;
+  align-content: start;
+  gap: 14px;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.canvas-detail-media {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-height: 160px;
+  max-height: 46vh;
+  overflow: hidden;
+  isolation: isolate;
+  margin: 0;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  cursor: zoom-in;
+  padding: 0;
+}
+
+.canvas-detail-media img {
+  display: block;
+  max-width: 100%;
+  max-height: calc(46vh - 2px);
+  object-fit: contain;
+}
+
+video.canvas-detail-media {
+  cursor: default;
+  object-fit: contain;
+}
+
+.canvas-detail-media.is-placeholder,
+.canvas-detail-media.canvas-media-missing {
+  min-height: 200px;
+  align-content: center;
+  gap: 10px;
+  color: var(--muted);
+  cursor: default;
+}
+
+.canvas-detail-media.is-placeholder strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.canvas-detail-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.canvas-detail-strip .canvas-result-media,
+.canvas-detail-strip-empty {
+  width: auto;
+  height: 56px;
+  max-width: 112px;
+  aspect-ratio: var(--media-ratio, 1);
+  border-radius: var(--radius-sm);
+}
+
+.canvas-detail-strip-empty {
+  border: 1px dashed var(--border);
+  background: var(--surface-quiet);
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+.canvas-detail-strip-empty.is-selected {
+  border: 1px solid var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.canvas-detail-strip-empty:disabled {
+  cursor: default;
+}
+
+.canvas-detail-meta {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 14px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.canvas-detail-meta > div {
+  display: contents;
+}
+
+.canvas-detail-meta dt {
+  color: var(--muted);
+}
+
+.canvas-detail-meta dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.canvas-detail-section {
+  display: grid;
+  gap: 6px;
+}
+
+.canvas-detail-section header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.canvas-detail-section strong {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.canvas-detail-section p {
+  margin: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-quiet);
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+}
+
+.canvas-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.canvas-detail-actions > .canvas-result-actions {
+  display: contents;
+}
+
+.canvas-detail-danger {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.canvas-detail-danger span {
+  flex: 1 1 100%;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.canvas-detail-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.canvas-detail-note,
+.canvas-detail-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.canvas-detail-empty {
+  padding: 32px 18px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+/* 图读不到时的占位：缩略图格子里、详情栏和全屏查看里都用 */
 .canvas-media-missing {
   display: grid;
   width: 100%;
@@ -4976,52 +5272,66 @@ h2 {
   font-size: 14px;
 }
 
-/* 按任务：左边时间、提示词和操作，右边缩略图（1.8.4）。生成记录区窄于 560px 时上下排 */
-.canvas-stage {
-  container-type: inline-size;
+/* 窗口不够三栏时：详情栏放到生成记录上面（同一列），不拖宽；再窄就整个上下排 */
+@media (max-width: 1080px) {
+  .canvas-layout,
+  .canvas-layout.is-panel-collapsed {
+    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  }
+
+  .canvas-layout.is-panel-collapsed {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .canvas-layout > .canvas-panel,
+  .canvas-layout > .canvas-panel-rail {
+    grid-row: 1 / span 2;
+  }
+
+  .canvas-detail {
+    position: static;
+    grid-column: 2;
+    grid-row: 1;
+    max-height: 60vh;
+  }
+
+  .canvas-stage {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .canvas-detail-resizer {
+    display: none;
+  }
+
+  .canvas-detail-media,
+  .canvas-detail-media img {
+    max-height: 30vh;
+  }
 }
 
-.canvas-task {
-  grid-template-columns: minmax(220px, 1fr) auto;
-  align-items: start;
-  column-gap: 16px;
-}
-
-.canvas-task-info {
-  display: grid;
-  min-width: 0;
-  align-content: start;
-  gap: 8px;
-}
-
-.canvas-task-info .canvas-task-prompt {
-  -webkit-line-clamp: 5;
-}
-
-.canvas-task-slots,
-.canvas-task-slots.is-count-1,
-.canvas-task-slots.is-count-2,
-.canvas-task-slots.is-count-3,
-.canvas-task-slots.is-count-4 {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.canvas-task-slots .canvas-slot {
-  width: 150px;
-}
-
-@container (max-width: 560px) {
-  .canvas-task {
+@media (max-width: 960px) {
+  .canvas-layout,
+  .canvas-layout.is-panel-collapsed {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .canvas-task-slots,
-  .canvas-task-slots.is-count-1,
-  .canvas-task-slots.is-count-2,
-  .canvas-task-slots.is-count-3,
-  .canvas-task-slots.is-count-4 {
-    justify-content: flex-start;
+  .canvas-layout > .canvas-panel,
+  .canvas-layout > .canvas-panel-rail,
+  .canvas-detail,
+  .canvas-stage {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .canvas-panel-rail {
+    position: static;
+    grid-auto-flow: column;
+    justify-content: start;
+    padding: 6px 10px;
+  }
+
+  .canvas-panel-rail span {
+    writing-mode: horizontal-tb;
   }
 }

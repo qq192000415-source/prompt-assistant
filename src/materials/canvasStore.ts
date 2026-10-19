@@ -1,7 +1,7 @@
 // 创作画布在界面这边的状态：草稿参数、参考图、来源组，以及主进程推来的任务队列和 NAS 上的生成历史。
 // 放在模块里而不是组件里：切到提示词库、文档库再切回来，草稿和列表都还在。任务本身在主进程队列里跑，不受界面影响。
 import { useSyncExternalStore } from 'react';
-import { loadMaterialsCanvasDraft, saveMaterialsCanvasDraft } from '../localState.ts';
+import { loadMaterialsCanvasDraft, saveMaterialsCanvasDraft, type CanvasSortOrder } from '../localState.ts';
 import type { MaterialItem } from './library.ts';
 import { buildCanvasImageGenerationPayload, normalizeCanvasDraftSettings } from './suyan/canvasGeneration.ts';
 import type { CanvasDraftSettings, CanvasReferenceImage } from './suyan/canvasTypes.ts';
@@ -51,9 +51,13 @@ export const isVideoModel = (model: string) => /^agnes-video-/i.test(model.trim(
 export const isActive = (task: MaterialCanvasTask) => task.slots.some((slot) => slot.status === 'queued' || slot.status === 'running');
 
 // 列表：队列里的任务在前（能取消、重试），再接生成历史里不在队列中的；按提示词、模型搜索。
-export function visibleTasks(queue: readonly MaterialCanvasTask[], history: readonly MaterialCanvasTask[], query: string) {
+// 队列和历史合并后按创建时间排：队列里的任务不再总排在前面，另一台电脑同一时段生成的也按时间插进来。
+export function visibleTasks(queue: readonly MaterialCanvasTask[], history: readonly MaterialCanvasTask[], query: string, order: CanvasSortOrder = 'newest') {
   const inQueue = new Set(queue.map((task) => task.id));
-  const merged = [...queue, ...history.filter((task) => !inQueue.has(task.id))];
+  const direction = order === 'oldest' ? 1 : -1;
+  const merged = [...queue, ...history.filter((task) => !inQueue.has(task.id))].sort(
+    (a, b) => direction * ((Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0)),
+  );
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (!words.length) return merged;
   return merged.filter((task) => {

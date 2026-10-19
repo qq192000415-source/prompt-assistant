@@ -15,8 +15,14 @@ const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 420;
 
 export type LibraryMode = 'prompts' | 'documents' | 'materials' | 'canvas';
-// 画布生成记录的看法：按任务分组，或所有图平铺成图片墙。
+// 画布生成记录的看法：列表（按任务分组，存的值沿用 1.8.3 的 tasks）或网格（wall）。
 export type CanvasRecordView = 'tasks' | 'wall';
+export type CanvasSortOrder = 'newest' | 'oldest';
+const CANVAS_SORT_ORDER_KEY = 'prompt-library.canvasSortOrder.v1';
+const CANVAS_DETAIL_WIDTH_KEY = 'prompt-library.canvasDetailWidth.v1';
+const CANVAS_PANEL_COLLAPSED_KEY = 'prompt-library.canvasPanelCollapsed.v1';
+const MIN_CANVAS_DETAIL_WIDTH = 300;
+const MAX_CANVAS_DETAIL_WIDTH = 720;
 
 export type RememberedCloudLogin = {
   email: string;
@@ -192,6 +198,35 @@ export const saveCanvasRecordView = (view: CanvasRecordView) => {
     // 记不住看法不影响使用。
   }
 };
+
+// 画布的排序、详情栏宽度、参数栏收起：都只是本机偏好，读写失败按默认来。
+const readKey = (key: string) => {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+const writeKey = (key: string, value: string) => {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // 记不住不影响使用。
+  }
+};
+
+export const loadCanvasSortOrder = (): CanvasSortOrder => (readKey(CANVAS_SORT_ORDER_KEY) === 'oldest' ? 'oldest' : 'newest');
+export const saveCanvasSortOrder = (order: CanvasSortOrder) => writeKey(CANVAS_SORT_ORDER_KEY, order);
+
+export const clampCanvasDetailWidth = (width: number) => Math.round(Math.min(MAX_CANVAS_DETAIL_WIDTH, Math.max(MIN_CANVAS_DETAIL_WIDTH, width)));
+export const loadCanvasDetailWidth = () => {
+  const saved = Number(readKey(CANVAS_DETAIL_WIDTH_KEY) ?? NaN);
+  return Number.isFinite(saved) ? clampCanvasDetailWidth(saved) : 400;
+};
+export const saveCanvasDetailWidth = (width: number) => writeKey(CANVAS_DETAIL_WIDTH_KEY, String(clampCanvasDetailWidth(width)));
+
+export const loadCanvasPanelCollapsed = () => readKey(CANVAS_PANEL_COLLAPSED_KEY) === '1';
+export const saveCanvasPanelCollapsed = (collapsed: boolean) => writeKey(CANVAS_PANEL_COLLAPSED_KEY, collapsed ? '1' : '0');
 
 export const saveLibraryMode = (mode: LibraryMode) => {
   try {

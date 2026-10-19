@@ -9,7 +9,7 @@ window.localStorage = {
   removeItem: (key) => store.delete(key),
 };
 
-const { loadCanvasRecordView, loadDeletedRecords, loadExportSettings, loadLibraryMode, loadSidebarWidth, loadSyncRecords, saveCanvasRecordView, saveDeletedRecords } = await import(
+const { clampCanvasDetailWidth, loadCanvasDetailWidth, loadCanvasPanelCollapsed, loadCanvasRecordView, loadCanvasSortOrder, saveCanvasDetailWidth, saveCanvasPanelCollapsed, saveCanvasSortOrder, loadDeletedRecords, loadExportSettings, loadLibraryMode, loadSidebarWidth, loadSyncRecords, saveCanvasRecordView, saveDeletedRecords } = await import(
   '../src/localState.ts'
 );
 const { normalizeDesktopSettings } = await import('../src/desktopSettings.ts');
@@ -65,6 +65,22 @@ test('画布生成记录的看法：默认按任务，存过图片墙就记住�
   assert.equal(loadCanvasRecordView(), 'wall');
   store.set('prompt-library.canvasRecordView.v1', 'grid');
   assert.equal(loadCanvasRecordView(), 'tasks');
+});
+
+test('画布的排序、详情栏宽度、参数栏收起：有默认值，存过就记住，乱写的值退回默认', () => {
+  for (const key of ['canvasSortOrder', 'canvasDetailWidth', 'canvasPanelCollapsed']) store.delete(`prompt-library.${key}.v1`);
+  assert.deepEqual([loadCanvasSortOrder(), loadCanvasDetailWidth(), loadCanvasPanelCollapsed()], ['newest', 400, false]);
+
+  saveCanvasSortOrder('oldest');
+  saveCanvasDetailWidth(512.4);
+  saveCanvasPanelCollapsed(true);
+  assert.deepEqual([loadCanvasSortOrder(), loadCanvasDetailWidth(), loadCanvasPanelCollapsed()], ['oldest', 512, true]);
+
+  // 宽度夹在 300–720；非数字、乱写的排序按默认
+  assert.deepEqual([clampCanvasDetailWidth(100), clampCanvasDetailWidth(5000)], [300, 720]);
+  store.set('prompt-library.canvasDetailWidth.v1', 'wide');
+  store.set('prompt-library.canvasSortOrder.v1', 'random');
+  assert.deepEqual([loadCanvasDetailWidth(), loadCanvasSortOrder()], [400, 'newest']);
 });
 
 test('桌面设置：透明度夹在 0.25–1，非法关闭行为沿用原值，坐标缺失时保留原坐标', () => {
