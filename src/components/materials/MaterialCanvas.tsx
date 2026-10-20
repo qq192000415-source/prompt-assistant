@@ -385,8 +385,8 @@ export function MaterialCanvas({ controller, nas, onOpenSettings }: MaterialCanv
   ]
     .filter(Boolean)
     .join(' · ');
-  // 批量管理能选的：已结束任务里的图（网格里只有生成好的，列表里失败的也能选）。进行中的不能删。
-  const pickable = pageTasks
+  // 批量管理能选的：筛选后全部已结束任务里的图（不只是已显示的几页；网格里只有生成好的，列表里失败的也能选）。进行中的不能删。
+  const pickable = tasks
     .filter((task) => !isActive(task))
     .flatMap((task) => task.slots.filter((slot) => recordView === 'tasks' || slot.status === 'done').map((slot) => slotKey(task, slot)));
   const recordProps: RecordProps = {

@@ -203,7 +203,8 @@ export function BatchProgressPanel({ progress, onCancel }: BatchProgressPanelPro
       <div className="materials-progress-head">
         <strong>{progress.task}</strong>
         <span>{countText}</span>
-        {progress.task !== '下载 FFmpeg' && (
+        {/* 删除生成记录时记录已经先删了，中途停下只会在 NAS 留下没人用的文件 */}
+        {progress.task !== '下载 FFmpeg' && progress.task !== '删除生成记录' && (
           <Button className="button ghost compact" type="button" onClick={onCancel}>
             取消
           </Button>

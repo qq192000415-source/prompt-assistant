@@ -232,7 +232,7 @@ export function useMaterialLibrary(notify: (message: string) => void, account: M
     canvasDismiss: (taskId: string) => api!.canvasDismiss(taskId).catch((error) => notify(messageOf(error))),
     canvasHistory: () => api!.canvasHistory(),
     canvasHistoryDelete: async (ids: string[]) => {
-      const result = await run('正在删除…', () => api!.canvasHistoryDelete(ids));
+      const result = await runBatch('正在删除…', () => api!.canvasHistoryDelete(ids));
       if (!result) return null;
       notify(result.warnings.length ? `已删除，但有 ${result.warnings.length} 个文件没能从 NAS 上删掉：${result.warnings.join('；')}` : '已删除');
       return result.history;

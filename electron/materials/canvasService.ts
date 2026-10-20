@@ -292,19 +292,23 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem, onPe
       return { history: mergePending(cached, listPending(dir)), dropped: 0, offline: true, error: error instanceof Error ? error.message : String(error) };
     }
   });
-  ipcMain.handle('materials:canvas-history-delete', async (_event, ids) => {
+  ipcMain.handle('materials:canvas-history-delete', async (event, ids) => {
     const config = loadConfig(userDataDir);
     const wanted = Array.isArray(ids) ? ids.map(String) : [];
+    const report = (done: number, total: number, current: string) => {
+      if (!event.sender.isDestroyed()) event.sender.send('materials:progress', { task: '删除生成记录', done, total, current });
+    };
+    report(0, 0, '正在更新生成历史');
     const { history, dropped, result: orphaned } = await mutateHistory(config, (current) => {
       const outcome = deleteHistoryTasks(current, wanted, new Date().toISOString());
       return { history: outcome.history, result: outcome.orphaned };
     });
     // 记录已经删掉；文件删不掉只多占空间，告诉用户但不算失败。
     const warnings: string[] = [];
-    for (const media of orphaned) {
-      for (const target of [historyMediaPath(media), ...(media.hasThumb ? [historyThumbPath(media)] : [])]) {
-        await webdav.remove(config, target).catch((error) => warnings.push(`${target}：${error instanceof Error ? error.message : error}`));
-      }
+    const targets = orphaned.flatMap((media) => [historyMediaPath(media), ...(media.hasThumb ? [historyThumbPath(media)] : [])]);
+    for (const [index, target] of targets.entries()) {
+      report(index, targets.length, '正在从 NAS 删除文件');
+      await webdav.remove(config, target).catch((error) => warnings.push(`${target}：${error instanceof Error ? error.message : error}`));
     }
     const removing = new Set(wanted);
     // 还没传上 NAS 的也一起删（NAS 连得上才走到这里）。
