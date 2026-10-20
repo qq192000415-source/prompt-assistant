@@ -87,6 +87,13 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     canvasReference: (id) => ipcRenderer.invoke('materials:canvas-reference', id),
     canvasClipboardImage: () => ipcRenderer.invoke('materials:canvas-clipboard-image'),
     canvasHistoryImage: (sha256, ext) => ipcRenderer.invoke('materials:canvas-history-image', sha256, ext),
+    nasStatus: () => ipcRenderer.invoke('materials:nas-status'),
+    nasReconnect: () => ipcRenderer.invoke('materials:nas-reconnect'),
+    onNasStatus: (callback) => {
+      const listener = (_event, status) => callback(status);
+      ipcRenderer.on('materials:nas-status', listener);
+      return () => ipcRenderer.removeListener('materials:nas-status', listener);
+    },
     onProgress: (callback) => {
       const listener = (_event, progress) => callback(progress);
       ipcRenderer.on('materials:progress', listener);

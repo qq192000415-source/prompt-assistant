@@ -5279,6 +5279,110 @@ h2 {
   font-size: 12px;
 }
 
+/* NAS 连接状态：设置页里是一块，素材库和画布顶部是一行 */
+.nas-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 13px;
+  padding: 8px 12px;
+}
+
+.nas-status.is-disconnected {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+  background: var(--danger-weak);
+}
+
+/* 画布标题栏的直接子 div 默认是 grid，这里要横排 */
+.canvas-stage-header > .nas-status {
+  display: flex;
+}
+
+.nas-status.is-compact {
+  border: 0;
+  background: transparent;
+  font-size: 12px;
+  padding: 0;
+}
+
+.nas-status-line {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0;
+  color: var(--muted);
+}
+
+.nas-status-line strong {
+  color: var(--text);
+  font-size: inherit;
+  font-weight: 600;
+}
+
+.nas-status.is-disconnected .nas-status-line strong {
+  color: var(--danger);
+}
+
+.nas-status-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 999px;
+  margin-right: 6px;
+  background: var(--muted);
+}
+
+.nas-status.is-connected .nas-status-dot {
+  background: var(--success);
+}
+
+.nas-status.is-disconnected .nas-status-dot {
+  background: var(--danger);
+}
+
+.nas-status-detail {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.nas-status-detail.is-warning {
+  color: var(--warning);
+}
+
+.nas-status .is-spinning {
+  animation: nas-spin 900ms linear infinite;
+}
+
+@keyframes nas-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nas-status .is-spinning {
+    animation: none;
+  }
+}
+
+.canvas-offline-note {
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--warning) 30%, var(--border));
+  border-radius: 10px;
+  background: var(--warning-weak);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 8px 12px;
+}
+
 /* 图右上角的删除：悬停（或键盘聚焦）才出现，盖住「已存入」小勾；点一下变红色「删除」等确认 */
 .canvas-slot-delete {
   position: absolute;

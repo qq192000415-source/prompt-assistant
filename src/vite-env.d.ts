@@ -131,7 +131,8 @@ type DesktopMaterialsApi = {
   canvasCancel: (taskId: string) => Promise<void>;
   canvasRetry: (taskId: string, index: number) => Promise<void>;
   canvasDismiss: (taskId: string) => Promise<void>;
-  canvasHistory: () => Promise<{ history: MaterialCanvasHistory; dropped: number }>;
+  // offline：NAS 连不上，返回的是本机缓存（最近一次读到的 + 还没传上去的）。
+  canvasHistory: () => Promise<{ history: MaterialCanvasHistory; dropped: number; offline: boolean; error: string }>;
   // ids 是任务 id（删整个任务）或 `任务 id:图序号`（只删那一张）。
   canvasHistoryDelete: (ids: string[]) => Promise<{ history: MaterialCanvasHistory; dropped: number; warnings: string[] }>;
   canvasTemplates: () => Promise<MaterialCanvasTemplateResult>;
@@ -145,6 +146,9 @@ type DesktopMaterialsApi = {
   canvasReference: (id: string) => Promise<{ dataUrl: string; title: string }>;
   canvasClipboardImage: () => Promise<string>;
   canvasHistoryImage: (sha256: string, ext: string) => Promise<string>;
+  nasStatus: () => Promise<MaterialNasStatus>;
+  nasReconnect: () => Promise<MaterialNasStatus>;
+  onNasStatus: (callback: (status: MaterialNasStatus) => void) => () => void;
   onProgress: (callback: (progress: MaterialBatchProgress) => void) => () => void;
 };
 
@@ -207,6 +211,13 @@ type MaterialCanvasTemplateResult = { templates: { schemaVersion: 1; updatedAt: 
 type MaterialCanvasOrigin = { prompt: string; negativePrompt: string; title: string; category: string; tags: string[] };
 type MaterialAiBatchResult = MaterialLoadResult & { processed: number; skipped: number; failures: MaterialBatchFailure[]; canceled: boolean };
 
+// NAS 连接状态（electron/materials/nasMonitor.ts）和当前账号本机待上传的生成记录。
+type MaterialNasStatus = {
+  state: 'unknown' | 'connected' | 'disconnected';
+  error: string;
+  nextRetryAt: string | null;
+  pending: { count: number; bytes: number; overLimit: boolean };
+};
 type MaterialProxySettings = { mode: 'system' | 'direct' | 'custom'; url: string };
 type MaterialBatchProgress ={ task: string; done: number; total: number; current: string };
 type MaterialImageCompressOptions = { quality: number; maxSide: number; format: 'keep' | 'jpeg' };

@@ -76,7 +76,28 @@ export function requestTimeoutMs(body: DavBody | undefined, headers: Record<stri
 const timeoutError = (seconds: number, method: string, relativePath: string) =>
   new DavError(`NAS ${seconds} 秒没有响应（${method} ${relativePath || '/'}），可能是 NAS 或网络卡住了，稍后再试`, 0);
 
+// 连不上、超时，或 NAS 前面的反向代理说后面不通（502–504）才算断开；401、404 这类是连上了。
+export const isUnreachable = (error: unknown) => error instanceof DavError && (error.status === 0 || (error.status >= 502 && error.status <= 504));
+
+// 每个请求通没通报给 NAS 连接状态（nasMonitor.ts）；Node 测试里不设，什么都不做。
+let reachability: (ok: boolean, error: string) => void = () => undefined;
+export const setReachabilityListener = (listener: (ok: boolean, error: string) => void) => {
+  reachability = listener;
+};
+
 export async function dav(config: DavConfig, method: string, relativePath: string, options: RequestOptions = {}) {
+  try {
+    const response = await request(config, method, relativePath, options);
+    reachability(true, '');
+    return response;
+  } catch (error) {
+    if (isUnreachable(error)) reachability(false, (error as DavError).message);
+    else if (error instanceof DavError) reachability(true, '');
+    throw error;
+  }
+}
+
+async function request(config: DavConfig, method: string, relativePath: string, options: RequestOptions) {
   const timeoutMs = options.timeoutMs ?? requestTimeoutMs(options.body, options.headers);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);

@@ -4,6 +4,8 @@ import { Button } from '../ui/button';
 import { useMaterialSettings } from '../../materials/useMaterialLibrary';
 import { AiSettingsForm } from './AiSettings';
 import { NasGrantsPanel } from './NasGrantsPanel';
+import { NasStatusBadge } from './NasStatusBadge';
+import { useNasStatus } from '../../materials/useNasStatus';
 
 type NasSettingsFormProps = {
   config: NasConfig | null;
@@ -195,6 +197,7 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 // 设置页里素材库相关的三块：NAS 连接、AI 助手、网络。
 export function MaterialSettingsSection({ section, notify, adminEmail }: MaterialSettingsSectionProps) {
   const settings = useMaterialSettings(notify, adminEmail);
+  const nas = useNasStatus();
   const busy = Boolean(settings.busy);
 
   if (!settings.available) return <p className="settings-note">桌面版运行时可用。</p>;
@@ -214,6 +217,7 @@ export function MaterialSettingsSection({ section, notify, adminEmail }: Materia
   if (!settings.config) return null;
   return (
     <>
+      {settings.config.hasPassword && <NasStatusBadge nas={nas} />}
       <NasSettingsForm config={settings.config} busy={busy} onSubmit={settings.saveConfig} />
       {adminEmail && settings.config.hasPassword && settings.config.source === 'manual' && <NasGrantsPanel key={settings.savedCount} adminEmail={adminEmail} notify={notify} />}
     </>

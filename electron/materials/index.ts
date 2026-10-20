@@ -1,4 +1,5 @@
 // 素材库主进程入口：nas-media:// 媒体协议、导入、IPC。编译成 electron/materials.cjs，由 main.cjs 引用。
+import fs from 'node:fs';
 import path from 'node:path';
 import { clipboard, dialog, nativeImage, protocol, type BrowserWindow, type IpcMain } from 'electron';
 import {
@@ -22,7 +23,9 @@ import { applyProxySettings, readProxySettings, saveProxySettings, testProxy } f
 import { registerCanvas } from './canvasService.ts';
 import { commitImport, uploadFile } from './uploads.ts';
 import { prepareAccountFolder } from './accountFolder.ts';
-import { applyGrant, getPublicConfig, loadConfig, loadRootConfig, revealConfig, saveConfig, setAccount } from './config.ts';
+import { applyGrant, getAccount, getPublicConfig, loadConfig, loadRootConfig, revealConfig, saveConfig, setAccount } from './config.ts';
+import { cacheDir, localCanvasFile, storeThumb, thumbInsteadOf, thumbShaOf } from './canvasCache.ts';
+import { createNasMonitor } from './nasMonitor.ts';
 import { FFMPEG_COMPONENT, ffmpegPath, installFfmpeg, isFfmpegInstalled, type VideoCompressOptions } from './ffmpeg.ts';
 import { mutateLibrary, readLibrary } from './libraryStore.ts';
 import * as webdav from './webdav.ts';
@@ -38,8 +41,11 @@ export function registerScheme() {
   ]);
 }
 
+const fileResponse = (file: string, type: string) => new Response(fs.readFileSync(file), { headers: { 'Content-Type': type, 'Cache-Control': 'no-store' } });
+
 // 渲染进程用 nas-media://media/<sha>.<ext> 显示图片和视频：主进程带上账户去 NAS 取，
-// 透传 Range 让视频能拖进度条，并要求不缓存，素材不落在本机磁盘上。
+// 透传 Range 让视频能拖进度条，并要求浏览器不缓存。素材库的不落本机；画布生成记录先看本机缓存（canvasCache.ts）：
+// 没传上 NAS 的原图、看过的缩略图直接读本机，从 NAS 读到的缩略图存一份，NAS 断开时原图用缩略图代替。
 function handleMediaRequest(userDataDir: string) {
   return async (request: Request) => {
     const url = new URL(request.url);
@@ -47,6 +53,9 @@ function handleMediaRequest(userDataDir: string) {
     if (!MEDIA_PATH_PATTERN.test(relativePath)) {
       return new Response('not found', { status: 404 });
     }
+    const dir = relativePath.startsWith('canvas-history/') && getAccount() ? cacheDir(userDataDir, getAccount()) : null;
+    const local = dir && localCanvasFile(dir, relativePath);
+    if (local) return fileResponse(local, mimeTypeOf(relativePath));
     try {
       const config = loadConfig(userDataDir);
       const range = request.headers.get('range');
@@ -55,12 +64,20 @@ function handleMediaRequest(userDataDir: string) {
         allow: [404, 416],
       });
       const headers = new Headers({ 'Content-Type': mimeTypeOf(relativePath), 'Cache-Control': 'no-store' });
+      const sha256 = dir && upstream.status === 200 ? thumbShaOf(relativePath) : null;
+      if (dir && sha256) {
+        const buffer = Buffer.from(await upstream.arrayBuffer());
+        storeThumb(dir, sha256, buffer);
+        return new Response(buffer, { headers });
+      }
       for (const name of ['content-length', 'content-range', 'accept-ranges']) {
         const value = upstream.headers.get(name);
         if (value) headers.set(name, value);
       }
       return new Response(upstream.body, { status: upstream.status, headers });
     } catch (error) {
+      const thumb = dir && webdav.isUnreachable(error) ? thumbInsteadOf(dir, relativePath) : null;
+      if (thumb) return fileResponse(thumb, 'image/jpeg');
       return new Response(error instanceof Error ? error.message : String(error), { status: 502 });
     }
   };
@@ -93,6 +110,26 @@ type RegisterOptions = {
 
 export function register({ ipcMain, userDataDir, updateBaseUrl, getWindow }: RegisterOptions) {
   protocol.handle(SCHEME, handleMediaRequest(userDataDir));
+
+  // NAS 连接状态推给界面，带上当前账号本机待上传的数量；从断开变成连上时补传。
+  const nasStatus = () => ({ ...monitor.status(), pending: canvasService.pendingStats() });
+  const pushNasStatus = () => {
+    const window = getWindow();
+    if (window && !window.isDestroyed()) window.webContents.send('materials:nas-status', nasStatus());
+  };
+  const monitor = createNasMonitor({
+    probe: () => webdav.exists(loadRootConfig(userDataDir), ''),
+    onChange: (status, previous) => {
+      pushNasStatus();
+      if (status.state === 'connected' && previous !== 'connected') void canvasService.syncPending();
+    },
+  });
+  webdav.setReachabilityListener(monitor.report);
+  ipcMain.handle('materials:nas-status', () => nasStatus());
+  ipcMain.handle('materials:nas-reconnect', async () => {
+    await monitor.reconnect();
+    return nasStatus();
+  });
 
   ipcMain.handle('materials:get-config', () => getPublicConfig(userDataDir));
   ipcMain.handle('materials:save-config', (_event, input) =>
@@ -265,5 +302,5 @@ export function register({ ipcMain, userDataDir, updateBaseUrl, getWindow }: Reg
     batchClassify(loadAiRuntime(userDataDir), loadConfig(userDataDir), asStringArray(ids), progressTo(event)),
   );
 
-  registerCanvas({ ipcMain, userDataDir, getWindow, findItem });
+  const canvasService = registerCanvas({ ipcMain, userDataDir, getWindow, findItem, onPendingChange: pushNasStatus });
 }

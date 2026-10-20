@@ -59,9 +59,10 @@ export function useMaterialLibrary(notify: (message: string) => void, account: M
     [],
   );
 
-  const reload = useCallback(async () => {
+  // quiet：NAS 重新连上后在后台重读，不切到「正在读取」，画布不会被卸掉重来。
+  const reload = useCallback(async (quiet = false) => {
     if (!api) return;
-    setStatus('loading');
+    if (!quiet) setStatus('loading');
     try {
       const nextConfig = await api.getConfig();
       setConfig(nextConfig);

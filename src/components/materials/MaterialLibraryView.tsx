@@ -35,6 +35,8 @@ import { MaterialCanvas } from './MaterialCanvas';
 import { BatchProgressPanel, CompressImagesDialog, CompressVideosDialog } from './BatchDialogs';
 import { MaterialDetailDialog } from './MaterialDetailDialog';
 import { NasSettingsForm } from './NasSettings';
+import { NasStatusBadge } from './NasStatusBadge';
+import { useNasRecovered, useNasStatus } from '../../materials/useNasStatus';
 
 export const mediaSrc = (media: MaterialMedia) => `nas-media://media/${media.sha256}${media.ext}`;
 export const previewSrc = (media: MaterialMedia) => (media.hasThumb ? `nas-media://thumbs/${media.sha256}.jpg` : mediaSrc(media));
@@ -51,6 +53,11 @@ type MaterialLibraryViewProps = {
 export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, onOpenSettings, notify, account }: MaterialLibraryViewProps) {
   const controller = useMaterialLibrary(notify, account);
   const { status, library, busy } = controller;
+  const nas = useNasStatus();
+  // NAS 断开时打开（或读到一半断了）的素材库，重新连上后自动再读一次。
+  useNasRecovered(nas, (reconnected) => {
+    if (reconnected && status === 'error') void controller.reload(true);
+  });
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState(ALL_CATEGORIES);
   const [openItemId, setOpenItemId] = useState<string | null>(null);
@@ -154,6 +161,7 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, onOpenSe
             <h1>素材库</h1>
             <span>{busy || summary}</span>
           </div>
+          {(ready || status === 'error') && <NasStatusBadge nas={nas} compact />}
           {ready && !onCanvas && (
             <>
               <label className="materials-search">
@@ -197,9 +205,11 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, onOpenSe
         </header>
       )}
 
-      {ready && onCanvas && (
+      {/* NAS 断开时画布照常打开，生成记录用本机缓存 */}
+      {(ready || status === 'error') && onCanvas && (
         <MaterialCanvas
           controller={controller}
+          nas={nas}
           onOpenSettings={() => onOpenSettings('ai')}
         />
       )}
@@ -343,7 +353,7 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, onOpenSe
         </div>
       )}
 
-      {status === 'error' && (
+      {status === 'error' && !onCanvas && (
         <div className="materials-state is-error" role="alert">
           <strong>读取素材库失败</strong>
           <span>{controller.error}</span>

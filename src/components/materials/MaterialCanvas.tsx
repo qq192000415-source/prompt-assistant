@@ -27,6 +27,8 @@ import {
 import type { CanvasBaseResolution, CanvasReferenceImage, CanvasSizeMode } from '../../materials/suyan/canvasTypes.ts';
 import { ReferenceEditor, ReferencePreview, type EditorMode } from './ReferenceEditor';
 import { CanvasTemplatePanel } from './CanvasTemplatePanel';
+import { NasStatusBadge } from './NasStatusBadge';
+import { useNasRecovered, type NasStatusController } from '../../materials/useNasStatus';
 
 const SIZE_MODES: Array<{ value: CanvasSizeMode; label: string }> = [
   { value: 'auto', label: '自动' },
@@ -73,10 +75,11 @@ function Segmented<T extends string>({ value, options, onChange, label }: { valu
 
 type MaterialCanvasProps = {
   controller: MaterialLibraryController;
+  nas: NasStatusController;
   onOpenSettings: () => void;
 };
 
-export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasProps) {
+export function MaterialCanvas({ controller, nas, onOpenSettings }: MaterialCanvasProps) {
   const { draft, error, queue, history, historyLoaded } = useCanvasState();
   const [model, setModel] = useState<string | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
@@ -157,11 +160,14 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
   };
   const frequentTemplates = (templates ?? []).filter((entry) => entry.useCount > 0).sort((a, b) => b.useCount - a.useCount).slice(0, 4);
 
+  // NAS 连不上时主进程给的是本机缓存（最近一次读到的 + 还没传上去的）。
+  const [historyOffline, setHistoryOffline] = useState(false);
   const reloadHistory = () =>
     controller
       .canvasHistory()
-      .then(({ history: loaded, dropped }) => {
+      .then(({ history: loaded, dropped, offline }) => {
         canvas.setHistory(loaded.tasks);
+        setHistoryOffline(offline);
         if (dropped) canvas.showError(`生成历史里有 ${dropped} 条记录读不懂（可能是别的电脑上更新的版本写的），已跳过；下次生成时它们不会被保留`);
       })
       .catch((loadError) => {
@@ -181,6 +187,9 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
       finishedSlots.current = finished;
     });
   }, []);
+
+  // 重新连上 NAS、本机待上传的存了新的或补传完了，都重读一次。
+  useNasRecovered(nas, () => void reloadHistory());
 
   // 画布里按 Ctrl+V：剪贴板里有图就加成参考图；输入框里的粘贴照常。
   useEffect(() => {
@@ -713,6 +722,7 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
             {/* 页面标题栏去掉后，存入、读取这类进度显示在这里 */}
             <span aria-live="polite">{controller.busy || (historyLoaded || tasks.length ? countLine : '正在读取生成历史…')}</span>
           </div>
+          <NasStatusBadge nas={nas} compact />
           <div className="canvas-stage-tools">
             <Segmented value={recordView} options={RECORD_VIEWS} onChange={changeRecordView} label="生成记录的看法" />
             <Segmented value={sortOrder} options={SORT_ORDERS} onChange={changeSortOrder} label="生成记录的排序" />
@@ -747,6 +757,12 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
             </div>
           )}
         </div>
+
+        {historyOffline && (
+          <p className="canvas-offline-note" role="status">
+            NAS 连不上，下面是这台电脑上缓存的生成记录，大图先用缩略图代替。新生成的图先存在本机，连上 NAS 后自动传上去；删除、存入素材库要等连上。
+          </p>
+        )}
 
         {picked && (
           <div className="materials-batch-bar" role="toolbar" aria-label="批量操作">

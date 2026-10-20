@@ -8,6 +8,19 @@ import { mimeTypeOf } from '../../src/materials/mediaFileTypes.ts';
 import { loadAiRuntime, loadCanvasOptions } from './aiSettings.ts';
 import { CANVAS_CATEGORY, decodeGeneratedMedia, generateMedia, savedItemText, sizeMismatchWarning, type CanvasOrigin } from './canvas.ts';
 import {
+  addPending,
+  cacheDir,
+  listPending,
+  mergePending,
+  pendingStats,
+  pruneCache,
+  readHistoryCopy,
+  readPendingMedia,
+  removePending,
+  saveHistoryCopy,
+  type PendingEntry,
+} from './canvasCache.ts';
+import {
   HISTORY_DIR,
   deleteHistoryTasks,
   findSlot,
@@ -15,6 +28,7 @@ import {
   historyThumbPath,
   markSavedToLibrary,
   mutateHistory,
+  normalizeHistory,
   readHistory,
   recordSlot,
   type HistoryMedia,
@@ -32,6 +46,8 @@ type Options = {
   userDataDir: string;
   getWindow: () => BrowserWindow | null;
   findItem: (itemId: unknown) => Promise<{ config: DavConfig; library: MaterialLibrary; item: MaterialItem }>;
+  // 本机待上传的记录变了（新存了、补传了），NAS 状态里带着待上传数，要重新推给界面。
+  onPendingChange: () => void;
 };
 
 const taskRecord = (task: QueueTask, references: HistoryMedia[]) => ({
@@ -49,29 +65,32 @@ const taskRecord = (task: QueueTask, references: HistoryMedia[]) => ({
 
 const stamp = () => new Date().toLocaleString('sv-SE').replace(/[: ]/g, '-');
 
+// 生成的图的记录信息和缩略图（只有图片有）。存 NAS 和存本机待上传都用它。
+function describeMedia(buffer: Buffer, ext: string) {
+  const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
+  const kind = ext === '.mp4' ? 'video' : 'image';
+  const media: HistoryMedia = { sha256, ext, kind, size: buffer.length, width: null, height: null, hasThumb: false };
+  if (kind !== 'image') return { media, thumb: null };
+  const image = nativeImage.createFromBuffer(buffer);
+  const thumb = makeThumbnail(image);
+  if (thumb) Object.assign(media, image.getSize(), { hasThumb: true });
+  return { media, thumb };
+}
+
 // 按 sha256 存（同一张图只存一份），图片顺带存缩略图，和素材库的 uploadBuffer 一个思路。
 async function putHistoryMedia(config: DavConfig, buffer: Buffer, ext: string): Promise<HistoryMedia> {
   await webdav.ensureFolder(config, HISTORY_DIR);
   await webdav.ensureFolder(config, `${HISTORY_DIR}media/`);
   await webdav.ensureFolder(config, `${HISTORY_DIR}thumbs/`);
-  const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
-  const kind = ext === '.mp4' ? 'video' : 'image';
-  const media: HistoryMedia = { sha256, ext, kind, size: buffer.length, width: null, height: null, hasThumb: false };
+  const { media, thumb } = describeMedia(buffer, ext);
   if (!(await webdav.exists(config, historyMediaPath(media)))) {
     await webdav.put(config, historyMediaPath(media), new Uint8Array(buffer), { 'Content-Type': mimeTypeOf(`x${ext}`) });
   }
-  if (kind === 'image') {
-    const image = nativeImage.createFromBuffer(buffer);
-    const thumb = makeThumbnail(image);
-    if (thumb) {
-      await webdav.put(config, historyThumbPath(media), new Uint8Array(thumb), { 'Content-Type': 'image/jpeg' });
-      Object.assign(media, image.getSize(), { hasThumb: true });
-    }
-  }
+  if (thumb) await webdav.put(config, historyThumbPath(media), new Uint8Array(thumb), { 'Content-Type': 'image/jpeg' });
   return media;
 }
 
-export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Options) {
+export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem, onPendingChange }: Options) {
   // 状态变化很密（每个槽位开始、结束、重试都会变），合并成每 150 毫秒最多推一次给界面。
   let pending: NodeJS.Timeout | null = null;
   const broadcast = () => {
@@ -130,22 +149,35 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Op
       };
     },
     persist: async (task, slot, generated) => {
-      const config = loadConfig(userDataDir, accountByTask.get(task.id));
+      const account = accountByTask.get(task.id) ?? getAccount();
       const references = await referencesOf(task);
       const { buffer, ext } = decodeGeneratedMedia(generated.dataUrl);
-      const media = await putHistoryMedia(config, buffer, ext);
-      await mutateHistory(config, (history) => ({
-        history: recordSlot(history, taskRecord(task, references), { index: slot.index, status: 'done', media, revisedPrompt: generated.revisedPrompt, error: generated.warning ?? '', attempts: slot.attempts, savedToLibrary: false }, new Date().toISOString()),
-        result: null,
-      }));
-      return media;
+      const record = { index: slot.index, status: 'done' as const, revisedPrompt: generated.revisedPrompt, error: generated.warning ?? '', attempts: slot.attempts, savedToLibrary: false };
+      try {
+        const config = loadConfig(userDataDir, account);
+        const media = await putHistoryMedia(config, buffer, ext);
+        await mutateHistory(config, (history) => ({ history: recordSlot(history, taskRecord(task, references), { ...record, media }, new Date().toISOString()), result: null }));
+        return media;
+      } catch (error) {
+        if (!webdav.isUnreachable(error)) throw error;
+        // NAS 断开：先存本机，界面照常显示（nas-media 先读本机），连上后 syncPending 补传。
+        const { media, thumb } = describeMedia(buffer, ext);
+        addPending(cacheDir(userDataDir, account), taskRecord(task, references), { ...record, media }, { media: buffer, thumb });
+        onPendingChange();
+        return media;
+      }
     },
     recordFailure: async (task, slot) => {
+      const account = accountByTask.get(task.id) ?? getAccount();
       const references = await referencesOf(task);
-      await mutateHistory(loadConfig(userDataDir, accountByTask.get(task.id)), (history) => ({
-        history: recordSlot(history, taskRecord(task, references), { index: slot.index, status: 'failed', media: null, revisedPrompt: null, error: slot.error, attempts: slot.attempts, savedToLibrary: false }, new Date().toISOString()),
-        result: null,
-      }));
+      const record = { index: slot.index, status: 'failed' as const, media: null, revisedPrompt: null, error: slot.error, attempts: slot.attempts, savedToLibrary: false };
+      try {
+        await mutateHistory(loadConfig(userDataDir, account), (history) => ({ history: recordSlot(history, taskRecord(task, references), record, new Date().toISOString()), result: null }));
+      } catch (error) {
+        if (!webdav.isUnreachable(error)) throw error;
+        addPending(cacheDir(userDataDir, account), taskRecord(task, references), record);
+        onPendingChange();
+      }
     },
     limits: () => loadCanvasOptions(userDataDir),
     onChange: broadcast,
@@ -164,6 +196,11 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Op
       const { buffer, ext } = decodeGeneratedMedia(inMemory.slot.dataUrl!);
       return { buffer, ext, task: inMemory.task, fromHistory: false };
     }
+    // 断线时生成、还没传上 NAS 的图在本机。
+    const dir = cacheDir(userDataDir, getAccount());
+    const pending = listPending(dir).find((entry) => entry.task.id === taskId && entry.slot.index === index);
+    const pendingBuffer = pending && readPendingMedia(dir, pending);
+    if (pending?.slot.media && pendingBuffer) return { buffer: pendingBuffer, ext: pending.slot.media.ext, task: pending.task, fromHistory: false };
     const config = loadConfig(userDataDir);
     const { history } = await readHistory(config);
     const { task, media } = findSlot(history, taskId, index);
@@ -208,7 +245,53 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Op
   ipcMain.handle('materials:canvas-retry', (_event, taskId, index) => queue.retry(String(taskId), Number(index)));
   ipcMain.handle('materials:canvas-dismiss', (_event, taskId) => queue.dismiss(String(taskId)));
 
-  ipcMain.handle('materials:canvas-history', () => readHistory(loadConfig(userDataDir)));
+  // 本机待上传的补传到 NAS：连上 NAS、读到生成历史时触发，同一时间只跑一个。传一条删一条，中途断了下次接着传。
+  let syncing: Promise<void> | null = null;
+  const syncPending = () =>
+    (syncing ??= (async () => {
+      const account = getAccount();
+      if (!account) return;
+      const dir = cacheDir(userDataDir, account);
+      if (!listPending(dir).length) return;
+      const config = loadConfig(userDataDir, account);
+      const same = (entry: PendingEntry) => (other: PendingEntry) => other.task.id === entry.task.id && other.slot.index === entry.slot.index;
+      for (const entry of listPending(dir)) {
+        let media = entry.slot.media;
+        if (media) {
+          const buffer = readPendingMedia(dir, entry);
+          if (!buffer) {
+            console.warn(`本机暂存的图不见了，这条生成记录没法补传：${entry.task.id}:${entry.slot.index}`);
+            removePending(dir, same(entry));
+            continue;
+          }
+          media = await putHistoryMedia(config, buffer, media.ext);
+        }
+        await mutateHistory(config, (history) => ({ history: recordSlot(history, entry.task, { ...entry.slot, media }, entry.at), result: null }));
+        removePending(dir, same(entry));
+      }
+    })()
+      .catch((error) => console.warn('本机暂存的生成记录没补传完，下次连上再试', error))
+      .finally(() => {
+        syncing = null;
+        onPendingChange();
+      }));
+
+  // NAS 连不上时用本机那份（最近一次读到的）加上待上传的，界面照常显示，offline 告诉界面这是缓存。
+  ipcMain.handle('materials:canvas-history', async () => {
+    const config = loadConfig(userDataDir);
+    const dir = cacheDir(userDataDir, getAccount());
+    try {
+      const { history, dropped } = await readHistory(config);
+      saveHistoryCopy(dir, history);
+      pruneCache(dir);
+      void syncPending();
+      return { history: mergePending(history, listPending(dir)), dropped, offline: false, error: '' };
+    } catch (error) {
+      if (!webdav.isUnreachable(error)) throw error;
+      const cached = readHistoryCopy(dir) ?? normalizeHistory(null).history;
+      return { history: mergePending(cached, listPending(dir)), dropped: 0, offline: true, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
   ipcMain.handle('materials:canvas-history-delete', async (_event, ids) => {
     const config = loadConfig(userDataDir);
     const wanted = Array.isArray(ids) ? ids.map(String) : [];
@@ -224,6 +307,8 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Op
       }
     }
     const removing = new Set(wanted);
+    // 还没传上 NAS 的也一起删（NAS 连得上才走到这里）。
+    if (removePending(cacheDir(userDataDir, getAccount()), (entry) => removing.has(entry.task.id) || removing.has(`${entry.task.id}:${entry.slot.index}`))) onPendingChange();
     for (const task of ownTasks()) {
       if (!wanted.some((id) => id === task.id || id.startsWith(`${task.id}:`))) continue;
       // 只删了几张时，留下的图里还有只在内存里（没存进历史）的，任务就不从队列拿掉，免得那几张跟着没了。
@@ -304,4 +389,9 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Op
     if (image.isEmpty()) throw new Error('剪贴板里没有图片');
     return image.toDataURL();
   });
+
+  return {
+    syncPending,
+    pendingStats: () => (getAccount() ? pendingStats(cacheDir(userDataDir, getAccount())) : { count: 0, bytes: 0, overLimit: false }),
+  };
 }
