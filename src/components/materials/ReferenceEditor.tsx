@@ -30,7 +30,18 @@ const MODES: Array<{ value: EditorMode; label: string }> = [
   { value: 'mask', label: '局部重绘' },
 ];
 const RATIOS = [{ value: '', label: '自由' }, ...canvasAspectRatioOptions.map(({ value, label }) => ({ value: value as string, label }))];
-const MASK_COLOR = 'rgb(0, 255, 0)';
+// 局部重绘的标记颜色：默认实色绿（照 ComfyUI Draw Mask On Image）；换颜色时整层一起换，提示词里写「X色标记区域」。
+const MASK_COLORS = [
+  { value: '#00ff00', label: '绿色' },
+  { value: '#ff0000', label: '红色' },
+  { value: '#0000ff', label: '蓝色' },
+  { value: '#ffff00', label: '黄色' },
+  { value: '#ff00ff', label: '品红' },
+  { value: '#00ffff', label: '青色' },
+  { value: '#ffffff', label: '白色' },
+  { value: '#000000', label: '黑色' },
+];
+const PREVIEW_SIZE = 240;
 const CORNER_HANDLES: CropHandle[] = ['nw', 'ne', 'se', 'sw'];
 const EDGE_HANDLES: CropHandle[] = ['n', 'e', 's', 'w'];
 const EDGE_ROOM = 12;
@@ -82,6 +93,9 @@ export function ReferenceEditor({ reference, position, initialMode, onSave, onCa
   const [quad, setQuad] = useState<Quad>([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }]);
   const [tool, setTool] = useState<'brush' | 'eraser'>('brush');
   const [brushSize, setBrushSize] = useState(40);
+  // 遮罩层一直按不透明的颜色画，透明度只在显示和合成提交的图时用：笔画重叠不会越涂越深，给接口的遮罩也还是「涂过 = 透明」。
+  const [maskColor, setMaskColor] = useState(reference.maskColor ?? MASK_COLORS[0].value);
+  const [maskOpacity, setMaskOpacity] = useState(reference.maskOpacity ?? 100);
   const [canUndo, setCanUndo] = useState(false);
   const [frame, setFrame] = useState({ w: 0, h: 0 });
   const [saving, setSaving] = useState(false);
@@ -89,6 +103,7 @@ export function ReferenceEditor({ reference, position, initialMode, onSave, onCa
   const boxRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const maskRef = useRef<HTMLCanvasElement>(null);
+  const previewRef = useRef<HTMLCanvasElement>(null);
   const undoRef = useRef<ImageData | null>(null);
   const dragRef = useRef<Drag | null>(null);
   const width = image?.naturalWidth ?? 1;
@@ -122,7 +137,7 @@ export function ReferenceEditor({ reference, position, initialMode, onSave, onCa
     if (!reference.maskDataUrl) return;
     void loadImage(reference.maskDataUrl).then((mask) => {
       const context = canvasElement.getContext('2d')!;
-      context.fillStyle = MASK_COLOR;
+      context.fillStyle = maskColor;
       context.fillRect(0, 0, canvasElement.width, canvasElement.height);
       context.globalCompositeOperation = 'destination-out';
       context.drawImage(mask, 0, 0, canvasElement.width, canvasElement.height);
@@ -205,8 +220,8 @@ export function ReferenceEditor({ reference, position, initialMode, onSave, onCa
     const point = toImage(event);
     const lineWidth = brushSize * unit;
     context.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
-    context.fillStyle = MASK_COLOR;
-    context.strokeStyle = MASK_COLOR;
+    context.fillStyle = maskColor;
+    context.strokeStyle = maskColor;
     context.lineWidth = lineWidth;
     context.lineCap = 'round';
     context.lineJoin = 'round';
@@ -233,12 +248,37 @@ export function ReferenceEditor({ reference, position, initialMode, onSave, onCa
     const context = maskContext();
     context.globalCompositeOperation = 'source-over';
     if (fill) {
-      context.fillStyle = MASK_COLOR;
+      context.fillStyle = maskColor;
       context.fillRect(0, 0, width, height);
     } else {
       context.clearRect(0, 0, width, height);
     }
   };
+
+  // 换颜色：已经涂过的地方一起换成新颜色，整层只有一种颜色。
+  const changeMaskColor = (color: string) => {
+    setMaskColor(color);
+    if (!maskRef.current) return;
+    const context = maskContext();
+    context.globalCompositeOperation = 'source-in';
+    context.fillStyle = color;
+    context.fillRect(0, 0, width, height);
+    context.globalCompositeOperation = 'source-over';
+  };
+
+  // 裁剪时右侧实时画出裁剪后的样子，按比例缩进预览框。
+  const cropPixels = image ? pixelCrop(crop, width, height) : null;
+  const previewScale = cropPixels ? Math.min(PREVIEW_SIZE / cropPixels.w, PREVIEW_SIZE / cropPixels.h) : 1;
+  useEffect(() => {
+    const element = previewRef.current;
+    if (!element || !image || !cropPixels || mode !== 'crop') return;
+    const ratio = window.devicePixelRatio || 1;
+    element.width = Math.max(1, Math.round(cropPixels.w * previewScale * ratio));
+    element.height = Math.max(1, Math.round(cropPixels.h * previewScale * ratio));
+    const context = element.getContext('2d')!;
+    context.imageSmoothingQuality = 'high';
+    context.drawImage(image, cropPixels.x, cropPixels.y, cropPixels.w, cropPixels.h, 0, 0, element.width, element.height);
+  }, [image, mode, cropPixels?.x, cropPixels?.y, cropPixels?.w, cropPixels?.h]);
 
   const undo = () => {
     if (!undoRef.current) return;
@@ -295,13 +335,15 @@ export function ReferenceEditor({ reference, position, initialMode, onSave, onCa
     }
     const marked = makeCanvas(width, height);
     marked.context.drawImage(image, 0, 0);
+    marked.context.globalAlpha = maskOpacity / 100;
     marked.context.drawImage(maskCanvas, 0, 0);
+    marked.context.globalAlpha = 1;
     const mask = makeCanvas(width, height);
     mask.context.fillStyle = '#fff';
     mask.context.fillRect(0, 0, width, height);
     mask.context.globalCompositeOperation = 'destination-out';
     mask.context.drawImage(maskCanvas, 0, 0);
-    onSave({ fileName: '', title: reference.title, dataUrl: encode(marked.element), sourceDataUrl: source, maskDataUrl: mask.element.toDataURL('image/png') });
+    onSave({ fileName: '', title: reference.title, dataUrl: encode(marked.element), sourceDataUrl: source, maskDataUrl: mask.element.toDataURL('image/png'), maskColor, maskOpacity });
   };
 
   const shownHandles = lockedRatio ? CORNER_HANDLES : [...CORNER_HANDLES, ...EDGE_HANDLES];
@@ -316,10 +358,11 @@ export function ReferenceEditor({ reference, position, initialMode, onSave, onCa
   } catch {
     // 四个角挤成一条线时不画网格
   }
+  const colorName = MASK_COLORS.find((entry) => entry.value === maskColor.toLowerCase())?.label ?? '所选颜色的';
   const hints: Record<EditorMode, string> = {
     crop: '拖框边或四角调整，拖框内移动，在框外拖动重新框选。',
     perspective: '把四个角拖到要拉正的区域（比如斜着拍的屏幕、海报），保存后拉成正视的矩形；网格帮助对齐。',
-    mask: '在要重绘的地方涂抹，涂满整张就是整图重绘。提交时涂过的地方会以实色绿色画进这张参考图，提示词里写「绿色标记区域…」；OpenAI 兼容接口还会同时收到遮罩，Grok、Agnes 只看绿色标记。',
+    mask: `在要重绘的地方涂抹，涂满整张就是整图重绘。提交时涂过的地方会按现在看到的颜色和透明度画进这张参考图，提示词里写「${colorName}标记区域…」；OpenAI 兼容接口还会同时收到遮罩，Grok、Agnes 只看${colorName}标记。`,
   };
 
   return (
@@ -382,6 +425,27 @@ export function ReferenceEditor({ reference, position, initialMode, onSave, onCa
               <input type="range" min={4} max={200} value={brushSize} onChange={(event) => setBrushSize(Number(event.target.value))} />
               <span>{brushSize}px</span>
             </label>
+            <div className="ref-editor-swatches" role="radiogroup" aria-label="笔刷颜色">
+              {MASK_COLORS.map((entry) => (
+                <button
+                  key={entry.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={maskColor === entry.value}
+                  aria-label={entry.label}
+                  title={entry.label}
+                  className={maskColor === entry.value ? 'is-active' : ''}
+                  style={{ background: entry.value }}
+                  onClick={() => changeMaskColor(entry.value)}
+                />
+              ))}
+              <input type="color" value={maskColor} aria-label="自定义颜色" title="自定义颜色" onChange={(event) => changeMaskColor(event.target.value)} />
+            </div>
+            <label className="ref-editor-size">
+              透明度
+              <input type="range" min={10} max={100} step={5} value={maskOpacity} onChange={(event) => setMaskOpacity(Number(event.target.value))} />
+              <span>{maskOpacity}%</span>
+            </label>
             <Button className="button ghost compact" type="button" disabled={!canUndo} onClick={undo} title="撤销上一笔">
               <Undo2 size={13} />
               撤销
@@ -398,6 +462,7 @@ export function ReferenceEditor({ reference, position, initialMode, onSave, onCa
         )}
       </div>
 
+      <div className={`ref-editor-body ${mode === 'crop' ? 'has-preview' : ''}`}>
       <div className="ref-editor-canvas" ref={boxRef}>
         {loadError ? (
           <p className="canvas-media-missing">{loadError}</p>
@@ -408,6 +473,7 @@ export function ReferenceEditor({ reference, position, initialMode, onSave, onCa
               <canvas
                 ref={maskRef}
                 className={`ref-editor-mask ${mode === 'mask' ? '' : 'is-hidden'}`}
+                style={{ opacity: maskOpacity / 100 }}
                 aria-label="遮罩：在图上涂抹要重绘的区域"
                 onPointerDown={onMaskDown}
                 onPointerMove={onMaskMove}
@@ -456,6 +522,16 @@ export function ReferenceEditor({ reference, position, initialMode, onSave, onCa
             </div>
           )
         )}
+      </div>
+      {mode === 'crop' && image && cropPixels && (
+        <aside className="ref-editor-preview" aria-label="裁剪后预览">
+          <strong>裁剪后预览</strong>
+          <canvas ref={previewRef} />
+          <span>
+            {cropPixels.w}×{cropPixels.h}
+          </span>
+        </aside>
+      )}
       </div>
 
       <p className={error ? 'canvas-detail-error' : 'nas-form-note'} role={error ? 'alert' : undefined}>

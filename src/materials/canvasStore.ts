@@ -7,7 +7,8 @@ import { buildCanvasImageGenerationPayload, canvasAspectRatioOptions, normalizeC
 import type { CanvasBaseResolution, CanvasDraftSettings, CanvasReferenceImage } from './suyan/canvasTypes.ts';
 
 // 参考图编辑（局部重绘）后多两样：没涂之前的原图，和给 /images/edits 的遮罩 PNG（涂过的地方透明）。dataUrl 是涂了绿色标记的图，提交的就是它。
-export type CanvasReference = CanvasReferenceImage & { sourceDataUrl?: string; maskDataUrl?: string };
+// maskColor、maskOpacity 是涂的时候选的颜色和透明度，再打开编辑时接着用。
+export type CanvasReference = CanvasReferenceImage & { sourceDataUrl?: string; maskDataUrl?: string; maskColor?: string; maskOpacity?: number };
 
 export type CanvasState = {
   draft: CanvasDraftSettings;

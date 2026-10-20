@@ -6,6 +6,7 @@ import { TooltipProvider } from './components/ui/tooltip';
 import { applyTheme, isDarkTheme, readTheme, type ThemeMode } from './lib/theme';
 import { toast as pushToast } from 'sonner';
 import type { CloudSnapshot } from './cloudSync';
+import { loadOwnNasGrant } from './cloudSync';
 import {
   DOCUMENT_CATEGORY_STORAGE_KEY,
   DOCUMENT_SUBCATEGORY_STORAGE_KEY,
@@ -627,6 +628,28 @@ function App() {
     setIsEditorOpen(true);
   };
 
+  // NAS 授权（1.9.7）：登录后按授权表同步本机的 NAS 连接；连接变了就让素材库重新挂载、按新连接重读。
+  // 没建授权表、网络不通时只记日志（普通用户不用管这张表）；有授权却连不上 NAS 时告诉用户。
+  const [nasGrantVersion, setNasGrantVersion] = useState(0);
+  const isNasAdmin = Boolean(cloud.cloudEmail) && cloud.cloudSettings.adminEmails.length > 0 && cloud.canManageCloudSettings;
+  useEffect(() => {
+    const materialsApi = window.promptAssistantDesktop?.materials;
+    const email = cloud.cloudEmail;
+    if (!materialsApi || !email) return;
+    let alive = true;
+    void loadOwnNasGrant(email).then(
+      (grant) =>
+        materialsApi.applyGrant(grant && { baseUrl: grant.baseUrl, username: grant.username, password: grant.password }, isNasAdmin).then(
+          (result) => alive && result.changed && setNasGrantVersion((version) => version + 1),
+          (error) => alive && showToast(`自动连接管理员授权的 NAS 失败：${error instanceof Error ? error.message : error}`),
+        ),
+      (error) => console.warn('读取 NAS 授权失败', error),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [cloud.cloudEmail, isNasAdmin]);
+
   const duplicatePrompt = (prompt: PromptItem) => {
     const now = new Date().toISOString();
     const clone: PromptItem = {
@@ -1237,7 +1260,7 @@ function App() {
       ) : isMaterialsMode ? (
         <MaterialLibraryView
           // 换账号时整个重新挂载，不留上一个账号的素材和画布状态。
-          key={cloud.cloudEmail ?? ''}
+          key={`${cloud.cloudEmail ?? ''}:${nasGrantVersion}`}
           account={cloud.cloudEmail ? { email: cloud.cloudEmail, adoptLegacy: cloud.cloudSettings.adminEmails.length > 0 && cloud.canManageCloudSettings } : null}
           libraryMode={libraryMode}
           onChangeLibraryMode={changeLibraryMode}

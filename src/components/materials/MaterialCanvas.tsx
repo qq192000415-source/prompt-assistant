@@ -404,7 +404,7 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
             <span className="material-field-tools">
               <Button className="button ghost compact" type="button" onClick={() => fileInput.current?.click()}>
                 <ImagePlus size={13} />
-                本机图片
+                上传参考图
               </Button>
               <Button className="button ghost compact" type="button" disabled={busy} onClick={() => void pasteReference()} title="也可以直接按 Ctrl+V">
                 <ClipboardPaste size={13} />

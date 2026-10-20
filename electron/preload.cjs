@@ -33,6 +33,8 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     getConfig: () => ipcRenderer.invoke('materials:get-config'),
     saveConfig: (config) => ipcRenderer.invoke('materials:save-config', config),
     setAccount: (email, adoptLegacy) => ipcRenderer.invoke('materials:set-account', email, adoptLegacy),
+    revealConfig: () => ipcRenderer.invoke('materials:reveal-config'),
+    applyGrant: (grant, own) => ipcRenderer.invoke('materials:apply-grant', grant, own),
     load: () => ipcRenderer.invoke('materials:load'),
     pickAndImport: (category) => ipcRenderer.invoke('materials:pick-and-import', category),
     importPaths: (paths, category) => ipcRenderer.invoke('materials:import-paths', paths, category),

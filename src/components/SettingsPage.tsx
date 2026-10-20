@@ -432,7 +432,7 @@ export function SettingsPage({
 
         {(section === 'nas' || section === 'ai' || section === 'network') && (
           <section className="settings-section">
-            <MaterialSettingsSection section={section} notify={notify} />
+            <MaterialSettingsSection section={section} notify={notify} adminEmail={canManageCloud && cloudEmail ? cloudEmail : null} />
           </section>
         )}
 

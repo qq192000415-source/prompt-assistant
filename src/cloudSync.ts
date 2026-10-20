@@ -424,3 +424,37 @@ export const downloadCloudFile = async (userId: string, sha256: string, settings
   if (error) throw new Error(/not found|object/i.test(error.message) ? '云端也没有这个文件' : describeStorageError(error));
   return new Uint8Array(await data.arrayBuffer());
 };
+
+// 素材库 NAS 授权（表 nas_grants，见 supabase-schema.sql）：管理员给账号开通 NAS 连接，对方登录后自动连上。
+export type NasGrant = { email: string; baseUrl: string; username: string; password: string; updatedAt: string };
+
+type NasGrantRow = { email: string; base_url: string; username: string; password: string; updated_at: string };
+
+const rowToGrant = (row: NasGrantRow): NasGrant => ({ email: row.email, baseUrl: row.base_url, username: row.username, password: row.password, updatedAt: row.updated_at });
+
+// 没执行过建表 SQL 时 Supabase 报找不到表，换成能看懂的话。
+const grantError = (message: string) =>
+  /nas_grants|schema cache|does not exist/i.test(message) ? new Error('Supabase 里还没有 NAS 授权表，请先执行 supabase-schema.sql 末尾的「素材库 NAS 授权」那段') : new Error(message);
+
+export const loadOwnNasGrant = async (email: string, settings: CloudSettings = loadCloudSettings()) => {
+  const { data, error } = await getSupabaseClient(settings).from('nas_grants').select('*').eq('email', normalizeCloudEmail(email)).maybeSingle();
+  if (error) throw grantError(error.message);
+  return data ? rowToGrant(data as NasGrantRow) : null;
+};
+
+export const listNasGrants = async (settings: CloudSettings = loadCloudSettings()) => {
+  const { data, error } = await getSupabaseClient(settings).from('nas_grants').select('*').order('email');
+  if (error) throw grantError(error.message);
+  return (data as NasGrantRow[]).map(rowToGrant);
+};
+
+export const saveNasGrant = async (grant: Omit<NasGrant, 'updatedAt'>, settings: CloudSettings = loadCloudSettings()) => {
+  const row = { email: normalizeCloudEmail(grant.email), base_url: grant.baseUrl, username: grant.username, password: grant.password, updated_at: new Date().toISOString() };
+  const { error } = await getSupabaseClient(settings).from('nas_grants').upsert(row);
+  if (error) throw grantError(error.message);
+};
+
+export const deleteNasGrant = async (email: string, settings: CloudSettings = loadCloudSettings()) => {
+  const { error } = await getSupabaseClient(settings).from('nas_grants').delete().eq('email', normalizeCloudEmail(email));
+  if (error) throw grantError(error.message);
+};

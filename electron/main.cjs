@@ -4,6 +4,7 @@ const attachmentStore = require('./attachmentStore.cjs');
 // 素材库由 electron/materials/*.ts 编译而来（npm run build:electron）。
 const materials = require('./materials.cjs');
 const { migrateLegacyUserData } = require('./userDataMigration.cjs');
+const { parseLatestYml, isNewerVersion } = require('./portableUpdate.cjs');
 const { autoUpdater } = require('electron-updater');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -342,6 +343,23 @@ function showUpdateAvailablePrompt(info) {
 
   lastPromptedUpdateVersion = version;
 
+  // 主窗口开着就在窗口上弹对话框（系统通知容易被专注模式藏起来）；缩到托盘时仍用系统通知。
+  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
+    void dialog
+      .showMessageBox(mainWindow, {
+        type: 'info',
+        title: '提示词小助手已有新版本',
+        message: `发现新版本 ${version}`,
+        detail: `当前版本 ${appVersion}。现在下载吗？下载完成后重启软件即可安装；也可以以后在「设置 > 关于与更新」里手动下载。`,
+        buttons: ['下载', '稍后'],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
+      })
+      .then(({ response }) => handleUpdatePromptChoice(response === 0 ? 'download' : 'dismiss', version));
+    return;
+  }
+
   if (!Notification.isSupported()) {
     showUpdateTrayBalloonPrompt(version);
     return;
@@ -410,7 +428,34 @@ async function runUpdateCheck({ automatic = false } = {}) {
   }
 }
 
+// 便携版：启动后读一次 latest.yml，有新版本就弹窗，点「下载」用浏览器打开安装包地址。读不到不提示，手动检查不受影响。
+async function checkPortableUpdate() {
+  try {
+    const response = await fetch(`${UPDATE_BASE_URL}/latest.yml`, { cache: 'no-store' });
+    if (!response.ok) return;
+    const latest = parseLatestYml(await response.text());
+    if (!latest || !isNewerVersion(latest.version, appVersion) || !mainWindow || mainWindow.isDestroyed()) return;
+    const { response: choice } = await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: '提示词小助手已有新版本',
+      message: `发现新版本 ${latest.version}`,
+      detail: `当前版本 ${appVersion}。便携版不能自动更新，点「下载」用浏览器下载新版安装包；想继续用便携版，请向发布者要新的便携版文件。`,
+      buttons: latest.path ? ['下载', '稍后'] : ['知道了'],
+      defaultId: 0,
+      cancelId: latest.path ? 1 : 0,
+      noLink: true,
+    });
+    if (latest.path && choice === 0) void shell.openExternal(`${UPDATE_BASE_URL}/${encodeURIComponent(latest.path)}`);
+  } catch (error) {
+    console.warn('便携版检查更新失败', error);
+  }
+}
+
 function startAutomaticUpdateChecks() {
+  if (isPortableBuild() && UPDATE_BASE_URL && !isDev && app.isPackaged) {
+    setTimeout(() => void checkPortableUpdate(), AUTO_UPDATE_CHECK_DELAY_MS);
+    return;
+  }
   if (automaticUpdateTimer || getUpdateUnsupportedMessage()) {
     return;
   }

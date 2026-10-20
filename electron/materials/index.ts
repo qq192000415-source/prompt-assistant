@@ -22,7 +22,7 @@ import { applyProxySettings, readProxySettings, saveProxySettings, testProxy } f
 import { registerCanvas } from './canvasService.ts';
 import { commitImport, uploadFile } from './uploads.ts';
 import { prepareAccountFolder } from './accountFolder.ts';
-import { getPublicConfig, loadConfig, loadRootConfig, saveConfig, setAccount } from './config.ts';
+import { applyGrant, getPublicConfig, loadConfig, loadRootConfig, revealConfig, saveConfig, setAccount } from './config.ts';
 import { FFMPEG_COMPONENT, ffmpegPath, installFfmpeg, isFfmpegInstalled, type VideoCompressOptions } from './ffmpeg.ts';
 import { mutateLibrary, readLibrary } from './libraryStore.ts';
 import * as webdav from './webdav.ts';
@@ -101,6 +101,14 @@ export function register({ ipcMain, userDataDir, updateBaseUrl, getWindow }: Reg
       username: String(input?.username ?? ''),
       password: typeof input?.password === 'string' ? input.password : undefined,
     }),
+  );
+  ipcMain.handle('materials:reveal-config', () => revealConfig(userDataDir));
+  ipcMain.handle('materials:apply-grant', (_event, grant, own) =>
+    applyGrant(
+      userDataDir,
+      grant ? { baseUrl: String(grant.baseUrl ?? ''), username: String(grant.username ?? ''), password: String(grant.password ?? '') } : null,
+      own === true,
+    ),
   );
   // 界面登录、切换、退出云同步账号时调用；管理员账号第一次打开时把根下的旧数据搬进自己的子文件夹。
   ipcMain.handle('materials:set-account', async (_event, email, adoptLegacy) => {

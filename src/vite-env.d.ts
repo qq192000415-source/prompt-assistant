@@ -77,7 +77,7 @@ type DesktopDocumentsApi = {
   startDrag: (sha: string, name: string) => void;
 };
 
-type NasConfig = { baseUrl: string; username: string; hasPassword: boolean };
+type NasConfig = { baseUrl: string; username: string; hasPassword: boolean; source: "manual" | "grant" };
 
 type MaterialLoadResult = { library: import('./materials/library').MaterialLibrary; dropped: number };
 
@@ -91,6 +91,10 @@ type DesktopMaterialsApi = {
   getConfig: () => Promise<NasConfig>;
   // 素材库按云同步账号分开：告诉主进程当前账号（空串是没登录），返回从根目录搬进账号文件夹的旧数据。
   setAccount: (email: string, adoptLegacy: boolean) => Promise<{ moved: string[] }>;
+  // 明文的 NAS 连接（点眼睛、管理员授权时用）；授权来的连接会报错，不给看密码。
+  revealConfig: () => Promise<{ baseUrl: string; username: string; password: string }>;
+  // 按授权表同步本机的 NAS 连接；grant 为 null 是没有授权（收回了）。own 是管理员自己的那一行。
+  applyGrant: (grant: { baseUrl: string; username: string; password: string } | null, own: boolean) => Promise<{ changed: boolean }>;
   saveConfig: (config: { baseUrl: string; username: string; password?: string }) => Promise<NasConfig>;
   load: () => Promise<MaterialLoadResult>;
   pickAndImport: (category: string) => Promise<MaterialImportResult | null>;

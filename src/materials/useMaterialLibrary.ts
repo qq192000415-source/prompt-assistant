@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadMaterialsExportDir, saveMaterialsExportDir } from '../localState';
 import { emptyLibrary, type MaterialLibrary, type MaterialMedia, type MaterialPatch } from './library';
 import { canvas } from './canvasStore';
+import { listNasGrants, normalizeCloudEmail, saveNasGrant } from '../cloudSync';
 
 export type MaterialStatus = 'unavailable' | 'loading' | 'unconfigured' | 'signed-out' | 'ready' | 'error';
 // 素材库按云同步账号分开存放；adoptLegacy 是管理员账号，第一次打开时把 NAS 根下的旧数据搬进自己的文件夹。
@@ -275,10 +276,12 @@ export function useMaterialLibrary(notify: (message: string) => void, account: M
 export type MaterialLibraryController = ReturnType<typeof useMaterialLibrary>;
 
 // 设置页用：只管 NAS 连接、网络代理和 AI 设置，不读素材库。回到素材页时素材库视图会重新挂载、按新设置重读。
-export function useMaterialSettings(notify: (message: string) => void) {
+export function useMaterialSettings(notify: (message: string) => void, adminEmail: string | null = null) {
   const api = window.promptAssistantDesktop?.materials;
   const [config, setConfig] = useState<NasConfig | null>(null);
   const [busy, setBusy] = useState('');
+  // 每次保存连接后加一，授权管理按它重新读列表（保存时可能更新了授权表）。
+  const [savedCount, setSavedCount] = useState(0);
 
   useEffect(() => {
     void api?.getConfig().then(setConfig, (error) => notify(messageOf(error)));
@@ -299,12 +302,24 @@ export function useMaterialSettings(notify: (message: string) => void) {
   return {
     available: Boolean(api),
     config,
+    savedCount,
     busy,
     saveConfig: async (input: { baseUrl: string; username: string; password?: string }) => {
       const saved = await run('正在连接 NAS…', () => api!.saveConfig(input));
       if (!saved) return false;
       setConfig(saved);
       notify('NAS 已连接');
+      // 管理员改了连接：自己那一行（换电脑自动填）和已授权的账号一起换成新的。授权表没建好时只提示，不影响本机的连接。
+      if (adminEmail) {
+        try {
+          const own = await api!.revealConfig();
+          const targets = new Set([normalizeCloudEmail(adminEmail), ...(await listNasGrants()).map((entry) => entry.email)]);
+          for (const email of targets) await saveNasGrant({ email, baseUrl: own.baseUrl, username: own.username, password: own.password });
+        } catch (error) {
+          notify(`NAS 已连接，但没能更新授权表：${messageOf(error)}`);
+        }
+      }
+      setSavedCount((count) => count + 1);
       return true;
     },
     getProxy: () => api!.getProxy(),

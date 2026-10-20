@@ -3520,6 +3520,86 @@ h2 {
   gap: 8px;
 }
 
+/* NAS 连接：地址、用户名、密码默认遮住，右边眼睛切换明文 */
+.masked-input {
+  position: relative;
+  display: block;
+}
+
+.masked-input input {
+  padding-right: 40px;
+}
+
+.masked-input .icon-button {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+}
+
+/* 管理员的授权管理 */
+.nas-grants {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.nas-grants h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.nas-grants-add {
+  display: flex;
+  gap: 8px;
+}
+
+.nas-grants-add input {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  outline: 0;
+  padding: 0 10px;
+}
+
+.nas-grants-add input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-weak);
+}
+
+.nas-grants-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nas-grants-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  font-size: 13px;
+  padding: 8px 10px;
+}
+
+.nas-grants-list li strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
 .ai-slot {
   display: grid;
   gap: 10px;
@@ -6442,6 +6522,104 @@ html.dark {
   font-variant-numeric: tabular-nums;
 }
 
+/* 编辑区；裁剪时右边多一栏实时预览 */
+.ref-editor-body {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.ref-editor-body.has-preview {
+  grid-template-columns: minmax(0, 1fr) clamp(120px, 34%, 264px);
+}
+
+.ref-editor-preview {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 12px;
+  padding: 12px;
+}
+
+.ref-editor-preview strong {
+  align-self: flex-start;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ref-editor-preview canvas {
+  max-width: 100%;
+  max-height: 240px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.ref-editor-preview span {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 编辑区窄（详情栏拉得很宽时）：预览挪到图下面一条，不把裁剪区挤没 */
+.ref-editor {
+  container-type: inline-size;
+}
+
+@container (max-width: 640px) {
+  .ref-editor-body.has-preview {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .ref-editor-preview {
+    flex-direction: row;
+    justify-content: center;
+  }
+
+  .ref-editor-preview strong {
+    align-self: center;
+  }
+
+  .ref-editor-preview canvas {
+    max-height: 96px;
+  }
+}
+
+.ref-editor-swatches {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ref-editor-swatches button {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.ref-editor-swatches button.is-active {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+}
+
+.ref-editor-swatches input[type='color'] {
+  width: 26px;
+  height: 22px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  padding: 1px;
+}
+
 .ref-editor-canvas {
   display: grid;
   min-height: 0;
@@ -6469,10 +6647,9 @@ html.dark {
   pointer-events: none;
 }
 
-/* 画的时候半透明，看得到下面的图；提交的图里是实色绿 */
+/* 透明度由笔刷的透明度滑块给（行内样式），看到的就是提交的样子 */
 .ref-editor-mask {
   cursor: crosshair;
-  opacity: 0.6;
   touch-action: none;
 }
 
