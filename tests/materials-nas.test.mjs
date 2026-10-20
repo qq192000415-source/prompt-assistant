@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 
 const { mutateLibrary, readLibrary } = await import('../electron/materials/libraryStore.ts');
-const { davUrl, normalizeBaseUrl } = await import('../electron/materials/webdav.ts');
+const { dav, davUrl, normalizeBaseUrl, requestTimeoutMs } = await import('../electron/materials/webdav.ts');
+const http = await import('node:http');
 const { exportItems } = await import('../electron/materials/export.ts');
 const { exclusive } = await import('../electron/materials/tasks.ts');
 const { startFakeNas } = await import('./helpers/fake-nas.mjs');
@@ -130,4 +131,38 @@ test('密码不对时给出明确提示', async () => {
   } finally {
     nas.server.close();
   }
+});
+
+test('NAS 卡住时请求按时失败：等不到响应报超时；includeBody 时读内容卡住也失败，否则响应头到了就不再计时', async () => {
+  // 收到请求后：/hang 一直不回；/stall 先回响应头，内容过 600ms 才发完
+  const server = http.createServer((request, response) => {
+    if (request.url.includes('hang')) return;
+    response.writeHead(200, { 'Content-Type': 'application/octet-stream' });
+    response.write('a');
+    setTimeout(() => response.end('b'), 600);
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const config = { baseUrl: `http://127.0.0.1:${server.address().port}/`, username: 'u', password: 'p' };
+  try {
+    const started = Date.now();
+    await assert.rejects(dav(config, 'PROPFIND', 'hang', { timeoutMs: 200 }), /NAS 0 秒没有响应（PROPFIND hang）/);
+    assert.ok(Date.now() - started < 2000);
+
+    const bounded = await dav(config, 'GET', 'stall', { timeoutMs: 300, includeBody: true });
+    await assert.rejects(bounded.text(), { name: 'AbortError' });
+
+    // 不带 includeBody：内容慢慢来也能读完（大视频下载、nas-media 播放）
+    const streaming = await dav(config, 'GET', 'stall', { timeoutMs: 300 });
+    assert.equal(await streaming.text(), 'ab');
+  } finally {
+    server.closeAllConnections();
+    server.close();
+  }
+});
+
+test('上传的超时按大小加时间（最慢 50KB/s），流式上传按 Content-Length 算', () => {
+  assert.equal(requestTimeoutMs(undefined), 60_000);
+  assert.equal(requestTimeoutMs(new Uint8Array(20 * 1024 * 1024)), 60_000 + 409_600);
+  assert.equal(requestTimeoutMs('x'.repeat(51_200)), 61_000);
+  assert.equal(requestTimeoutMs({}, { 'Content-Length': String(512_000) }), 70_000);
 });
