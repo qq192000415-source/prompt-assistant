@@ -306,10 +306,17 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem, onPe
     // 记录已经删掉；文件删不掉只多占空间，告诉用户但不算失败。
     const warnings: string[] = [];
     const targets = orphaned.flatMap((media) => [historyMediaPath(media), ...(media.hasThumb ? [historyThumbPath(media)] : [])]);
-    for (const [index, target] of targets.entries()) {
-      report(index, targets.length, '正在从 NAS 删除文件');
-      await webdav.remove(config, target).catch((error) => warnings.push(`${target}：${error instanceof Error ? error.message : error}`));
-    }
+    // 4 个请求同时删，一次删上百张时快几倍。
+    let next = 0;
+    const worker = async () => {
+      while (next < targets.length) {
+        const index = next++;
+        report(index, targets.length, '正在从 NAS 删除文件');
+        const target = targets[index];
+        await webdav.remove(config, target).catch((error) => warnings.push(`${target}：${error instanceof Error ? error.message : error}`));
+      }
+    };
+    await Promise.all(Array.from({ length: 4 }, worker));
     const removing = new Set(wanted);
     // 还没传上 NAS 的也一起删（NAS 连得上才走到这里）。
     if (removePending(cacheDir(userDataDir, getAccount()), (entry) => removing.has(entry.task.id) || removing.has(`${entry.task.id}:${entry.slot.index}`))) onPendingChange();
