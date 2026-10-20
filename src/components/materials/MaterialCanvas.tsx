@@ -178,11 +178,19 @@ export function MaterialCanvas({ controller, onOpenSettings, templates, template
   };
 
   // 提交后立刻可以改参数再提交，任务在主进程队列里排队。
+  // 提交成功后详情栏立刻换成新任务、按钮短暂显示「已提交」：选「最早优先」或记录很多时新任务在列表最后、不在当前页，
+  // 不这样看起来像点了没反应（1.9.0 主人 17 秒连点了 27 次，每次其实都提交了）。
+  const [justSubmitted, setJustSubmitted] = useState(false);
   const generate = async () => {
     if (!model || submitting) return;
     setSubmitting(true);
-    await canvas.submit(model, controller.canvasSubmit);
+    let taskId = '';
+    const submitted = await canvas.submit(model, async (input) => (taskId = await controller.canvasSubmit(input)));
     setSubmitting(false);
+    if (!submitted || !taskId) return;
+    setSelectedKey(`${taskId}:0`);
+    setJustSubmitted(true);
+    window.setTimeout(() => setJustSubmitted(false), 1500);
   };
 
   // 本次打开画布后存过的：没存进生成历史、只在内存里的图没有历史标记可读，靠这里记住，按钮才会变成「已存入」。
@@ -600,8 +608,8 @@ export function MaterialCanvas({ controller, onOpenSettings, templates, template
             </p>
           )}
           <Button className="button primary canvas-generate" type="submit" disabled={submitting || !model || !draft.prompt.trim()}>
-            <Sparkles size={15} />
-            {video ? '生成视频' : activeCount ? '再提交一个任务' : '生成'}
+            {justSubmitted ? <Check size={15} /> : <Sparkles size={15} />}
+            {justSubmitted ? '已提交，右边是这个任务' : video ? '生成视频' : activeCount ? '再提交一个任务' : '生成'}
           </Button>
         </div>
       </form>
