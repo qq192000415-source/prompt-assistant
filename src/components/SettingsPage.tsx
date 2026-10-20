@@ -3,7 +3,9 @@ import { Check, Cloud, Download, FolderOpen, LogIn, LogOut, RotateCcw } from 'lu
 import { Button } from './ui/button';
 import { Separator } from './ui/separator';
 import { MaterialSettingsSection } from './materials/NasSettings';
+import { SkinSettings } from './SkinSettings';
 import { themeOptions, type SkinEntry, type ThemeMode } from '../lib/theme';
+import type { SkinsController } from '../skins/useSkins';
 import type { CloudSettings } from '../cloudSync';
 import type { ExportSettings } from '../librarySync';
 import { type DesktopSettingsInput, normalizeDesktopSettings } from '../desktopSettings';
@@ -13,6 +15,7 @@ import { APP_VERSION } from '../appMeta';
 
 const SECTIONS = [
   { key: 'general', label: '通用' },
+  { key: 'skins', label: '皮肤' },
   { key: 'sync', label: '云同步' },
   { key: 'nas', label: '素材库（NAS）' },
   { key: 'ai', label: 'API 配置' },
@@ -46,6 +49,7 @@ type SettingsPageProps = {
   onSave: (settings: ExportSettings, cloudSettings: CloudSettings, desktopSettings: DesktopRuntimeSettings) => void;
   theme: ThemeMode;
   skins: ReadonlyArray<SkinEntry>;
+  skinPacks: SkinsController;
   onThemeChange: (theme: ThemeMode) => void;
 };
 
@@ -75,6 +79,7 @@ export function SettingsPage({
   onSave,
   theme,
   skins,
+  skinPacks,
   onThemeChange,
 }: SettingsPageProps) {
   const [draft, setDraft] = useState(exportSettings);
@@ -437,6 +442,8 @@ export function SettingsPage({
             <MaterialSettingsSection section={section} notify={notify} adminEmail={canManageCloud && cloudEmail ? cloudEmail : null} />
           </section>
         )}
+
+        {section === 'skins' && <SkinSettings skinPacks={skinPacks} theme={theme} onThemeChange={onThemeChange} notify={notify} />}
 
         {section === 'about' && (
           <>

@@ -30,6 +30,14 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     saveAs: (sha, name) => ipcRenderer.invoke('documents:save-as', sha, name),
     startDrag: (sha, name) => ipcRenderer.send('documents:start-drag', sha, name),
   },
+  skins: {
+    list: () => ipcRenderer.invoke('skins:list'),
+    pickAndInstall: () => ipcRenderer.invoke('skins:pick-install'),
+    installPaths: (paths) => ipcRenderer.invoke('skins:install-paths', paths),
+    remove: (id) => ipcRenderer.invoke('skins:remove', id),
+    exportSkin: (id) => ipcRenderer.invoke('skins:export', id),
+    pathForFile: (file) => webUtils.getPathForFile(file),
+  },
   materials: {
     getConfig: () => ipcRenderer.invoke('materials:get-config'),
     saveConfig: (config) => ipcRenderer.invoke('materials:save-config', config),

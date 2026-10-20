@@ -1,0 +1,24 @@
+{
+  "id": "my-skin",
+  "name": "我的皮肤",
+  "note": "一句话介绍",
+  "author": "你的名字",
+  "version": "1.0.0",
+  "base": "light",
+  "tokens": {
+    "--sidebar": "rgba(255, 255, 255, 0.76)",
+    "--surface": "rgba(255, 255, 255, 0.88)",
+    "--surface-quiet": "rgba(255, 255, 255, 0.4)",
+    "--surface-raised": "rgba(255, 255, 255, 0.95)",
+    "--surface-muted": "rgba(244, 240, 252, 0.84)",
+    "--overlay-surface": "#ffffff",
+    "--text": "#1f1b2e",
+    "--muted": "#5f5873",
+    "--accent": "#6d28d9",
+    "--accent-hover": "#5b21b6",
+    "--accent-weak": "rgba(109, 40, 217, 0.12)",
+    "--on-accent": "#ffffff"
+  },
+  "wallpaper": { "file": "wallpaper.webp", "overlay": "rgba(255, 255, 255, 0.2)" },
+  "preview": "preview.webp"
+}

@@ -5845,6 +5845,78 @@ html[data-skin] .settings-form-footer {
   backdrop-filter: blur(16px);
 }
 
+/* 设置页「皮肤」：已安装的皮肤包列表，整块能拖进 .zip 安装 */
+.skin-format-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.skin-drop-zone {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: 10px;
+}
+
+.skin-drop-zone.is-dragging {
+  border-color: var(--accent);
+  background: var(--accent-weak);
+}
+
+.skin-drop-zone > .settings-note {
+  margin: 14px 6px;
+}
+
+.skin-pack-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.skin-pack-item {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: 8px;
+}
+
+.skin-pack-preview {
+  width: 96px;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--surface-muted);
+}
+
+.skin-pack-text {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.skin-pack-text strong {
+  font-size: 14px;
+}
+
+.skin-pack-text span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skin-pack-actions {
+  display: flex;
+  gap: 6px;
+}
+
 html[data-skin] .top-menu-bar {
   background: var(--surface-raised);
   backdrop-filter: blur(16px);

@@ -1,4 +1,6 @@
 export const THEME_STORAGE_KEY = 'prompt-library.theme';
+// 当前皮肤生成好的样子。安装的皮肤要等主进程列出来，启动时先用这份，免得先闪一下浅色。
+const SKIN_CACHE_KEY = 'prompt-library.skin-cache';
 
 // 外观主题：浅色、深色是原来的两套；米白、暖夜照 Claude 桌面端的暖米色调（赭橙强调色）。
 // 只换颜色令牌（styles.css 里 html[data-theme] 的几块），组件不用改。
@@ -36,11 +38,21 @@ export const readTheme = (skins: ReadonlyArray<SkinEntry> = []): ThemeMode => {
   }
 };
 
+export const readCachedSkin = (): SkinEntry | null => {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(SKIN_CACHE_KEY) ?? 'null');
+    return value && typeof value.id === 'string' && typeof value.css === 'string' && (value.base === 'light' || value.base === 'dark') ? value : null;
+  } catch {
+    return null;
+  }
+};
+
 export const applyTheme = (theme: ThemeMode, skins: ReadonlyArray<SkinEntry> = []) => {
   const skin = skinOf(theme, skins);
   const root = document.documentElement;
   root.classList.toggle('dark', isDarkTheme(theme, skins));
-  root.dataset.theme = skin ? skin.base : theme;
+  // 找不到的皮肤（刚删掉、还没列出来）先按浅色显示
+  root.dataset.theme = skin ? skin.base : theme.startsWith('skin:') ? 'light' : theme;
   if (skin) root.dataset.skin = skin.id;
   else delete root.dataset.skin;
   let style = document.getElementById('app-skin');
@@ -52,6 +64,8 @@ export const applyTheme = (theme: ThemeMode, skins: ReadonlyArray<SkinEntry> = [
   style.textContent = skin?.css ?? '';
   try {
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    if (skin) window.localStorage.setItem(SKIN_CACHE_KEY, JSON.stringify(skin));
+    else window.localStorage.removeItem(SKIN_CACHE_KEY);
   } catch {
     // 隐私模式写不进 localStorage 时，仍保留当前页面的外观。
   }

@@ -3,8 +3,8 @@ import { ArrowLeft, Menu } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Toaster } from './components/ui/sonner';
 import { TooltipProvider } from './components/ui/tooltip';
-import { applyTheme, isDarkTheme, readTheme, type ThemeMode } from './lib/theme';
-import { BUILTIN_SKINS } from './skins/builtin';
+import { applyTheme, isDarkTheme, readTheme, skinOf, type ThemeMode } from './lib/theme';
+import { useSkins } from './skins/useSkins';
 import { toast as pushToast } from 'sonner';
 import type { CloudSnapshot } from './cloudSync';
 import { loadOwnNasGrant } from './cloudSync';
@@ -203,15 +203,24 @@ function App() {
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
   const [closeRequestOpen, setCloseRequestOpen] = useState(false);
   const [rememberCloseChoice, setRememberCloseChoice] = useState(false);
-  const [theme, setTheme] = useState<ThemeMode>(() => readTheme(BUILTIN_SKINS));
+  const skins = useSkins((message) => pushToast(message));
+  const [theme, setTheme] = useState<ThemeMode>(() => readTheme(skins.skins));
   const fileInputRef = useRef<HTMLInputElement>(null);
   const showToast = (message: string) => {
     pushToast(message);
   };
 
   useEffect(() => {
-    applyTheme(theme, BUILTIN_SKINS);
-  }, [theme]);
+    applyTheme(theme, skins.skins);
+  }, [theme, skins.skins]);
+
+  // 正在用的皮肤被删了或读不了：换回浅色并说一声。
+  useEffect(() => {
+    if (skins.loaded && theme.startsWith('skin:') && !skinOf(theme, skins.skins)) {
+      pushToast('当前皮肤已删除或读不了，已换回浅色');
+      setTheme('light');
+    }
+  }, [skins.loaded, skins.skins, theme]);
 
   const openSettings = (section: SettingsSection = 'general') => {
     setSettingsSection(section);
@@ -1209,7 +1218,7 @@ function App() {
         nas={nas}
         onOpenNasSettings={() => openSettings('nas')}
         theme={theme}
-        skins={BUILTIN_SKINS}
+        skins={skins.skins}
         onThemeChange={setTheme}
       />
 
@@ -1236,7 +1245,8 @@ function App() {
           onOpenAuth={() => setIsAuthOpen(true)}
           onSignOut={cloud.signOut}
           theme={theme}
-          skins={BUILTIN_SKINS}
+          skins={skins.skins}
+          skinPacks={skins}
           onThemeChange={setTheme}
           onSave={(settings, nextCloudSettings, nextDesktopSettings) => {
             cloud.updateCloudSettings(nextCloudSettings);
@@ -1498,7 +1508,7 @@ function App() {
         <ConfirmDialog dialog={confirmDialog} onCancel={closeConfirmDialog} onConfirm={confirmCurrentDialog} />
       )}
 
-      <Toaster theme={isDarkTheme(theme, BUILTIN_SKINS) ? 'dark' : 'light'} />
+      <Toaster theme={isDarkTheme(theme, skins.skins) ? 'dark' : 'light'} />
     </div>
     </TooltipProvider>
   );

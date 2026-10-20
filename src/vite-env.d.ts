@@ -81,6 +81,19 @@ type DesktopDocumentsApi = {
   startDrag: (sha: string, name: string) => void;
 };
 
+// 皮肤包（electron/materials/skinStore.ts）：主进程只给校验过的 manifest 和图标文件名，资源走 skin://<id>/<文件>。
+type DesktopInstalledSkin = { manifest: import('./skins/skinPack').SkinManifest; icons: string[] };
+type DesktopSkinInstallResult = { installed: Array<{ id: string; name: string; replaced: boolean }>; errors: Array<{ name: string; message: string }> };
+type DesktopSkinsApi = {
+  list: () => Promise<{ skins: DesktopInstalledSkin[]; errors: Array<{ id: string; message: string }> }>;
+  pickAndInstall: () => Promise<DesktopSkinInstallResult | null>;
+  installPaths: (paths: string[]) => Promise<DesktopSkinInstallResult>;
+  remove: (id: string) => Promise<void>;
+  // 返回导出到的路径，取消是 null。
+  exportSkin: (id: string) => Promise<string | null>;
+  pathForFile: (file: File) => string;
+};
+
 type NasConfig = { baseUrl: string; username: string; hasPassword: boolean; source: "manual" | "grant" };
 
 type MaterialLoadResult = { library: import('./materials/library').MaterialLibrary; dropped: number };
@@ -254,6 +267,7 @@ interface Window {
     onCloseRequest: (callback: () => void) => () => void;
     onUpdateStatus?: (callback: (status: DesktopUpdateStatus) => void) => () => void;
     documents?: DesktopDocumentsApi;
+    skins?: DesktopSkinsApi;
   };
   promptAssistantFloating?: {
     showMain: () => Promise<void>;

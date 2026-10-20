@@ -28,16 +28,19 @@ import { cacheDir, localCanvasFile, storeThumb, thumbInsteadOf, thumbShaOf } fro
 import { createNasMonitor } from './nasMonitor.ts';
 import { FFMPEG_COMPONENT, ffmpegPath, installFfmpeg, isFfmpegInstalled, type VideoCompressOptions } from './ffmpeg.ts';
 import { mutateLibrary, readLibrary } from './libraryStore.ts';
+import { handleSkinRequest, SKIN_SCHEME } from './skinStore.ts';
+import { registerSkins } from './skins.ts';
 import * as webdav from './webdav.ts';
 
 const SCHEME = 'nas-media';
 // 素材库的原文件、缩略图，以及画布生成历史（canvas-history/）里的原文件、缩略图。
 const MEDIA_PATH_PATTERN = /^((canvas-history\/)?media\/[0-9a-f]{64}\.[a-z0-9]{1,5}|(canvas-history\/)?thumbs\/[0-9a-f]{64}\.jpg)$/;
 
-// 必须在 app ready 之前调用。
+// 必须在 app ready 之前调用，而且只能调一次（后一次会覆盖前一次），所以皮肤的 skin:// 也登记在这里。
 export function registerScheme() {
   protocol.registerSchemesAsPrivileged([
     { scheme: SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+    { scheme: SKIN_SCHEME, privileges: { standard: true, secure: true } },
   ]);
 }
 
@@ -110,6 +113,9 @@ type RegisterOptions = {
 
 export function register({ ipcMain, userDataDir, updateBaseUrl, getWindow }: RegisterOptions) {
   protocol.handle(SCHEME, handleMediaRequest(userDataDir));
+  // 皮肤包（src/skins/）和素材库无关，只是借这里的主进程打包和协议登记。
+  protocol.handle(SKIN_SCHEME, handleSkinRequest(userDataDir));
+  registerSkins({ ipcMain, userDataDir, getWindow });
 
   // NAS 连接状态推给界面，带上当前账号本机待上传的数量；从断开变成连上时补传。
   const nasStatus = () => ({ ...monitor.status(), pending: canvasService.pendingStats() });
