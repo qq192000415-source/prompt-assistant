@@ -159,6 +159,11 @@ export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, te
                       size={query.trim() ? Math.min(8, Math.max(2, matched.length)) : undefined}
                       value={matched.some((model) => model.id === slot.model) ? slot.model : ''}
                       onChange={(event) => event.target.value && setSlot(name, { model: event.target.value })}
+                      // 展开成列表时值对不上任何一项，React 会把第一项标成选中，点它不触发 change（1.10.4 主人实测选不上），所以直接认点到的那一项。
+                      onClick={(event) => {
+                        const option = event.target as HTMLElement;
+                        if (option instanceof HTMLOptionElement && option.value) setSlot(name, { model: option.value });
+                      }}
                     >
                       {!query.trim() && <option value="">共 {models[name].length} 个，点开选择…</option>}
                       {matched.map((model) => (
