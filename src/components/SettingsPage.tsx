@@ -3,7 +3,7 @@ import { Check, Cloud, Download, FolderOpen, LogIn, LogOut, RotateCcw } from 'lu
 import { Button } from './ui/button';
 import { Separator } from './ui/separator';
 import { MaterialSettingsSection } from './materials/NasSettings';
-import { THEMES, type ThemeMode } from '../lib/theme';
+import { themeOptions, type SkinEntry, type ThemeMode } from '../lib/theme';
 import type { CloudSettings } from '../cloudSync';
 import type { ExportSettings } from '../librarySync';
 import { type DesktopSettingsInput, normalizeDesktopSettings } from '../desktopSettings';
@@ -45,6 +45,7 @@ type SettingsPageProps = {
   onSignOut: () => void;
   onSave: (settings: ExportSettings, cloudSettings: CloudSettings, desktopSettings: DesktopRuntimeSettings) => void;
   theme: ThemeMode;
+  skins: ReadonlyArray<SkinEntry>;
   onThemeChange: (theme: ThemeMode) => void;
 };
 
@@ -73,6 +74,7 @@ export function SettingsPage({
   onSignOut,
   onSave,
   theme,
+  skins,
   onThemeChange,
 }: SettingsPageProps) {
   const [draft, setDraft] = useState(exportSettings);
@@ -159,10 +161,10 @@ export function SettingsPage({
                 <section className="settings-section" aria-labelledby="appearance-settings-title">
                   <div>
                     <h3 id="appearance-settings-title">外观</h3>
-                    <p>选一套主题，马上生效，只保存在本机。顶部栏的主题按钮也能切换。</p>
+                    <p>选一套主题或皮肤，马上生效，只保存在本机。顶部栏的主题按钮也能切换。</p>
                   </div>
                   <div className="theme-picker" role="radiogroup" aria-labelledby="appearance-settings-title">
-                    {THEMES.map((entry) => (
+                    {themeOptions(skins).map((entry) => (
                       <button
                         key={entry.value}
                         type="button"
@@ -171,8 +173,8 @@ export function SettingsPage({
                         aria-checked={theme === entry.value}
                         onClick={() => onThemeChange(entry.value)}
                       >
-                        <span className="theme-swatch" style={{ background: entry.swatch[0] }} aria-hidden="true">
-                          <span style={{ background: entry.swatch[1] }} />
+                        <span className="theme-swatch" style={entry.swatch ? { background: entry.swatch[0] } : { background: `center / cover url("${entry.preview}")` }} aria-hidden="true">
+                          {entry.swatch && <span style={{ background: entry.swatch[1] }} />}
                         </span>
                         <span className="theme-menu-text">
                           <strong>{entry.label}</strong>

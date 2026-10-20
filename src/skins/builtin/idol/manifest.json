@@ -1,0 +1,31 @@
+{
+  "id": "idol",
+  "name": "明星",
+  "note": "演唱会应援、粉紫灯光",
+  "author": "提示词助手",
+  "version": "1.0.0",
+  "base": "dark",
+  "tokens": {
+    "--sidebar": "rgba(22, 8, 30, 0.8)",
+    "--surface": "rgba(34, 14, 46, 0.86)",
+    "--surface-quiet": "rgba(16, 6, 24, 0.4)",
+    "--surface-raised": "rgba(34, 14, 46, 0.95)",
+    "--surface-muted": "rgba(48, 22, 64, 0.84)",
+    "--overlay-surface": "#241030",
+    "--hover": "rgba(244, 114, 182, 0.08)",
+    "--border": "rgba(244, 114, 182, 0.16)",
+    "--border-strong": "rgba(244, 114, 182, 0.3)",
+    "--text": "#fdf2fb",
+    "--muted": "#c9a9c6",
+    "--faint": "#8a6c88",
+    "--accent": "#f472b6",
+    "--accent-hover": "#f9a8d4",
+    "--accent-weak": "rgba(244, 114, 182, 0.16)",
+    "--on-accent": "#2a0a1e"
+  },
+  "wallpaper": {
+    "file": "wallpaper.webp",
+    "overlay": "rgba(14, 4, 20, 0.3)"
+  },
+  "preview": "preview.webp"
+}

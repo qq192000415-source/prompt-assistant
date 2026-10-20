@@ -1,0 +1,31 @@
+{
+  "id": "gamer",
+  "name": "游戏风",
+  "note": "像素霓虹、合成波",
+  "author": "提示词助手",
+  "version": "1.0.0",
+  "base": "dark",
+  "tokens": {
+    "--sidebar": "rgba(18, 8, 32, 0.8)",
+    "--surface": "rgba(28, 14, 48, 0.86)",
+    "--surface-quiet": "rgba(14, 6, 26, 0.4)",
+    "--surface-raised": "rgba(28, 14, 48, 0.95)",
+    "--surface-muted": "rgba(40, 22, 66, 0.84)",
+    "--overlay-surface": "#1e1036",
+    "--hover": "rgba(34, 211, 238, 0.08)",
+    "--border": "rgba(34, 211, 238, 0.16)",
+    "--border-strong": "rgba(34, 211, 238, 0.3)",
+    "--text": "#eef2ff",
+    "--muted": "#b4a8d4",
+    "--faint": "#7b6f9c",
+    "--accent": "#22d3ee",
+    "--accent-hover": "#67e8f9",
+    "--accent-weak": "rgba(34, 211, 238, 0.16)",
+    "--on-accent": "#08131a"
+  },
+  "wallpaper": {
+    "file": "wallpaper.webp",
+    "overlay": "rgba(10, 4, 20, 0.25)"
+  },
+  "preview": "preview.webp"
+}

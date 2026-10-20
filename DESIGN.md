@@ -144,6 +144,12 @@ components:
 
 「一处蓝」在米白、暖夜里就是「一处赭橙」：强调色只换颜色，不换用法。全局搜索的青绿在四套里都不变。新加颜色一律写成令牌或 `color-mix(… var(--accent) …)`，不要写死蓝色。
 
+### Skins（1.11.0）
+皮肤叠在浅色或深色上面：同一套令牌换值，再加壁纸和图标，组件不用改。内置六套（二次元、游戏风、原神、明星、宝可梦、汽车）在 `src/skins/builtin/<id>/`，格式和以后的皮肤包一样：`manifest.json`（只能改 `:root` 已有的颜色令牌，见 `src/skins/skinPack.ts` 的 `SKIN_TOKENS`）+ `wallpaper.webp` + `preview.webp` + `icons/<lucide 名>.svg|png`。
+- 壁纸透出来靠把 `--surface-quiet`、`--sidebar`、`--surface` 设成半透明；菜单、浮层（`--overlay-surface`）保持不透明。顶部栏和吸顶的标题栏、设置页底栏在皮肤下改用 `--surface-raised` 加毛玻璃，挡住下面滚过去的内容。
+- 图标按 lucide 的类名 `svg.lucide-<名>` 覆盖：`.svg` 当遮罩、颜色跟文字走，`.png` 保留彩色。内置的每套换 13 个最显眼的（顶栏四个标签、侧栏四个视图、搜索、新建、设置、文件夹、复制），单色剪影。
+- 每套都量过：按钮字、正文、次要字、强调色在卡片底上都 ≥4.5:1。
+
 ## Typography
 
 **Body Font:** Segoe UI Variable Text（备选 Segoe UI、Microsoft YaHei UI、Microsoft YaHei）

@@ -1,0 +1,31 @@
+{
+  "id": "racing",
+  "name": "汽车",
+  "note": "赛道夜跑、碳纤红",
+  "author": "提示词助手",
+  "version": "1.0.0",
+  "base": "dark",
+  "tokens": {
+    "--sidebar": "rgba(14, 14, 16, 0.84)",
+    "--surface": "rgba(24, 24, 27, 0.88)",
+    "--surface-quiet": "rgba(8, 8, 10, 0.4)",
+    "--surface-raised": "rgba(24, 24, 27, 0.95)",
+    "--surface-muted": "rgba(36, 36, 40, 0.86)",
+    "--overlay-surface": "#1c1c1f",
+    "--hover": "rgba(255, 255, 255, 0.06)",
+    "--border": "rgba(255, 255, 255, 0.1)",
+    "--border-strong": "rgba(255, 255, 255, 0.18)",
+    "--text": "#f5f5f4",
+    "--muted": "#a8a29e",
+    "--faint": "#78716c",
+    "--accent": "#ff4d2e",
+    "--accent-hover": "#ff7a5c",
+    "--accent-weak": "rgba(255, 77, 46, 0.16)",
+    "--on-accent": "#170705"
+  },
+  "wallpaper": {
+    "file": "wallpaper.webp",
+    "overlay": "rgba(0, 0, 0, 0.25)"
+  },
+  "preview": "preview.webp"
+}

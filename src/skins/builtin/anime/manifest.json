@@ -1,0 +1,30 @@
+{
+  "id": "anime",
+  "name": "二次元",
+  "note": "樱花晚霞、粉紫配色",
+  "author": "提示词助手",
+  "version": "1.0.0",
+  "base": "light",
+  "tokens": {
+    "--sidebar": "rgba(255, 246, 251, 0.74)",
+    "--surface": "rgba(255, 251, 253, 0.86)",
+    "--surface-quiet": "rgba(255, 247, 252, 0.42)",
+    "--surface-raised": "rgba(255, 251, 253, 0.94)",
+    "--surface-muted": "rgba(251, 236, 246, 0.8)",
+    "--overlay-surface": "#fffafd",
+    "--hover": "rgba(194, 24, 91, 0.07)",
+    "--border": "rgba(194, 24, 91, 0.14)",
+    "--border-strong": "rgba(194, 24, 91, 0.26)",
+    "--text": "#2b1b2a",
+    "--muted": "#6b5066",
+    "--faint": "#a08499",
+    "--accent": "#c2185b",
+    "--accent-hover": "#a3134c",
+    "--accent-weak": "rgba(194, 24, 91, 0.12)",
+    "--on-accent": "#ffffff",
+    "--shadow": "0 18px 40px rgba(120, 40, 90, 0.14), 0 0 0 1px rgba(194, 24, 91, 0.06)",
+    "--shadow-soft": "0 10px 28px rgba(120, 40, 90, 0.1), 0 0 0 1px rgba(194, 24, 91, 0.06)"
+  },
+  "wallpaper": { "file": "wallpaper.webp", "overlay": "rgba(255, 248, 252, 0.28)" },
+  "preview": "preview.webp"
+}

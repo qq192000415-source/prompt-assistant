@@ -3,7 +3,7 @@ import { Check, Moon, Palette, Settings, Sun } from 'lucide-react';
 import { LibrarySwitch } from './LibrarySwitch';
 import { Button } from './ui/button';
 import { useSecondsUntil } from './materials/NasStatusBadge';
-import { isDarkTheme, THEMES, type ThemeMode } from '../lib/theme';
+import { isDarkTheme, themeOptions, type SkinEntry, type ThemeMode } from '../lib/theme';
 import type { LibraryMode } from '../localState';
 import type { NasStatusController } from '../materials/useNasStatus';
 
@@ -20,6 +20,7 @@ type TopMenuBarProps = {
   nas: NasStatusController;
   onOpenNasSettings: () => void;
   theme: ThemeMode;
+  skins: ReadonlyArray<SkinEntry>;
   onThemeChange: (theme: ThemeMode) => void;
 };
 
@@ -35,6 +36,7 @@ export function TopMenuBar({
   nas,
   onOpenNasSettings,
   theme,
+  skins,
   onThemeChange,
 }: TopMenuBarProps) {
   return (
@@ -56,7 +58,7 @@ export function TopMenuBar({
           <span className="cloud-dot" aria-hidden="true" />
           {cloudStatus}
         </Button>
-        <ThemeMenu theme={theme} onChange={onThemeChange} />
+        <ThemeMenu theme={theme} skins={skins} onChange={onThemeChange} />
         <Button
           className={`top-menu-button top-settings-button ${settingsActive ? 'is-active' : ''}`}
           type="button"
@@ -108,11 +110,12 @@ function NasPill({ nas, onOpenSettings }: { nas: NasStatusController; onOpenSett
   );
 }
 
-// 外观主题菜单：四套主题，带色块预览；点外面或按 Esc 关。
-function ThemeMenu({ theme, onChange }: { theme: ThemeMode; onChange: (theme: ThemeMode) => void }) {
+// 外观主题菜单：四套主题带色块预览，皮肤带预览图；点外面或按 Esc 关。
+function ThemeMenu({ theme, skins, onChange }: { theme: ThemeMode; skins: ReadonlyArray<SkinEntry>; onChange: (theme: ThemeMode) => void }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const current = THEMES.find((entry) => entry.value === theme) ?? THEMES[0];
+  const options = themeOptions(skins);
+  const current = options.find((entry) => entry.value === theme) ?? options[0];
 
   useEffect(() => {
     if (!open) return;
@@ -141,11 +144,11 @@ function ThemeMenu({ theme, onChange }: { theme: ThemeMode; onChange: (theme: Th
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        {theme === 'light' ? <Sun size={15} /> : isDarkTheme(theme) ? <Moon size={15} /> : <Palette size={15} />}
+        {theme === 'light' ? <Sun size={15} /> : isDarkTheme(theme, skins) ? <Moon size={15} /> : <Palette size={15} />}
       </Button>
       {open && (
         <div className="top-dropdown-menu theme-menu-list" role="menu" aria-label="外观主题">
-          {THEMES.map((entry) => (
+          {options.map((entry) => (
             <Button
               key={entry.value}
               className="top-dropdown-item"
@@ -157,8 +160,8 @@ function ThemeMenu({ theme, onChange }: { theme: ThemeMode; onChange: (theme: Th
                 setOpen(false);
               }}
             >
-              <span className="theme-swatch" style={{ background: entry.swatch[0] }} aria-hidden="true">
-                <span style={{ background: entry.swatch[1] }} />
+              <span className="theme-swatch" style={entry.swatch ? { background: entry.swatch[0] } : { background: `center / cover url("${entry.preview}")` }} aria-hidden="true">
+                {entry.swatch && <span style={{ background: entry.swatch[1] }} />}
               </span>
               <span className="theme-menu-text">
                 <strong>{entry.label}</strong>

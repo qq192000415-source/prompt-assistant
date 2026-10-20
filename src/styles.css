@@ -585,7 +585,7 @@ body.resizing-sidebar * {
   display: grid;
   flex: 0 0 auto;
   gap: 8px;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  border-top: 1px solid var(--border);
   padding-top: 10px;
 }
 
@@ -1145,7 +1145,7 @@ h2 {
 }
 
 .document-workbar.is-searching {
-  border-bottom-color: #bfdbfe;
+  border-bottom-color: color-mix(in srgb, var(--accent) 30%, var(--border));
 }
 
 .document-new-button {
@@ -5837,6 +5837,19 @@ video.canvas-detail-media {
 }
 
 /* 外观主题（1.8.6）：顶部栏的主题菜单和设置页的主题选择，色块是这套主题的底色加强调色 */
+/* 皮肤（src/skins/）把底色设成半透明让壁纸透出来；吸顶的栏要挡住下面滚过去的内容 */
+html[data-skin] .document-workbar,
+html[data-skin] .document-workbar::before,
+html[data-skin] .settings-form-footer {
+  background: var(--surface-raised);
+  backdrop-filter: blur(16px);
+}
+
+html[data-skin] .top-menu-bar {
+  background: var(--surface-raised);
+  backdrop-filter: blur(16px);
+}
+
 .theme-menu {
   position: relative;
   -webkit-app-region: no-drag;

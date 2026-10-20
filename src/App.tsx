@@ -4,6 +4,7 @@ import { Button } from './components/ui/button';
 import { Toaster } from './components/ui/sonner';
 import { TooltipProvider } from './components/ui/tooltip';
 import { applyTheme, isDarkTheme, readTheme, type ThemeMode } from './lib/theme';
+import { BUILTIN_SKINS } from './skins/builtin';
 import { toast as pushToast } from 'sonner';
 import type { CloudSnapshot } from './cloudSync';
 import { loadOwnNasGrant } from './cloudSync';
@@ -202,14 +203,14 @@ function App() {
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
   const [closeRequestOpen, setCloseRequestOpen] = useState(false);
   const [rememberCloseChoice, setRememberCloseChoice] = useState(false);
-  const [theme, setTheme] = useState<ThemeMode>(() => readTheme());
+  const [theme, setTheme] = useState<ThemeMode>(() => readTheme(BUILTIN_SKINS));
   const fileInputRef = useRef<HTMLInputElement>(null);
   const showToast = (message: string) => {
     pushToast(message);
   };
 
   useEffect(() => {
-    applyTheme(theme);
+    applyTheme(theme, BUILTIN_SKINS);
   }, [theme]);
 
   const openSettings = (section: SettingsSection = 'general') => {
@@ -1208,6 +1209,7 @@ function App() {
         nas={nas}
         onOpenNasSettings={() => openSettings('nas')}
         theme={theme}
+        skins={BUILTIN_SKINS}
         onThemeChange={setTheme}
       />
 
@@ -1234,6 +1236,7 @@ function App() {
           onOpenAuth={() => setIsAuthOpen(true)}
           onSignOut={cloud.signOut}
           theme={theme}
+          skins={BUILTIN_SKINS}
           onThemeChange={setTheme}
           onSave={(settings, nextCloudSettings, nextDesktopSettings) => {
             cloud.updateCloudSettings(nextCloudSettings);
@@ -1495,7 +1498,7 @@ function App() {
         <ConfirmDialog dialog={confirmDialog} onCancel={closeConfirmDialog} onConfirm={confirmCurrentDialog} />
       )}
 
-      <Toaster theme={isDarkTheme(theme) ? 'dark' : 'light'} />
+      <Toaster theme={isDarkTheme(theme, BUILTIN_SKINS) ? 'dark' : 'light'} />
     </div>
     </TooltipProvider>
   );

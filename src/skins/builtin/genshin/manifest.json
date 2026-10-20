@@ -1,0 +1,31 @@
+{
+  "id": "genshin",
+  "name": "原神",
+  "note": "提瓦特星夜、金色点缀",
+  "author": "提示词助手",
+  "version": "1.0.0",
+  "base": "dark",
+  "tokens": {
+    "--sidebar": "rgba(16, 22, 40, 0.8)",
+    "--surface": "rgba(24, 31, 54, 0.86)",
+    "--surface-quiet": "rgba(10, 15, 30, 0.4)",
+    "--surface-raised": "rgba(24, 31, 54, 0.95)",
+    "--surface-muted": "rgba(34, 42, 68, 0.84)",
+    "--overlay-surface": "#1a2238",
+    "--hover": "rgba(236, 208, 140, 0.08)",
+    "--border": "rgba(236, 208, 140, 0.14)",
+    "--border-strong": "rgba(236, 208, 140, 0.26)",
+    "--text": "#f3ecd9",
+    "--muted": "#b7ad95",
+    "--faint": "#7f7864",
+    "--accent": "#e4c27a",
+    "--accent-hover": "#efd398",
+    "--accent-weak": "rgba(228, 194, 122, 0.16)",
+    "--on-accent": "#1a1608"
+  },
+  "wallpaper": {
+    "file": "wallpaper.webp",
+    "overlay": "rgba(8, 12, 26, 0.3)"
+  },
+  "preview": "preview.webp"
+}
