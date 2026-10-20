@@ -35,7 +35,6 @@ import { MaterialCanvas } from './MaterialCanvas';
 import { BatchProgressPanel, CompressImagesDialog, CompressVideosDialog } from './BatchDialogs';
 import { MaterialDetailDialog } from './MaterialDetailDialog';
 import { NasSettingsForm } from './NasSettings';
-import { NasStatusBadge } from './NasStatusBadge';
 import { useNasRecovered, useNasStatus } from '../../materials/useNasStatus';
 
 export const mediaSrc = (media: MaterialMedia) => `nas-media://media/${media.sha256}${media.ext}`;
@@ -161,7 +160,6 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, onOpenSe
             <h1>素材库</h1>
             <span>{busy || summary}</span>
           </div>
-          {(ready || status === 'error') && <NasStatusBadge nas={nas} compact />}
           {ready && !onCanvas && (
             <>
               <label className="materials-search">

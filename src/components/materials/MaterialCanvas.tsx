@@ -27,7 +27,6 @@ import {
 import type { CanvasBaseResolution, CanvasReferenceImage, CanvasSizeMode } from '../../materials/suyan/canvasTypes.ts';
 import { ReferenceEditor, ReferencePreview, type EditorMode } from './ReferenceEditor';
 import { CanvasTemplatePanel } from './CanvasTemplatePanel';
-import { NasStatusBadge } from './NasStatusBadge';
 import { useNasRecovered, type NasStatusController } from '../../materials/useNasStatus';
 
 const SIZE_MODES: Array<{ value: CanvasSizeMode; label: string }> = [
@@ -722,7 +721,6 @@ export function MaterialCanvas({ controller, nas, onOpenSettings }: MaterialCanv
             {/* 页面标题栏去掉后，存入、读取这类进度显示在这里 */}
             <span aria-live="polite">{controller.busy || (historyLoaded || tasks.length ? countLine : '正在读取生成历史…')}</span>
           </div>
-          <NasStatusBadge nas={nas} compact />
           <div className="canvas-stage-tools">
             <Segmented value={recordView} options={RECORD_VIEWS} onChange={changeRecordView} label="生成记录的看法" />
             <Segmented value={sortOrder} options={SORT_ORDERS} onChange={changeSortOrder} label="生成记录的排序" />
@@ -748,10 +746,10 @@ export function MaterialCanvas({ controller, nas, onOpenSettings }: MaterialCanv
                   type="button"
                   className={label === ratioFilter ? 'is-active' : ''}
                   aria-pressed={label === ratioFilter}
-                  title={label === ratioFilter ? '再点一次显示全部' : `只看 ${label} 的结果`}
+                  title={label === ratioFilter ? `${label}：${count} 张图，再点一次显示全部` : `${label}：${count} 张图，点一下只看这个比例`}
                   onClick={() => setRatioFilter(label === ratioFilter ? null : label)}
                 >
-                  {label} <span>{count}</span>
+                  {label}
                 </button>
               ))}
             </div>

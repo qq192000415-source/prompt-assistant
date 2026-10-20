@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, Moon, Palette, Settings, Sun } from 'lucide-react';
 import { LibrarySwitch } from './LibrarySwitch';
 import { Button } from './ui/button';
+import { useSecondsUntil } from './materials/NasStatusBadge';
 import { isDarkTheme, THEMES, type ThemeMode } from '../lib/theme';
 import type { LibraryMode } from '../localState';
+import type { NasStatusController } from '../materials/useNasStatus';
 
 type TopMenuBarProps = {
   // 在设置页时为 null，四个标签都不选中。
@@ -14,11 +16,14 @@ type TopMenuBarProps = {
   onChangeLibraryMode: (mode: LibraryMode) => void;
   onOpenCloudSettings: () => void;
   onOpenSettings: () => void;
+  // NAS 连接状态：只在素材、画布标签时显示。
+  nas: NasStatusController;
+  onOpenNasSettings: () => void;
   theme: ThemeMode;
   onThemeChange: (theme: ThemeMode) => void;
 };
 
-// 顶部栏是主导航：左边切换提示词、文档、素材、画布，右边是云同步状态、外观主题和设置。
+// 顶部栏是主导航：左边切换提示词、文档、素材、画布，右边是 NAS 状态（素材、画布时）、云同步状态、外观主题和设置。
 export function TopMenuBar({
   libraryMode,
   settingsActive,
@@ -27,6 +32,8 @@ export function TopMenuBar({
   onChangeLibraryMode,
   onOpenCloudSettings,
   onOpenSettings,
+  nas,
+  onOpenNasSettings,
   theme,
   onThemeChange,
 }: TopMenuBarProps) {
@@ -39,6 +46,7 @@ export function TopMenuBar({
       <div className="top-menu-drag-region" aria-hidden="true" />
 
       <div className="top-menu-right">
+        {(libraryMode === 'materials' || libraryMode === 'canvas') && <NasPill nas={nas} onOpenSettings={onOpenNasSettings} />}
         <Button
           className={`top-sync-pill ${cloudEmail ? 'is-online' : ''}`}
           type="button"
@@ -62,6 +70,41 @@ export function TopMenuBar({
 
       <div className="top-window-controls-reserve" aria-hidden="true" />
     </header>
+  );
+}
+
+// NAS 胶囊：已连接是绿点，点了去 NAS 设置；断开是红色带倒计时，点了立刻重连。还没连上过（没配置、没登录）不显示。
+function NasPill({ nas, onOpenSettings }: { nas: NasStatusController; onOpenSettings: () => void }) {
+  const { status, reconnecting, reconnect } = nas;
+  const seconds = useSecondsUntil(status?.state === 'disconnected' ? status.nextRetryAt : null);
+  if (!status || status.state === 'unknown') return null;
+  const pending = status.pending.count ? ` · ${status.pending.count} 条待上传` : '';
+  if (status.state === 'connected') {
+    return (
+      <Button
+        className="top-sync-pill top-nas-pill is-online"
+        type="button"
+        title={`NAS 已连接${status.pending.count ? `，本机有 ${status.pending.count} 条生成记录正在传上 NAS` : ''}，点击查看 NAS 设置`}
+        onClick={onOpenSettings}
+      >
+        <span className="cloud-dot" aria-hidden="true" />
+        NAS 已连接{pending}
+      </Button>
+    );
+  }
+  const retry = reconnecting ? ' · 正在连接…' : seconds !== null ? ` · ${seconds} 秒后重连` : '';
+  return (
+    <Button
+      className="top-sync-pill top-nas-pill is-down"
+      type="button"
+      disabled={reconnecting}
+      title={`${status.error || 'NAS 连不上'}。点击立刻重新连接`}
+      onClick={() => void reconnect()}
+    >
+      <span className="cloud-dot" aria-hidden="true" />
+      NAS 已断开{retry}
+      {pending}
+    </Button>
   );
 }
 

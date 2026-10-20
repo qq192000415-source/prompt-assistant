@@ -85,6 +85,7 @@ import { SettingsPage, type SettingsSection } from './components/SettingsPage';
 import { type MoveDirection, Sidebar } from './components/Sidebar';
 import { TopMenuBar } from './components/TopMenuBar';
 import { MaterialLibraryView } from './components/materials/MaterialLibraryView';
+import { useNasStatus } from './materials/useNasStatus';
 
 const emptyDraft: PromptDraft = {
   title: '',
@@ -195,6 +196,8 @@ function App() {
   const [updateStatus, setUpdateStatus] = useState<DesktopUpdateStatus>(defaultUpdateStatus);
   // 不为 null 时内容区显示设置页的这一类。
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
+  // 顶部栏的 NAS 胶囊用（素材、画布标签时显示）。
+  const nas = useNasStatus();
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
   const [closeRequestOpen, setCloseRequestOpen] = useState(false);
@@ -1202,6 +1205,8 @@ function App() {
         }}
         onOpenCloudSettings={() => openSettings('sync')}
         onOpenSettings={() => openSettings()}
+        nas={nas}
+        onOpenNasSettings={() => openSettings('nas')}
         theme={theme}
         onThemeChange={setTheme}
       />

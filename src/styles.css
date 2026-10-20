@@ -4805,6 +4805,30 @@ h2 {
   background: var(--global);
 }
 
+/* NAS 胶囊沿用云同步胶囊的样子；已连接用成功色，断开用危险色 */
+.top-nas-pill.is-online {
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  color: var(--success);
+}
+
+.top-nas-pill.is-online .cloud-dot {
+  background: var(--success);
+}
+
+.top-nas-pill.is-down {
+  background: var(--danger-weak);
+  color: var(--danger);
+  font-variant-numeric: tabular-nums;
+}
+
+.top-nas-pill.is-down .cloud-dot {
+  background: var(--danger);
+}
+
+.top-nas-pill:disabled {
+  cursor: progress;
+}
+
 .top-settings-button {
   gap: 6px;
   font-size: 13px;
@@ -5321,18 +5345,6 @@ h2 {
   background: var(--danger-weak);
 }
 
-/* 画布标题栏的直接子 div 默认是 grid，这里要横排 */
-.canvas-stage-header > .nas-status {
-  display: flex;
-}
-
-.nas-status.is-compact {
-  border: 0;
-  background: transparent;
-  font-size: 12px;
-  padding: 0;
-}
-
 .nas-status-line {
   display: inline-flex;
   flex-wrap: wrap;
@@ -5473,10 +5485,6 @@ h2 {
   flex: 1 1 100%;
 }
 
-.canvas-ratio-filter button span {
-  margin-left: 2px;
-  font-variant-numeric: tabular-nums;
-}
 
 /* 详情栏：跟参数栏一样贴顶，自己滚动 */
 .canvas-detail {
