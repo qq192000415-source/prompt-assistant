@@ -224,6 +224,19 @@ export function useMaterialLibrary(notify: (message: string) => void) {
       notify(result.warnings.length ? `已删除，但有 ${result.warnings.length} 个文件没能从 NAS 上删掉：${result.warnings.join('；')}` : '已删除');
       return result.history;
     },
+    // 读模板不走 run：没配 NAS 时由模板栏自己显示原因。改动走 run，出错统一提示；记使用次数失败不打扰。
+    canvasTemplates: () => api!.canvasTemplates(),
+    canvasTemplateSave: async (input: Parameters<DesktopMaterialsApi['canvasTemplateSave']>[0]) => {
+      const saved = await run('正在保存模板…', () => api!.canvasTemplateSave(input));
+      if (saved) notify(saved.result.duplicate ? '模板库里已经有这条了' : '已保存模板');
+      return saved;
+    },
+    canvasTemplateDelete: async (id: string) => {
+      const result = await run('正在删除模板…', () => api!.canvasTemplateDelete(id));
+      if (result) notify('已删除模板');
+      return result;
+    },
+    canvasTemplateUse: (id: string) => api!.canvasTemplateUse(id).catch((error) => (console.warn('记录模板使用次数失败', error), null)),
     canvasSave: async (taskId: string, index: number) => {
       const result = await run('正在存入素材库…', () => api!.canvasSave(taskId, index));
       if (!result) return false;

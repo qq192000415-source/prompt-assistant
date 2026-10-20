@@ -69,6 +69,10 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     canvasDismiss: (taskId) => ipcRenderer.invoke('materials:canvas-dismiss', taskId),
     canvasHistory: () => ipcRenderer.invoke('materials:canvas-history'),
     canvasHistoryDelete: (ids) => ipcRenderer.invoke('materials:canvas-history-delete', ids),
+    canvasTemplates: () => ipcRenderer.invoke('materials:canvas-templates'),
+    canvasTemplateSave: (input) => ipcRenderer.invoke('materials:canvas-template-save', input),
+    canvasTemplateDelete: (id) => ipcRenderer.invoke('materials:canvas-template-delete', id),
+    canvasTemplateUse: (id) => ipcRenderer.invoke('materials:canvas-template-use', id),
     canvasSave: (taskId, index) => ipcRenderer.invoke('materials:canvas-save', taskId, index),
     canvasSaveAs: (taskId, index) => ipcRenderer.invoke('materials:canvas-save-as', taskId, index),
     onCanvasQueue: (callback) => {

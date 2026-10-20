@@ -19,7 +19,6 @@ import {
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import type { LibraryMode } from '../../localState';
-import type { PromptItem } from '../../types';
 import {
   ALL_CATEGORIES,
   UNCATEGORIZED,
@@ -45,13 +44,9 @@ type MaterialLibraryViewProps = {
   onChangeLibraryMode: (mode: LibraryMode) => void;
   onOpenSettings: (section: 'nas' | 'ai') => void;
   notify: (message: string) => void;
-  // 画布的提示词模板：提示词库里的提示词和分类；存为模板写回提示词库。
-  templates: PromptItem[];
-  templateCategories: string[];
-  onSaveTemplate: (content: string) => void;
 };
 
-export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, onOpenSettings, notify, templates, templateCategories, onSaveTemplate }: MaterialLibraryViewProps) {
+export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, onOpenSettings, notify }: MaterialLibraryViewProps) {
   const controller = useMaterialLibrary(notify);
   const { status, library, busy } = controller;
   const [query, setQuery] = useState('');
@@ -202,9 +197,6 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, onOpenSe
         <MaterialCanvas
           controller={controller}
           onOpenSettings={() => onOpenSettings('ai')}
-          templates={templates}
-          templateCategories={templateCategories}
-          onSaveTemplate={onSaveTemplate}
         />
       )}
 

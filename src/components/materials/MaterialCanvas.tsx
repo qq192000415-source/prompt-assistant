@@ -16,7 +16,6 @@ import {
 } from '../../localState';
 import { copyToClipboard } from '../../promptUtils';
 import { useDetailResize } from '../../useDetailResize';
-import type { PromptItem } from '../../types';
 import { canvas, getCanvasState, isActive, isVideoModel, savedInHistory, useCanvasState, visibleTasks, type CanvasReference } from '../../materials/canvasStore';
 import {
   canvasAspectRatioOptions,
@@ -27,6 +26,7 @@ import {
 } from '../../materials/suyan/canvasGeneration.ts';
 import type { CanvasBaseResolution, CanvasReferenceImage, CanvasSizeMode } from '../../materials/suyan/canvasTypes.ts';
 import { ReferenceEditor, ReferencePreview, type EditorMode } from './ReferenceEditor';
+import { CanvasTemplatePanel } from './CanvasTemplatePanel';
 
 const SIZE_MODES: Array<{ value: CanvasSizeMode; label: string }> = [
   { value: 'auto', label: '自动' },
@@ -74,12 +74,9 @@ function Segmented<T extends string>({ value, options, onChange, label }: { valu
 type MaterialCanvasProps = {
   controller: MaterialLibraryController;
   onOpenSettings: () => void;
-  templates: PromptItem[];
-  templateCategories: string[];
-  onSaveTemplate: (content: string) => void;
 };
 
-export function MaterialCanvas({ controller, onOpenSettings, templates, templateCategories, onSaveTemplate }: MaterialCanvasProps) {
+export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasProps) {
   const { draft, error, queue, history, historyLoaded } = useCanvasState();
   const [model, setModel] = useState<string | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
@@ -92,7 +89,11 @@ export function MaterialCanvas({ controller, onOpenSettings, templates, template
   // 右侧详情栏显示的记录：`任务 id:图序号`，没有图的任务是 `任务 id:`；没选过或选的不见了就显示第一条。
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [templatesOpen, setTemplatesOpen] = useState(false);
+  // 画布模板（NAS 上，和提示词库分开）：null 是还没读到；模板栏打开时 newContent 不为 null 就直接新建。
+  const [templates, setTemplates] = useState<MaterialCanvasTemplate[] | null>(null);
+  const [templatesError, setTemplatesError] = useState('');
+  const [templatePanel, setTemplatePanel] = useState<{ newContent: string | null } | null>(null);
+  const promptInput = useRef<HTMLTextAreaElement>(null);
   // 参考图拖动排序：正在拖的是第几张、要放到第几张的位置。
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
@@ -116,6 +117,28 @@ export function MaterialCanvas({ controller, onOpenSettings, templates, template
       .then((settings) => setModel(settings.image?.usable ? settings.image.model : ''))
       .catch(() => setModel(''));
   }, []);
+
+  useEffect(() => {
+    void controller
+      .canvasTemplates()
+      .then(({ templates: loaded, dropped }) => {
+        setTemplates(loaded.templates);
+        if (dropped) canvas.showError(`画布模板里有 ${dropped} 条读不懂（可能是别的电脑上更新的版本写的），已跳过；下次改模板时它们不会被保留`);
+      })
+      .catch((loadError) => setTemplatesError(`读不到画布模板：${loadError instanceof Error ? loadError.message : loadError}`));
+  }, []);
+
+  // 插入放在提示词框的光标处（没点过就是末尾），替换整段换掉；都记一次使用。
+  const applyTemplate = (template: MaterialCanvasTemplate, how: 'insert' | 'replace') => {
+    const input = promptInput.current;
+    const start = input?.selectionStart ?? draft.prompt.length;
+    const end = input?.selectionEnd ?? start;
+    const prompt = how === 'replace' ? template.content : draft.prompt.slice(0, start) + template.content + draft.prompt.slice(end);
+    canvas.setDraft({ prompt: prompt.slice(0, maxCanvasPromptLength) });
+    setTemplatePanel(null);
+    void controller.canvasTemplateUse(template.id).then((result) => result && setTemplates(result.templates.templates));
+  };
+  const frequentTemplates = (templates ?? []).filter((entry) => entry.useCount > 0).sort((a, b) => b.useCount - a.useCount).slice(0, 4);
 
   const reloadHistory = () =>
     controller
@@ -337,7 +360,7 @@ export function MaterialCanvas({ controller, onOpenSettings, templates, template
           <span className="material-field-label">
             正向提示词
             <span className="material-field-tools">
-              <Button className="button ghost compact" type="button" aria-expanded={templatesOpen} title="从提示词库选一条填进来" onClick={() => setTemplatesOpen(!templatesOpen)}>
+              <Button className="button ghost compact" type="button" aria-expanded={Boolean(templatePanel)} title="打开画布模板库" onClick={() => setTemplatePanel({ newContent: null })}>
                 <BookOpen size={13} />
                 模板
               </Button>
@@ -345,9 +368,9 @@ export function MaterialCanvas({ controller, onOpenSettings, templates, template
                 className="icon-button compact-icon"
                 type="button"
                 aria-label="存为模板"
-                title="把当前提示词存进提示词库的「画布模板」分类"
+                title="把当前提示词存进画布模板库"
                 disabled={!draft.prompt.trim()}
-                onClick={() => onSaveTemplate(draft.prompt)}
+                onClick={() => setTemplatePanel({ newContent: draft.prompt })}
               >
                 <BookmarkPlus size={14} />
               </Button>
@@ -360,22 +383,20 @@ export function MaterialCanvas({ controller, onOpenSettings, templates, template
               </Button>
             </span>
           </span>
-          {templatesOpen && (
-            <TemplatePicker
-              templates={templates}
-              categories={templateCategories}
-              onPick={(content) => {
-                canvas.setDraft({ prompt: content.slice(0, maxCanvasPromptLength) });
-                setTemplatesOpen(false);
-              }}
-              onClose={() => setTemplatesOpen(false)}
-            />
-          )}
-          <textarea id="canvas-prompt" value={draft.prompt} maxLength={maxCanvasPromptLength} rows={8} onChange={(event) => canvas.setDraft({ prompt: event.target.value })} placeholder="描述想要的画面" />
+          <textarea ref={promptInput} id="canvas-prompt" value={draft.prompt} maxLength={maxCanvasPromptLength} rows={8} onChange={(event) => canvas.setDraft({ prompt: event.target.value })} placeholder="描述想要的画面" />
           <span className="canvas-count">
             {draft.prompt.length} / {maxCanvasPromptLength}
           </span>
         </label>
+        {frequentTemplates.length > 0 && (
+          <div className="canvas-template-chips canvas-frequent-templates" aria-label="常用模板">
+            {frequentTemplates.map((entry) => (
+              <button key={entry.id} type="button" title={`用「${entry.title}」换掉正向提示词`} onClick={() => applyTemplate(entry, 'replace')}>
+                {entry.title}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="canvas-section">
           <span className="material-field-label">
@@ -703,6 +724,18 @@ export function MaterialCanvas({ controller, onOpenSettings, templates, template
 
       {previewIndex !== null && (
         <ReferencePreview references={draft.referenceImages} index={previewIndex} onChange={setPreviewIndex} onEdit={editReference} onClose={() => setPreviewIndex(null)} />
+      )}
+
+      {templatePanel && (
+        <CanvasTemplatePanel
+          controller={controller}
+          templates={templates}
+          loadError={templatesError}
+          newContent={templatePanel.newContent}
+          onChange={setTemplates}
+          onUse={applyTemplate}
+          onClose={() => setTemplatePanel(null)}
+        />
       )}
 
       {viewing && (
@@ -1222,61 +1255,6 @@ function CanvasDetail({ task, slot, inQueue, busy, isSaved, onSelect, onOpen, on
         )}
       </div>
       {slot?.status === 'done' && isSaved(task, slot) && <p className="canvas-detail-note">这张已存入素材库。</p>}
-    </div>
-  );
-}
-
-// 提示词模板：就是提示词库里的提示词（不含文档），按分类筛、按标题和内容搜，点一条填进正向提示词。
-function TemplatePicker({ templates, categories, onPick, onClose }: { templates: PromptItem[]; categories: string[]; onPick: (content: string) => void; onClose: () => void }) {
-  const [category, setCategory] = useState('');
-  const [query, setQuery] = useState('');
-  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const used = categories.filter((name) => templates.some((template) => template.category === name));
-  const list = templates.filter(
-    (template) => (!category || template.category === category) && words.every((word) => `${template.title}\n${template.content}\n${template.tags.join(' ')}`.toLowerCase().includes(word)),
-  );
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
-
-  return (
-    <div className="canvas-templates" role="dialog" aria-label="从提示词库选模板">
-      <div className="canvas-templates-head">
-        <label className="materials-search canvas-search">
-          <Search size={14} aria-hidden="true" />
-          <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索提示词库" aria-label="搜索提示词库" />
-        </label>
-        <Button className="icon-button compact-icon" type="button" aria-label="关闭模板" onClick={onClose}>
-          <X size={14} />
-        </Button>
-      </div>
-      {used.length > 0 && (
-        <div className="canvas-template-chips" role="radiogroup" aria-label="按分类筛">
-          {['', ...used].map((name) => (
-            <button key={name || '全部'} type="button" role="radio" aria-checked={category === name} className={category === name ? 'is-active' : ''} onClick={() => setCategory(name)}>
-              {name || '全部'}
-            </button>
-          ))}
-        </div>
-      )}
-      {list.length > 0 ? (
-        <ul className="canvas-template-list">
-          {list.slice(0, 200).map((template) => (
-            <li key={template.id}>
-              <button type="button" title={template.content} onClick={() => onPick(template.content)}>
-                <strong>{template.title}</strong>
-                <span>{template.content}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="nas-form-note">{templates.length ? '没有匹配的提示词。' : '提示词库还是空的。写好提示词后点「存为模板」就会存进去。'}</p>
-      )}
     </div>
   );
 }

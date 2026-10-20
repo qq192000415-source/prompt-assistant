@@ -5670,36 +5670,73 @@ video.canvas-detail-media {
   pointer-events: none;
 }
 
-/* 模板：就在提示词框上面展开，不盖住输入框 */
-.canvas-templates {
-  display: grid;
-  gap: 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface-quiet);
-  padding: 8px;
+/* 画布模板：盖在窗口右边的宽侧栏（照 iLab CONJURE），卡片按分类分组铺开 */
+/* 从顶部栏下面开始：顶部栏固定在最上层，还带着窗口拖动区和窗口按钮 */
+.canvas-template-shell {
+  top: var(--topbar-height);
+  place-items: stretch end;
+  padding: 0;
 }
 
-.canvas-templates-head {
+.canvas-template-drawer {
+  position: relative;
+  z-index: 1;
   display: flex;
-  align-items: center;
-  gap: 6px;
+  width: min(520px, 100vw);
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+  border-left: 1px solid var(--border);
+  background: var(--overlay-surface);
+  box-shadow: var(--shadow);
+  padding: 20px;
 }
 
-.canvas-templates-head .canvas-search {
+.canvas-template-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.canvas-template-head h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.canvas-template-head p,
+.canvas-template-meta {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.canvas-template-toolbar {
+  display: flex;
+  gap: 8px;
+}
+
+.canvas-template-toolbar .materials-search {
+  max-width: none;
   flex: 1 1 auto;
   min-width: 0;
 }
 
+/* 聚焦样式由外框的 :focus-within 给，输入框自己不再画一圈 */
+.canvas-template-toolbar .materials-search input {
+  flex: 1;
+  outline: none;
+}
+
 .canvas-template-chips {
   display: flex;
-  gap: 4px;
-  overflow-x: auto;
-  padding-bottom: 2px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .canvas-template-chips button {
-  flex: 0 0 auto;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface);
@@ -5707,7 +5744,11 @@ video.canvas-detail-media {
   cursor: pointer;
   font: inherit;
   font-size: 12px;
-  padding: 2px 10px;
+  padding: 3px 11px;
+}
+
+.canvas-template-chips button:hover {
+  background: var(--hover);
 }
 
 .canvas-template-chips button.is-active {
@@ -5717,50 +5758,154 @@ video.canvas-detail-media {
   font-weight: 600;
 }
 
-.canvas-template-list {
-  display: grid;
-  max-height: 260px;
-  gap: 2px;
+.canvas-template-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
   overflow-y: auto;
+}
+
+.canvas-template-group {
+  display: grid;
+  gap: 8px;
+}
+
+.canvas-template-group h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.canvas-template-group h3 span {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.canvas-template-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.canvas-template-list button {
+.canvas-template-cards button {
   display: grid;
   width: 100%;
-  gap: 2px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: none;
+  height: 100%;
+  align-content: start;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
   color: var(--text);
   cursor: pointer;
   font: inherit;
-  padding: 6px 8px;
+  padding: 12px;
   text-align: left;
 }
 
-.canvas-template-list button:hover,
-.canvas-template-list button:focus-visible {
-  background: var(--hover);
+.canvas-template-cards button:hover,
+.canvas-template-cards button:focus-visible {
+  border-color: var(--accent);
   outline: none;
 }
 
-.canvas-template-list strong {
+.canvas-template-cards strong {
   overflow: hidden;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.canvas-template-list span {
+.canvas-template-preview {
+  display: -webkit-box;
   overflow: hidden;
   color: var(--muted);
   font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  white-space: pre-line;
+}
+
+.canvas-template-card-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.canvas-template-detail,
+.canvas-template-form {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.canvas-template-detail h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.canvas-template-content {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-quiet);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.7;
+  padding: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.canvas-template-form-content {
+  min-height: 0;
+  flex: 1;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.canvas-template-form-content textarea {
+  min-height: 200px;
+  resize: none;
+}
+
+.canvas-template-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.canvas-template-actions-start,
+.canvas-template-actions-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.canvas-template-form .canvas-template-actions {
+  justify-content: flex-end;
+}
+
+.canvas-frequent-templates {
+  margin-top: -4px;
 }
 
 .canvas-model-picker {

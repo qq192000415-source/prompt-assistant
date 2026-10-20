@@ -19,6 +19,7 @@ import {
   recordSlot,
   type HistoryMedia,
 } from './canvasHistory.ts';
+import { deleteTemplate, markTemplateUsed, mutateTemplates, readTemplates, saveTemplate, type TemplateInput } from './canvasTemplates.ts';
 import { createCanvasQueue, type QueueSlot, type QueueTask } from './canvasQueue.ts';
 import { loadConfig } from './config.ts';
 import type { AiImageGenerationPayload } from './suyan/aiTypes.ts';
@@ -223,6 +224,18 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Op
     }
     return { history, dropped, warnings };
   });
+
+  // 画布模板：和提示词库分开，存在 NAS 的 canvas-templates.json。
+  ipcMain.handle('materials:canvas-templates', () => readTemplates(loadConfig(userDataDir)));
+  ipcMain.handle('materials:canvas-template-save', (_event, input: TemplateInput) =>
+    mutateTemplates(loadConfig(userDataDir), (current) => saveTemplate(current, input ?? { title: '', content: '', category: '' }, new Date().toISOString())),
+  );
+  ipcMain.handle('materials:canvas-template-delete', (_event, id) =>
+    mutateTemplates(loadConfig(userDataDir), (current) => ({ templates: deleteTemplate(current, String(id), new Date().toISOString()), result: null })),
+  );
+  ipcMain.handle('materials:canvas-template-use', (_event, id) =>
+    mutateTemplates(loadConfig(userDataDir), (current) => ({ templates: markTemplateUsed(current, String(id), new Date().toISOString()), result: null })),
+  );
 
   // 存入素材库：提示词没改的「发到画布」任务归进来源组，否则归到「画布生成」。
   ipcMain.handle('materials:canvas-save', async (_event, taskId, index) => {

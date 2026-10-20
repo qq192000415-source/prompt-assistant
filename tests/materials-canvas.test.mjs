@@ -332,3 +332,40 @@ test('新增比例 4:5、5:4、9:21：尺寸是 16 的倍数且比例准确，�
   assert.deepEqual(resolveAgnesImageRequestSize('agnes-image-2.1', { size: '896x1120', ratio: '4:5' }), { size: '896x1120' });
   assert.deepEqual(resolveAgnesImageRequestSize('agnes-image-2.1', { size: '1568x672', ratio: '21:9' }), { size: '1K', ratio: '21:9' });
 });
+
+test('画布模板：存在 NAS 的 canvas-templates.json，新建、重复内容不再加、编辑、记使用次数、删除；坏 JSON 不覆盖', async () => {
+  const { readTemplates, mutateTemplates, saveTemplate, deleteTemplate, markTemplateUsed, normalizeTemplates } = await import('../electron/materials/canvasTemplates.ts');
+  const { startFakeNas } = await import('./helpers/fake-nas.mjs');
+  const nas = await startFakeNas();
+  const now = '2026-10-20T08:00:00.000Z';
+  try {
+    assert.deepEqual((await readTemplates(nas.config)).templates.templates, []);
+    const created = await mutateTemplates(nas.config, (current) => saveTemplate(current, { title: '', content: '电商主图\n白底', category: ' ' }, now));
+    assert.equal(created.result.duplicate, false);
+    assert.deepEqual(
+      created.templates.templates.map(({ title, category, useCount }) => ({ title, category, useCount })),
+      [{ title: '电商主图', category: '未分类', useCount: 0 }],
+    );
+    const again = await mutateTemplates(nas.config, (current) => saveTemplate(current, { title: '别的标题', content: ' 电商主图\n白底 ', category: '常用' }, now));
+    assert.deepEqual([again.result.duplicate, again.result.id, again.templates.templates.length], [true, created.result.id, 1]);
+
+    const id = created.result.id;
+    await mutateTemplates(nas.config, (current) => saveTemplate(current, { id, title: '主图', content: '电商主图\n白底\n正面', category: '电商' }, now));
+    await mutateTemplates(nas.config, (current) => ({ templates: markTemplateUsed(markTemplateUsed(current, id, now), id, now), result: null }));
+    const [saved] = (await readTemplates(nas.config)).templates.templates;
+    assert.deepEqual([saved.title, saved.category, saved.content, saved.useCount], ['主图', '电商', '电商主图\n白底\n正面', 2]);
+    await assert.rejects(mutateTemplates(nas.config, (current) => saveTemplate(current, { id: 'gone', title: '', content: 'x', category: '' }, now)), /已经被删掉了/);
+    await assert.rejects(mutateTemplates(nas.config, (current) => saveTemplate(current, { title: '', content: '  ', category: '' }, now)), /不能是空的/);
+
+    await mutateTemplates(nas.config, (current) => ({ templates: deleteTemplate(current, id, now), result: null }));
+    assert.deepEqual((await readTemplates(nas.config)).templates.templates, []);
+    assert.equal(nas.locks.size, 0);
+
+    nas.files.set('/团队文件-素材/canvas-templates.json', Buffer.from('{ broken'));
+    await assert.rejects(mutateTemplates(nas.config, (current) => saveTemplate(current, { title: '', content: 'x', category: '' }, now)), /不是有效的 JSON/);
+    assert.equal(nas.files.get('/团队文件-素材/canvas-templates.json').toString(), '{ broken');
+  } finally {
+    nas.server.close();
+  }
+  assert.equal(normalizeTemplates({ templates: [{ id: 'a', content: '猫' }, { id: '', content: 'x' }, { id: 'b', content: '' }, 'junk'] }).dropped, 3);
+});

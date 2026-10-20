@@ -127,6 +127,10 @@ type DesktopMaterialsApi = {
   canvasDismiss: (taskId: string) => Promise<void>;
   canvasHistory: () => Promise<{ history: MaterialCanvasHistory; dropped: number }>;
   canvasHistoryDelete: (ids: string[]) => Promise<{ history: MaterialCanvasHistory; dropped: number; warnings: string[] }>;
+  canvasTemplates: () => Promise<MaterialCanvasTemplateResult>;
+  canvasTemplateSave: (input: { id?: string; title: string; content: string; category: string }) => Promise<MaterialCanvasTemplateResult & { result: { id: string; duplicate: boolean } }>;
+  canvasTemplateDelete: (id: string) => Promise<MaterialCanvasTemplateResult>;
+  canvasTemplateUse: (id: string) => Promise<MaterialCanvasTemplateResult>;
   canvasSave: (taskId: string, index: number) => Promise<MaterialImportResult>;
   canvasSaveAs: (taskId: string, index: number) => Promise<string | null>;
   onCanvasQueue: (callback: (tasks: MaterialCanvasTask[]) => void) => () => void;
@@ -189,6 +193,9 @@ type MaterialCanvasTask = {
   slots: MaterialCanvasSlot[];
 };
 type MaterialCanvasHistory = { schemaVersion: 1; updatedAt: string; tasks: MaterialCanvasTask[] };
+// 画布模板（NAS 的 canvas-templates.json），字段对应 electron/materials/canvasTemplates.ts。
+type MaterialCanvasTemplate = { id: string; title: string; content: string; category: string; useCount: number; createdAt: string; updatedAt: string };
+type MaterialCanvasTemplateResult = { templates: { schemaVersion: 1; updatedAt: string; templates: MaterialCanvasTemplate[] }; dropped: number };
 type MaterialCanvasOrigin = { prompt: string; negativePrompt: string; title: string; category: string; tags: string[] };
 type MaterialAiBatchResult = MaterialLoadResult & { processed: number; skipped: number; failures: MaterialBatchFailure[]; canceled: boolean };
 

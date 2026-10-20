@@ -122,9 +122,6 @@ const defaultUpdateStatus: DesktopUpdateStatus = {
   message: '尚未检查更新',
 };
 
-// 画布里「存为模板」存进提示词库的这个分类。
-const CANVAS_TEMPLATE_CATEGORY = '画布模板';
-
 const FILE_FORMAT_LABELS: Record<FileFormat, string> = {
   json: 'JSON',
   txt: '记事本',
@@ -628,25 +625,6 @@ function App() {
   const openEditEditor = (prompt: PromptItem) => {
     setEditorPrompt(prompt);
     setIsEditorOpen(true);
-  };
-
-  // 画布的提示词模板就是提示词库里的提示词（不含文档），云同步照常。「存为模板」存进提示词库的「画布模板」分类。
-  // 直接改 allItems：画布页的 libraryMode 是 canvas，setPrompts 只改当前库那一份，用它会存错地方。
-  const promptTemplates = useMemo(() => allItems.filter((item) => !isDocumentItem(item)), [allItems]);
-  const addCanvasTemplate = (content: string) => {
-    const text = content.trim();
-    if (!text) return;
-    const title = text.split(/\r?\n/)[0].slice(0, 24);
-    if (findDuplicatePrompt(promptTemplates, { title, content: text, category: CANVAS_TEMPLATE_CATEGORY })) {
-      showToast(`提示词库的「${CANVAS_TEMPLATE_CATEGORY}」里已经有这条了`);
-      return;
-    }
-    const now = new Date().toISOString();
-    const template: PromptItem = { id: createId(), title, description: '', content: text, category: CANVAS_TEMPLATE_CATEGORY, tags: [], favorite: false, createdAt: now, updatedAt: now };
-    markLibraryChanged();
-    setAllItems((items) => appendPromptsToCategoryEnd(items, [template]));
-    setPromptCategories((categories) => (categories.includes(CANVAS_TEMPLATE_CATEGORY) ? categories : [...categories, CANVAS_TEMPLATE_CATEGORY]));
-    showToast(`已存为模板，在提示词库的「${CANVAS_TEMPLATE_CATEGORY}」分类里`);
   };
 
   const duplicatePrompt = (prompt: PromptItem) => {
@@ -1262,9 +1240,6 @@ function App() {
           onChangeLibraryMode={changeLibraryMode}
           onOpenSettings={openSettings}
           notify={showToast}
-          templates={promptTemplates}
-          templateCategories={library.categories}
-          onSaveTemplate={addCanvasTemplate}
         />
       ) : (
       <>
