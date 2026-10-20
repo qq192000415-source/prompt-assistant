@@ -169,7 +169,11 @@ export const canvasAspectRatioOptions: ReadonlyArray<{
   { value: "9:16", label: "9:16", orientation: "portrait" },
   { value: "4:3", label: "4:3", orientation: "landscape" },
   { value: "3:4", label: "3:4", orientation: "portrait" },
+  // 提示词助手改动（上游没有）：5:4、4:5、9:21，对齐 iLab CONJURE 的比例。
+  { value: "5:4", label: "5:4", orientation: "landscape" },
+  { value: "4:5", label: "4:5", orientation: "portrait" },
   { value: "21:9", label: "21:9", orientation: "landscape" },
+  { value: "9:21", label: "9:21", orientation: "portrait" },
 ];
 
 /** Agnes Image 2.x 的原生输出尺寸表。尺寸档位必须与比例一起使用，
@@ -222,6 +226,25 @@ const agnesOutputDimensions: Readonly<Record<CanvasAspectRatio, Readonly<Record<
     "2k": [3136, 1344],
     "3k": [4704, 2016],
     "4k": [6272, 2688],
+  },
+  // 提示词助手改动（上游没有）：和上面一样取 16 的倍数、1K 约一百万像素，2K/3K/4K 是 1K 的 2/3/4 倍；9:21 是 21:9 横竖对调。
+  "5:4": {
+    "1k": [1120, 896],
+    "2k": [2240, 1792],
+    "3k": [3360, 2688],
+    "4k": [4480, 3584],
+  },
+  "4:5": {
+    "1k": [896, 1120],
+    "2k": [1792, 2240],
+    "3k": [2688, 3360],
+    "4k": [3584, 4480],
+  },
+  "9:21": {
+    "1k": [672, 1568],
+    "2k": [1344, 3136],
+    "3k": [2016, 4704],
+    "4k": [2688, 6272],
   },
 };
 

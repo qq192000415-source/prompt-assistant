@@ -13,7 +13,8 @@ export type CanvasSizeMode = "auto" | "ratio" | "custom";
 export type CanvasPhase = "empty" | "thinking" | "generating" | "reveal" | "created";
 
 export type CanvasBaseResolution = "1k" | "2k" | "3k" | "4k";
-export type CanvasAspectRatio = "1:1" | "3:2" | "2:3" | "16:9" | "9:16" | "4:3" | "3:4" | "21:9";
+// 提示词助手改动（上游没有）：4:5、5:4、9:21，对齐 iLab CONJURE 的比例。
+export type CanvasAspectRatio = "1:1" | "3:2" | "2:3" | "16:9" | "9:16" | "4:3" | "3:4" | "5:4" | "4:5" | "21:9" | "9:21";
 export type CanvasGenerationProvider = "api" | "doubao-web";
 
 export type DoubaoWebCanvasBounds = {

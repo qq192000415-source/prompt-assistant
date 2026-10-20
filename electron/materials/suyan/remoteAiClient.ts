@@ -2874,6 +2874,10 @@ export function resolveAgnesImageRequestSize(
 
   const [width, height] = normalizedSize.split("x").map(Number);
   const tiers = agnesOutputDimensions[ratio];
+  // 提示词助手改动：画布多了 Agnes 原生表里没有的比例（4:5、5:4、9:21），这时直接按像素尺寸请求。
+  if (!tiers) {
+    return { size: normalizedSize };
+  }
   const exactTier = (Object.entries(tiers) as Array<[AiImageGenerationResolution, readonly [number, number]]>)
     .find(([, dimensions]) => dimensions[0] === width && dimensions[1] === height)?.[0];
   if (exactTier) {

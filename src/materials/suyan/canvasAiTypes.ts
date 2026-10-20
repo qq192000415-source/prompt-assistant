@@ -3,7 +3,8 @@
 
 export type AiImageGenerationSize = "auto" | `${number}x${number}`;
 
-export type AiImageGenerationRatio = "1:1" | "3:4" | "4:3" | "16:9" | "9:16" | "2:3" | "3:2" | "21:9";
+// 提示词助手改动（上游没有）：4:5、5:4、9:21。
+export type AiImageGenerationRatio = "1:1" | "3:4" | "4:3" | "16:9" | "9:16" | "2:3" | "3:2" | "5:4" | "4:5" | "21:9" | "9:21";
 
 export type AiImageGenerationQuality = "auto" | "low" | "medium" | "high";
 

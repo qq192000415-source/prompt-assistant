@@ -307,3 +307,24 @@ test('局部重绘：编辑后按对象换掉参考图；遮罩只能在第 1 �
     api.server.close();
   }
 });
+
+test('新增比例 4:5、5:4、9:21：尺寸是 16 的倍数且比例准确，草稿保留，全量恢复能反推，Agnes 不认识时按像素请求', async () => {
+  const { canvasAspectRatioOptions, normalizeCanvasDraftSettings, resolveCanvasGenerationSize } = await import('../src/materials/suyan/canvasGeneration.ts');
+  const { restoreDraftParams } = await import('../src/materials/canvasStore.ts');
+  const { resolveAgnesImageRequestSize } = await import('../electron/materials/suyan/remoteAiClient.ts');
+  assert.deepEqual(canvasAspectRatioOptions.map((option) => option.value), ['1:1', '3:2', '2:3', '16:9', '9:16', '4:3', '3:4', '5:4', '4:5', '21:9', '9:21']);
+  for (const ratio of ['5:4', '4:5', '9:21']) {
+    const [rw, rh] = ratio.split(':').map(Number);
+    for (const baseResolution of ['1k', '2k', '3k', '4k']) {
+      const size = resolveCanvasGenerationSize({ sizeMode: 'ratio', aspectRatio: ratio, baseResolution, customWidth: 0, customHeight: 0 });
+      const [w, h] = size.split('x').map(Number);
+      assert.equal(w % 16 + (h % 16), 0, `${ratio} ${baseResolution} ${size}`);
+      assert.ok(Math.abs(w / h - rw / rh) < 0.01, `${ratio} ${baseResolution} ${size}`);
+    }
+  }
+  assert.equal(resolveCanvasGenerationSize({ sizeMode: 'ratio', aspectRatio: '4:5', baseResolution: '1k', customWidth: 0, customHeight: 0 }), '896x1120');
+  assert.equal(normalizeCanvasDraftSettings({ aspectRatio: '9:21' }).aspectRatio, '9:21');
+  assert.deepEqual(restoreDraftParams({ params: { size: '2240x1792', ratio: '5:4', quality: 'auto', outputFormat: 'png', background: 'opaque' }, total: 1 }).aspectRatio, '5:4');
+  assert.deepEqual(resolveAgnesImageRequestSize('agnes-image-2.1', { size: '896x1120', ratio: '4:5' }), { size: '896x1120' });
+  assert.deepEqual(resolveAgnesImageRequestSize('agnes-image-2.1', { size: '1568x672', ratio: '21:9' }), { size: '1K', ratio: '21:9' });
+});
