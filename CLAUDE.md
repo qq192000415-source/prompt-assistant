@@ -77,6 +77,8 @@ npm.cmd run release:publish                   # 打三类包 + 上传更新源 +
 - 抓取分享链接走独立的 Electron 会话（`linkSession.ts`），代理设置（`proxy.ts`）只作用于它，不影响 Supabase、更新检查和 NAS。
 - 测试：`tests/materials-library.test.mjs`（纯逻辑），`tests/materials-import.test.mjs`（分享包读写、Word），`tests/suyan-*.test.ts`（SuYan 原有的解析器测试），`tests/materials-nas.test.mjs`（用本地模拟的 WebDAV 测加锁读改写、导出），`tests/materials-ffmpeg.test.mjs`（FFmpeg 参数、进度解析、下载校验），`tests/materials-ai.test.mjs`（用本地模拟的 OpenAI 接口、Ollama 和 WebDAV 测 AI 四项功能和批量任务），`tests/materials-canvas.test.mjs`（模拟生图接口和 Agnes 测文生图、图生图、视频、结果解码、来源组继承、sharp 替身、画布状态）。`batch.ts`、`index.ts`、`config.ts`、`aiSettings.ts` 依赖 Electron，不能在 Node 里直接加载，其余模块都可以。
 
+**自动更新（安装版，1.10.4）。** `electron-updater`，更新源在运行时用 `setFeedURL` 指到 `UPDATE_BASE_URL`（环境变量能覆盖，测试时可以指到本机临时起的静态服务）。点「下载」（设置页或启动弹窗）就是要装：`update-downloaded` 后 `installDownloadedUpdate` 直接 `quitAndInstall(true, true)` 静默安装、装完自动重开；画布还有任务在生成时先弹窗问。主人的安装是「所有用户」（HKLM、`C:\Program Files\prompt-library`），静默升级时安装程序自己弹 UAC。启动弹窗在窗口不在前台时会被挡住（Windows 不让后台程序抢前台，1.10.0 实测），所以这时改成任务栏闪烁 + 系统通知，切回窗口再弹。安装包下在 `%LOCALAPPDATA%\prompt-library-updater\pending\`（目录名来自打包写进 `resources/app-update.yml` 的 `updaterCacheDirName`），设置页显示路径、能打开；新版本启动时 `electron/updateCache.cjs` 判断哪些已经装上（`pending` 里的版本不比当前新，或 `update-info.json` 读不到）并删掉，连根目录的 `installer.exe`、`current.blockmap`；刚装完时安装包常被安装程序占着，删不掉隔 1 分钟重试，最多 3 次。全过程写 `<userData>/logs/update.log`。
+
 **数据目录。** `productName` 带版本号，Electron 默认会每个版本换一个 userData 目录。`electron/main.cjs` 启动时固定为 `%APPDATA%\prompt-assistant`，首次启动由 `electron/userDataMigration.cjs` 从最近使用的旧目录 `提示词助手X.Y.Z` 拷贝数据。
 
 **配置。** Supabase URL、anon key、管理员邮箱来自 `.env` 的 `VITE_*`，构建时写进前端产物。更新源 `UPDATE_BASE_URL` 在打包时由 `scripts/write-update-source.cjs` 写入被 Git 忽略的 `electron/app-update-source.local.json`。仓库里不放任何真实地址。

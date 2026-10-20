@@ -22,6 +22,12 @@ const capabilityNote = (name: MaterialAiSlotName, models: ModelOption[]) =>
     ? ` 查到 ${models.length} 个模型，其中 ${models.filter((model) => model.generation).length} 个认得出能生图（按模型名推断，没认出的也可能能生图），在「从查到的模型里选」里选。`
     : ` 查到 ${models.length} 个模型，其中 ${models.filter((model) => model.vision).length} 个认得出能看图（按模型名推断，没认出的也可能能看图，用测试连接或直接反推试一下），在「从查到的模型里选」里选。`;
 
+// 搜模型名：不分大小写，空格分开的几个词都要出现。
+const matchModels = (models: ModelOption[], query: string) => {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  return words.length ? models.filter((model) => words.every((word) => model.id.toLowerCase().includes(word))) : models;
+};
+
 const URL_PLACEHOLDER: Record<MaterialAiProvider, string> = {
   'openai-compatible': 'https://api.deepseek.com/v1',
   ollama: 'http://127.0.0.1:11434',
@@ -50,6 +56,7 @@ export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, te
   const [slots, setSlots] = useState<Record<MaterialAiSlotName, SlotDraft> | null>(null);
   const [actions, setActions] = useState<MaterialAiAction[]>([]);
   const [models, setModels] = useState<Record<MaterialAiSlotName, ModelOption[]>>({ text: [], vision: [], image: [] });
+  const [modelQuery, setModelQuery] = useState<Record<MaterialAiSlotName, string>>({ text: '', vision: '', image: '' });
   const [actionIndex, setActionIndex] = useState(0);
   const [canvasOptions, setCanvasOptions] = useState<MaterialCanvasOptions>({ concurrency: 2, retries: 2 });
 
@@ -130,24 +137,43 @@ export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, te
               模型
               <input value={slot.model} onChange={(event) => setSlot(name, { model: event.target.value })} spellCheck={false} />
             </label>
-            {/* 不用 datalist：Electron 里它的弹出列表只显示一部分、滚轮滚不动。原生下拉框能完整滚动。 */}
-            {models[name].length > 0 && (
-              <label className="field">
-                从查到的模型里选
-                <select
-                  aria-label={`选择${SLOT_LABELS[name].title}`}
-                  value={models[name].some((model) => model.id === slot.model) ? slot.model : ''}
-                  onChange={(event) => event.target.value && setSlot(name, { model: event.target.value })}
-                >
-                  <option value="">共 {models[name].length} 个，点开选择…</option>
-                  {models[name].map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.id}（{capabilityLabel(name, model)}）
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
+            {/* 不用 datalist：Electron 里它的弹出列表只显示一部分、滚轮滚不动。原生下拉框能完整滚动。
+                网关返回的模型可能有几百个：先搜，有搜索词时直接展开成列表（最多 8 行），点一下就选上。 */}
+            {models[name].length > 0 && (() => {
+              const query = modelQuery[name];
+              const matched = matchModels(models[name], query);
+              return (
+                <div className="field">
+                  从查到的模型里选
+                  <input
+                    type="search"
+                    value={query}
+                    onChange={(event) => setModelQuery({ ...modelQuery, [name]: event.target.value })}
+                    placeholder={`搜索 ${models[name].length} 个模型，比如 gpt、image、vl`}
+                    aria-label={`搜索${SLOT_LABELS[name].title}`}
+                    spellCheck={false}
+                  />
+                  {matched.length > 0 ? (
+                    <select
+                      aria-label={`选择${SLOT_LABELS[name].title}`}
+                      size={query.trim() ? Math.min(8, Math.max(2, matched.length)) : undefined}
+                      value={matched.some((model) => model.id === slot.model) ? slot.model : ''}
+                      onChange={(event) => event.target.value && setSlot(name, { model: event.target.value })}
+                    >
+                      {!query.trim() && <option value="">共 {models[name].length} 个，点开选择…</option>}
+                      {matched.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.id}（{capabilityLabel(name, model)}）
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="nas-form-note">没有名字里带「{query.trim()}」的模型</span>
+                  )}
+                  {query.trim() && matched.length > 0 && <span className="nas-form-note">找到 {matched.length} 个（共 {models[name].length} 个），点一下选上</span>}
+                </div>
+              );
+            })()}
             {name === 'image' && (
               <div className="canvas-row">
                 <label className="field">

@@ -393,5 +393,7 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem, onPe
   return {
     syncPending,
     pendingStats: () => (getAccount() ? pendingStats(cacheDir(userDataDir, getAccount())) : { count: 0, bytes: 0, overLimit: false }),
+    // 所有账号的：装更新要关软件，哪个账号的任务都会被中断。
+    activeTasks: () => queue.snapshot().filter((task) => task.slots.some((slot) => slot.status === 'queued' || slot.status === 'running')).length,
   };
 }

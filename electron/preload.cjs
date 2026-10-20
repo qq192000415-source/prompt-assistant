@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
   checkForUpdates: () => ipcRenderer.invoke('desktop:update-check'),
   downloadUpdate: () => ipcRenderer.invoke('desktop:update-download'),
   installUpdate: () => ipcRenderer.invoke('desktop:update-install'),
+  openUpdateFolder: () => ipcRenderer.invoke('desktop:update-open-folder'),
   onCloseRequest: (callback) => {
     const listener = () => callback();
     ipcRenderer.on('desktop-close-request', listener);

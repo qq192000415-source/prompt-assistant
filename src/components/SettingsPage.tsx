@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, Cloud, Download, LogIn, LogOut, RotateCcw } from 'lucide-react';
+import { Check, Cloud, Download, FolderOpen, LogIn, LogOut, RotateCcw } from 'lucide-react';
 import { Button } from './ui/button';
 import { Separator } from './ui/separator';
 import { MaterialSettingsSection } from './materials/NasSettings';
@@ -109,7 +109,7 @@ export function SettingsPage({
 
   const floatingOpacityPercent = Math.round(desktopDraft.floatingIcon.opacity * 100);
   const updateProgressPercent = Math.round(updateStatus.progress?.percent ?? 0);
-  const updateBusy = updateStatus.status === 'checking' || updateStatus.status === 'downloading';
+  const updateBusy = updateStatus.status === 'checking' || updateStatus.status === 'downloading' || updateStatus.status === 'installing';
   const canCheckUpdate = desktopAvailable && !updateBusy;
   const canDownloadUpdate = desktopAvailable && updateStatus.status === 'available';
   const canInstallUpdate = desktopAvailable && updateStatus.status === 'downloaded';
@@ -478,6 +478,21 @@ export function SettingsPage({
                   重启安装
                 </Button>
               </div>
+              {updateStatus.downloadDir && (
+                <p className="update-download-dir">
+                  <span>
+                    下载位置：<code>{updateStatus.downloadedFile || updateStatus.downloadDir}</code>。点「下载更新」后下完会自动安装，新版本启动后自动删掉这个安装包。
+                  </span>
+                  <Button
+                    className="button ghost compact"
+                    type="button"
+                    onClick={() => void window.promptAssistantDesktop?.openUpdateFolder?.().then((error) => error && notify(error))}
+                  >
+                    <FolderOpen size={14} />
+                    打开下载目录
+                  </Button>
+                </p>
+              )}
             </section>
 
             <section className="settings-section about-section" id="software-about-panel" aria-labelledby="software-about-title">

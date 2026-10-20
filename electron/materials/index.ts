@@ -303,4 +303,5 @@ export function register({ ipcMain, userDataDir, updateBaseUrl, getWindow }: Reg
   );
 
   const canvasService = registerCanvas({ ipcMain, userDataDir, getWindow, findItem, onPendingChange: pushNasStatus });
+  return { activeCanvasTasks: canvasService.activeTasks };
 }

@@ -36,6 +36,7 @@ type DesktopUpdateStatusName =
   | 'not-available'
   | 'downloading'
   | 'downloaded'
+  | 'installing'
   | 'error';
 
 type DesktopUpdateProgress = {
@@ -52,6 +53,9 @@ type DesktopUpdateStatus = {
   message: string;
   progress?: DesktopUpdateProgress;
   updateUrl?: string;
+  // 安装包下载目录（%LOCALAPPDATA%\<更新缓存>\pending）和下好的安装包。
+  downloadDir?: string;
+  downloadedFile?: string;
   updatedAt?: string;
 };
 
@@ -245,6 +249,8 @@ interface Window {
     checkForUpdates?: () => Promise<DesktopUpdateStatus>;
     downloadUpdate?: () => Promise<DesktopUpdateStatus>;
     installUpdate?: () => Promise<DesktopUpdateStatus>;
+    // 打开安装包下载目录；返回出错原因，空串是打开了。
+    openUpdateFolder?: () => Promise<string>;
     onCloseRequest: (callback: () => void) => () => void;
     onUpdateStatus?: (callback: (status: DesktopUpdateStatus) => void) => () => void;
     documents?: DesktopDocumentsApi;

@@ -5,6 +5,7 @@ const attachmentStore = require('./attachmentStore.cjs');
 const materials = require('./materials.cjs');
 const { migrateLegacyUserData } = require('./userDataMigration.cjs');
 const { parseLatestYml, isNewerVersion } = require('./portableUpdate.cjs');
+const { updaterCacheDir, installedUpdateLeftovers } = require('./updateCache.cjs');
 const { autoUpdater } = require('electron-updater');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -78,6 +79,8 @@ let floatingWindow = null;
 let forceQuit = false;
 let floatingDrag = null;
 let updaterInitialized = false;
+// materials.register 的返回值，问画布还有几个任务在生成。
+let materialsService = null;
 let automaticUpdateTimer = null;
 let lastPromptedUpdateVersion = '';
 const activeUpdateNotifications = new Set();
@@ -91,6 +94,28 @@ let updateStatus = {
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = false;
 autoUpdater.allowPrerelease = false;
+autoUpdater.disableWebInstaller = true;
+
+// 更新过程写日志 <userData>/logs/update.log（超过 1MB 从头写），装不上时看这里。
+function updateLog(level, message) {
+  try {
+    const file = path.join(app.getPath('userData'), 'logs', 'update.log');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    if (fs.existsSync(file) && fs.statSync(file).size > 1024 * 1024) fs.rmSync(file);
+    fs.appendFileSync(file, `${new Date().toISOString()} [${level}] ${message}\n`);
+  } catch {
+    // 日志写不进去不影响更新。
+  }
+}
+autoUpdater.logger = {
+  info: (message) => updateLog('info', message),
+  warn: (message) => updateLog('warn', message),
+  error: (message) => updateLog('error', message instanceof Error ? message.stack : message),
+  debug: () => undefined,
+};
+
+// 安装包下载到哪（%LOCALAPPDATA%\<updaterCacheDirName>，安装包在 pending 里），界面上显示、能打开。
+const UPDATE_CACHE_DIR = app.isPackaged ? updaterCacheDir(process.resourcesPath, process.env.LOCALAPPDATA) : '';
 
 function getSettingsPath() {
   return path.join(app.getPath('userData'), 'desktop-settings.json');
@@ -206,6 +231,7 @@ function setUpdateStatus(nextStatus) {
     ...nextStatus,
     currentVersion: appVersion,
     updateUrl: UPDATE_BASE_URL,
+    downloadDir: UPDATE_CACHE_DIR ? path.join(UPDATE_CACHE_DIR, 'pending') : '',
     updatedAt: new Date().toISOString(),
   };
 
@@ -298,7 +324,59 @@ async function downloadAvailableUpdate() {
   }
 }
 
+// 下载完就装：点了「下载」就是要装。画布还有任务在生成时先问，免得中断。
+// 静默安装，沿用上次的安装位置，装完自动重开；装在 Program Files 时安装程序会弹 Windows 权限确认。
+async function installDownloadedUpdate() {
+  const version = updateStatus.availableVersion || '';
+  const busy = materialsService?.activeCanvasTasks?.() ?? 0;
+  if (busy && mainWindow && !mainWindow.isDestroyed()) {
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'question',
+      title: '新版本已下载',
+      message: `新版本 ${version} 已下载，现在安装吗？`,
+      detail: `画布还有 ${busy} 个任务在生成，现在安装会关掉软件、中断它们（已经生成好的图都在生成记录里）。也可以等生成完，在「设置 > 关于与更新」里点「重启安装」。`,
+      buttons: ['现在安装', '稍后'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (response !== 0) {
+      updateLog('info', `画布有 ${busy} 个任务在生成，用户选了稍后安装 ${version}`);
+      return setUpdateStatus({ status: 'downloaded', message: '新版本已下载，在「设置 > 关于与更新」里点「重启安装」' });
+    }
+  }
+  updateLog('info', `开始安装 ${version}：${updateStatus.downloadedFile || ''}`);
+  setUpdateStatus({
+    status: 'installing',
+    message: '正在启动安装程序：软件会关闭，装好后自动重新打开。装在 C:\\Program Files 时 Windows 会弹出权限确认，请点「是」。',
+  });
+  forceQuit = true;
+  // 让界面先显示一下「正在启动安装程序」再退出。
+  setTimeout(() => autoUpdater.quitAndInstall(true, true), 1500);
+  return updateStatus;
+}
+
+// 新版本启动后删掉已经装上的安装包（pending 里的和根目录那两份），删了什么写进日志。
+// 刚装完自动打开时安装程序可能还没退出、占着安装包，删不掉的隔 1 分钟再试，最多 3 次。
+function cleanupInstalledUpdate(attempt = 1) {
+  let failed = false;
+  for (const target of installedUpdateLeftovers(UPDATE_CACHE_DIR, appVersion)) {
+    try {
+      fs.rmSync(target, { recursive: true, force: true });
+      updateLog('info', `已删除装好的更新留下的文件：${target}`);
+    } catch (error) {
+      failed = true;
+      updateLog('warn', `删不掉 ${target}（第 ${attempt} 次）：${error instanceof Error ? error.message : error}`);
+    }
+  }
+  if (failed && attempt < 3) setTimeout(() => cleanupInstalledUpdate(attempt + 1), 60_000).unref?.();
+}
+
+// 弹窗或通知里已经回答过的版本，切回窗口时不再弹。
+let answeredPromptVersion = '';
+
 function handleUpdatePromptChoice(choice, version) {
+  answeredPromptVersion = version;
   if (choice === 'download') {
     void downloadAvailableUpdate();
     return;
@@ -343,21 +421,34 @@ function showUpdateAvailablePrompt(info) {
 
   lastPromptedUpdateVersion = version;
 
-  // 主窗口开着就在窗口上弹对话框（系统通知容易被专注模式藏起来）；缩到托盘时仍用系统通知。
-  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
+  const promptInWindow = () =>
     void dialog
       .showMessageBox(mainWindow, {
         type: 'info',
         title: '提示词小助手已有新版本',
         message: `发现新版本 ${version}`,
-        detail: `当前版本 ${appVersion}。现在下载吗？下载完成后重启软件即可安装；也可以以后在「设置 > 关于与更新」里手动下载。`,
+        detail: `当前版本 ${appVersion}。点「下载」会在后台下载，下完自动关闭软件安装新版本，装好后自动重新打开；也可以以后在「设置 > 关于与更新」里手动下载。`,
         buttons: ['下载', '稍后'],
         defaultId: 0,
         cancelId: 1,
         noLink: true,
       })
       .then(({ response }) => handleUpdatePromptChoice(response === 0 ? 'download' : 'dismiss', version));
+
+  // 主窗口在前台就在窗口上弹对话框（系统通知容易被专注模式藏起来）。
+  const windowShown = mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible();
+  if (windowShown && mainWindow.isFocused()) {
+    promptInWindow();
     return;
+  }
+  // 窗口在别的窗口后面或最小化了：Windows 不让后台程序抢前台，这时弹的对话框会被挡住、根本看不到（1.10.0 实测）。
+  // 改成任务栏图标闪烁 + 下面的系统通知，切回窗口时再弹对话框（通知里已经回答过就不弹）。
+  if (windowShown) {
+    mainWindow.flashFrame(true);
+    mainWindow.once('focus', () => {
+      mainWindow?.flashFrame(false);
+      if (answeredPromptVersion !== version && updateStatus.status === 'available') promptInWindow();
+    });
   }
 
   if (!Notification.isSupported()) {
@@ -461,7 +552,7 @@ function startAutomaticUpdateChecks() {
   }
 
   const check = () => {
-    if (updateStatus.status === 'checking' || updateStatus.status === 'downloading' || updateStatus.status === 'downloaded') {
+    if (['checking', 'downloading', 'downloaded', 'installing'].includes(updateStatus.status)) {
       return;
     }
     void runUpdateCheck({ automatic: true });
@@ -506,12 +597,16 @@ autoUpdater.on('update-downloaded', (info) => {
   setUpdateStatus({
     status: 'downloaded',
     availableVersion: info?.version || updateStatus.availableVersion,
-    message: '更新已下载，重启后安装',
+    downloadedFile: info?.downloadedFile || '',
+    message: '更新已下载，准备安装',
     progress: { ...(updateStatus.progress ?? {}), percent: 100 },
   });
+  void installDownloadedUpdate();
 });
 
 autoUpdater.on('error', (error) => {
+  // 安装程序没启动起来：软件不退出了，关窗口恢复成平时的行为。
+  if (updateStatus.status === 'installing') forceQuit = false;
   setUpdateStatus({ status: 'error', message: normalizeUpdateError(error), progress: undefined });
 });
 
@@ -840,10 +935,13 @@ ipcMain.handle('desktop:update-install', () => {
     return setUpdateStatus({ status: 'error', message: '更新尚未下载完成', progress: undefined });
   }
 
-  forceQuit = true;
-  // 静默安装：沿用上次的安装位置，装完自动重开，不弹安装向导让用户一路点「下一步」。
-  autoUpdater.quitAndInstall(true, true);
-  return updateStatus;
+  return installDownloadedUpdate();
+});
+ipcMain.handle('desktop:update-open-folder', async () => {
+  const target = [updateStatus.downloadDir, UPDATE_CACHE_DIR].find((dir) => dir && fs.existsSync(dir));
+  if (!target) return '还没有下载过安装包';
+  const error = await shell.openPath(target);
+  return error || '';
 });
 ipcMain.handle('floating:show-main', () => showMainWindow());
 ipcMain.handle('floating:open-menu', () => showFloatingMenu());
@@ -916,7 +1014,8 @@ app.whenReady().then(() => {
   if (process.platform === 'win32' && app.isPackaged) {
     removeDeadStartMenuShortcuts();
   }
-  materials.register({ ipcMain, userDataDir: app.getPath('userData'), updateBaseUrl: UPDATE_BASE_URL, getWindow: () => mainWindow });
+  materialsService = materials.register({ ipcMain, userDataDir: app.getPath('userData'), updateBaseUrl: UPDATE_BASE_URL, getWindow: () => mainWindow });
+  if (!getUpdateUnsupportedMessage()) cleanupInstalledUpdate();
   createTray();
   createWindow();
   createFloatingWindow();

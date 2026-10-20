@@ -288,7 +288,7 @@ function App() {
 
     const unsubscribe = desktopApi.onUpdateStatus?.((status) => {
       setUpdateStatus(status);
-      if (status.status === 'available' || status.status === 'downloaded' || status.status === 'error') {
+      if (status.status === 'available' || status.status === 'downloaded' || status.status === 'installing' || status.status === 'error') {
         showToast(status.message);
       }
     });

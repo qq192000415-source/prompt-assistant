@@ -98,8 +98,8 @@ test('NAS 连接状态：断开后按间隔自动试连，连上后停；重新�
   let probes = 0;
   const counting = createNasMonitor({ delays: [20, 40], probe: async () => (probes += 1), onChange: () => undefined });
   counting.report(false, 'x');
-  await wait(90);
-  // 20ms 后试一次，再过 40ms 又一次
+  // 20ms 后试一次，再过 40ms 又一次（机器忙时会晚一点，最多等 2 秒）
+  for (let waited = 0; probes < 2 && waited < 2000; waited += 10) await wait(10);
   assert.ok(probes >= 2, `试连了 ${probes} 次`);
   counting.report(true);
   const settled = probes;

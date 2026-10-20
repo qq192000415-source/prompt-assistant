@@ -1959,6 +1959,30 @@ h2 {
   gap: 8px;
 }
 
+/* 安装包下载位置：路径可选中复制，长路径折行 */
+.update-download-dir {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.update-download-dir span {
+  flex: 1 1 320px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.update-download-dir code {
+  color: var(--text);
+  user-select: text;
+}
+
 .settings-subsection {
   display: grid;
   gap: 10px;
