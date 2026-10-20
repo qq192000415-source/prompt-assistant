@@ -29,7 +29,7 @@ import {
   type MaterialGroup,
   type MaterialMedia,
 } from '../../materials/library';
-import { useMaterialLibrary } from '../../materials/useMaterialLibrary';
+import { useMaterialLibrary, type MaterialAccount } from '../../materials/useMaterialLibrary';
 import { canvas } from '../../materials/canvasStore';
 import { MaterialCanvas } from './MaterialCanvas';
 import { BatchProgressPanel, CompressImagesDialog, CompressVideosDialog } from './BatchDialogs';
@@ -42,12 +42,14 @@ export const previewSrc = (media: MaterialMedia) => (media.hasThumb ? `nas-media
 type MaterialLibraryViewProps = {
   libraryMode: LibraryMode;
   onChangeLibraryMode: (mode: LibraryMode) => void;
-  onOpenSettings: (section: 'nas' | 'ai') => void;
+  onOpenSettings: (section: 'nas' | 'ai' | 'sync') => void;
+  // 当前登录的云同步账号；没登录是 null，素材库和画布要求先登录。
+  account: MaterialAccount | null;
   notify: (message: string) => void;
 };
 
-export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, onOpenSettings, notify }: MaterialLibraryViewProps) {
-  const controller = useMaterialLibrary(notify);
+export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, onOpenSettings, notify, account }: MaterialLibraryViewProps) {
+  const controller = useMaterialLibrary(notify, account);
   const { status, library, busy } = controller;
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState(ALL_CATEGORIES);
@@ -126,6 +128,8 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, onOpenSe
     ? `${groups.length} 组 · ${library.items.length} 个文件，存放在 NAS`
     : status === 'unconfigured'
       ? '还没有连接 NAS'
+      : status === 'signed-out'
+        ? '登录后显示你的素材'
       : status === 'unavailable'
         ? '需要桌面版'
         : 'NAS';
@@ -324,6 +328,18 @@ export function MaterialLibraryView({ libraryMode, onChangeLibraryMode, onOpenSe
             <span>素材只存放在你的 NAS 上，不会保存到这台电脑。填写 NAS 上专用文件夹的 WebDAV 地址和账户。</span>
           </div>
           <NasSettingsForm config={controller.config} busy={Boolean(busy)} onSubmit={controller.saveConfig} />
+        </div>
+      )}
+
+      {status === 'signed-out' && (
+        <div className="materials-state">
+          <strong>请先登录云同步账号</strong>
+          <span>素材库和画布按账号分开存放，每个账号只看得到自己的素材和生成记录。</span>
+          <div className="materials-state-actions">
+            <Button className="button primary compact" type="button" onClick={() => onOpenSettings('sync')}>
+              去登录
+            </Button>
+          </div>
         </div>
       )}
 

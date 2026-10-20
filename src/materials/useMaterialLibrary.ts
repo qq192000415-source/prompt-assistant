@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadMaterialsExportDir, saveMaterialsExportDir } from '../localState';
 import { emptyLibrary, type MaterialLibrary, type MaterialMedia, type MaterialPatch } from './library';
+import { canvas } from './canvasStore';
 
-export type MaterialStatus = 'unavailable' | 'loading' | 'unconfigured' | 'ready' | 'error';
+export type MaterialStatus = 'unavailable' | 'loading' | 'unconfigured' | 'signed-out' | 'ready' | 'error';
+// 素材库按云同步账号分开存放；adoptLegacy 是管理员账号，第一次打开时把 NAS 根下的旧数据搬进自己的文件夹。
+export type MaterialAccount = { email: string; adoptLegacy: boolean };
 
 // 主进程抛出的错误到渲染进程会带上 "Error invoking remote method 'x': Error: " 前缀，去掉只留原因。
 const messageOf = (error: unknown) =>
@@ -31,7 +34,7 @@ const compressSummary = (kind: string, result: MaterialCompressResult) =>
     .filter(Boolean)
     .join('，') + failureText(result.failures);
 
-export function useMaterialLibrary(notify: (message: string) => void) {
+export function useMaterialLibrary(notify: (message: string) => void, account: MaterialAccount | null) {
   const api = window.promptAssistantDesktop?.materials;
   const [status, setStatus] = useState<MaterialStatus>(api ? 'loading' : 'unavailable');
   const [config, setConfig] = useState<NasConfig | null>(null);
@@ -65,12 +68,20 @@ export function useMaterialLibrary(notify: (message: string) => void) {
         setStatus('unconfigured');
         return;
       }
+      canvas.switchAccount(account?.email ?? '');
+      if (!account) {
+        await api.setAccount('', false);
+        setStatus('signed-out');
+        return;
+      }
+      const { moved } = await api.setAccount(account.email, account.adoptLegacy);
+      if (moved.length) notifyRef.current(`已把以前放在 NAS 根目录的素材搬进你的账号文件夹：${moved.join('、')}`);
       apply(await api.load());
     } catch (loadError) {
       setError(messageOf(loadError));
       setStatus('error');
     }
-  }, [api, apply]);
+  }, [api, apply, account?.email, account?.adoptLegacy]);
 
   useEffect(() => {
     void reload();

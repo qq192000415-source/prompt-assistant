@@ -166,3 +166,55 @@ test('上传的超时按大小加时间（最慢 50KB/s），流式上传按 Con
   assert.equal(requestTimeoutMs('x'.repeat(51_200)), 61_000);
   assert.equal(requestTimeoutMs({}, { 'Content-Length': String(512_000) }), 70_000);
 });
+
+test('按账号分开：子文件夹用邮箱（小写）命名；管理员第一次打开把根下的旧数据整体搬进来，其他账号从空的开始', async () => {
+  const { prepareAccountFolder, accountConfig } = await import('../electron/materials/accountFolder.ts');
+  const nas = await startFakeNas();
+  const root = '/团队文件-素材/';
+  try {
+    await mutateLibrary(nas.config, addOne('7'));
+    nas.files.set(`${root}media/${sha(1)}.png`, Buffer.from('png'));
+    nas.files.set(`${root}canvas-history/history.json`, Buffer.from('{"tasks":[]}'));
+    nas.files.set(`${root}canvas-templates.json`, Buffer.from('{"templates":[]}'));
+
+    // 其他账号：不搬，自己的库是空的，根下的旧数据原样留着。
+    assert.deepEqual(await prepareAccountFolder(nas.config, 'Guest@Example.com', false), []);
+    const guest = accountConfig(nas.config, 'Guest@Example.com');
+    assert.match(guest.baseUrl, /\/guest%40example\.com\/$/);
+    assert.deepEqual((await readLibrary(guest)).library.items, []);
+    assert.ok(nas.files.has(`${root}library.json`));
+
+    // 管理员：根下的旧数据搬进自己的文件夹，读到原来的素材；根下不再有。
+    const moved = await prepareAccountFolder(nas.config, 'Owner@Example.com', true);
+    assert.deepEqual(moved, ['library.json', 'media/', 'canvas-history/', 'canvas-templates.json']);
+    const owner = accountConfig(nas.config, 'owner@example.com');
+    assert.deepEqual((await readLibrary(owner)).library.items.map((entry) => entry.id), ['7']);
+    assert.equal(nas.files.get(`${root}owner@example.com/media/${sha(1)}.png`).toString(), 'png');
+    assert.ok(nas.files.has(`${root}owner@example.com/canvas-history/history.json`));
+    assert.ok(!nas.files.has(`${root}library.json`) && !nas.files.has(`${root}media/${sha(1)}.png`));
+    assert.ok(nas.folders.has(`${root}owner@example.com/thumbs/`));
+
+    // 已有自己的库就不再搬：之后根下又出现的（比如旧版本写的）留在原处。
+    await mutateLibrary(nas.config, addOne('8'));
+    assert.deepEqual(await prepareAccountFolder(nas.config, 'owner@example.com', true), []);
+    assert.deepEqual((await readLibrary(owner)).library.items.map((entry) => entry.id), ['7']);
+  } finally {
+    nas.server.close();
+  }
+});
+
+test('搬旧数据时目标已存在就停下，说明搬了哪些、其余还在原处', async () => {
+  const { prepareAccountFolder } = await import('../electron/materials/accountFolder.ts');
+  const nas = await startFakeNas();
+  const root = '/团队文件-素材/';
+  try {
+    await mutateLibrary(nas.config, addOne('7'));
+    nas.files.set(`${root}media/${sha(1)}.png`, Buffer.from('png'));
+    nas.files.set(`${root}a@b.com/media/${sha(2)}.png`, Buffer.from('mine'));
+    await assert.rejects(prepareAccountFolder(nas.config, 'a@b.com', true), /media\/ 没搬成.*已搬过去的：library\.json；其余还在原处/);
+    assert.ok(nas.files.has(`${root}media/${sha(1)}.png`));
+    assert.equal(nas.files.get(`${root}a@b.com/media/${sha(2)}.png`).toString(), 'mine');
+  } finally {
+    nas.server.close();
+  }
+});

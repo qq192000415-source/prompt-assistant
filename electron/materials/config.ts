@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { safeStorage } from 'electron';
+import { accountConfig } from './accountFolder.ts';
 import * as webdav from './webdav.ts';
 import type { DavConfig } from './webdav.ts';
 
@@ -35,7 +36,22 @@ export function getPublicConfig(userDataDir: string): PublicNasConfig {
   return { baseUrl: readableUrl(stored?.baseUrl ?? ''), username: stored?.username ?? '', hasPassword: Boolean(stored?.password) };
 }
 
-export function loadConfig(userDataDir: string): DavConfig {
+// 当前登录的云同步账号（邮箱），界面登录、切换、退出时告诉主进程；没登录是空串，素材库不读写 NAS。
+let currentAccount = '';
+export const getAccount = () => currentAccount;
+export const setAccount = (email: string) => {
+  currentAccount = email.trim();
+};
+
+// 素材库读写用的地址：专用文件夹下当前账号的子文件夹。account 传了就用它（画布任务用提交时的账号，中途切换账号也存回原处）。
+export function loadConfig(userDataDir: string, account = currentAccount): DavConfig {
+  const root = loadRootConfig(userDataDir);
+  if (!account) throw new Error('请先登录云同步账号：素材库和画布按账号分开存放');
+  return accountConfig(root, account);
+}
+
+// 专用文件夹本身（各账号子文件夹的上一级），只在连接 NAS 和准备账号文件夹时用。
+export function loadRootConfig(userDataDir: string): DavConfig {
   const stored = readStored(userDataDir);
   if (!stored?.baseUrl || !stored.password) {
     throw new Error('还没有连接 NAS，请先在素材库里填写 NAS 连接');
@@ -52,7 +68,7 @@ export async function saveConfig(userDataDir: string, input: { baseUrl: string; 
   const baseUrl = webdav.normalizeBaseUrl(input.baseUrl);
   const username = input.username.trim();
   if (!username) throw new Error('请填写 NAS 用户名');
-  const password = input.password || (readStored(userDataDir)?.password ? loadConfig(userDataDir).password : '');
+  const password = input.password || (readStored(userDataDir)?.password ? loadRootConfig(userDataDir).password : '');
   if (!password) throw new Error('请填写 NAS 密码');
   if (!safeStorage.isEncryptionAvailable()) {
     throw new Error('这台电脑无法加密保存密码，没有保存 NAS 连接');
@@ -62,8 +78,6 @@ export async function saveConfig(userDataDir: string, input: { baseUrl: string; 
   if (!(await webdav.exists(config, ''))) {
     throw new Error('NAS 上找不到这个文件夹，检查地址最后的文件夹名');
   }
-  await webdav.ensureFolder(config, 'media/');
-  await webdav.ensureFolder(config, 'thumbs/');
 
   const stored: StoredConfig = { baseUrl, username, password: safeStorage.encryptString(password).toString('base64') };
   fs.mkdirSync(userDataDir, { recursive: true });

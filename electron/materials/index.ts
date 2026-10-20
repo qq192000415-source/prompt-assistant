@@ -21,7 +21,8 @@ import { exportSharePackageTo, importSharePackageFile, importWordFiles } from '.
 import { applyProxySettings, readProxySettings, saveProxySettings, testProxy } from './proxy.ts';
 import { registerCanvas } from './canvasService.ts';
 import { commitImport, uploadFile } from './uploads.ts';
-import { getPublicConfig, loadConfig, saveConfig } from './config.ts';
+import { prepareAccountFolder } from './accountFolder.ts';
+import { getPublicConfig, loadConfig, loadRootConfig, saveConfig, setAccount } from './config.ts';
 import { FFMPEG_COMPONENT, ffmpegPath, installFfmpeg, isFfmpegInstalled, type VideoCompressOptions } from './ffmpeg.ts';
 import { mutateLibrary, readLibrary } from './libraryStore.ts';
 import * as webdav from './webdav.ts';
@@ -101,6 +102,12 @@ export function register({ ipcMain, userDataDir, updateBaseUrl, getWindow }: Reg
       password: typeof input?.password === 'string' ? input.password : undefined,
     }),
   );
+  // 界面登录、切换、退出云同步账号时调用；管理员账号第一次打开时把根下的旧数据搬进自己的子文件夹。
+  ipcMain.handle('materials:set-account', async (_event, email, adoptLegacy) => {
+    setAccount(typeof email === 'string' ? email : '');
+    if (!email) return { moved: [] };
+    return { moved: await prepareAccountFolder(loadRootConfig(userDataDir), String(email), adoptLegacy === true) };
+  });
   ipcMain.handle('materials:load', () => readLibrary(loadConfig(userDataDir)));
 
   ipcMain.handle('materials:pick-and-import', async (_event, category) => {

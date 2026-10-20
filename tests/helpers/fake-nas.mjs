@@ -4,6 +4,9 @@ import http from 'node:http';
 export function startFakeNas() {
   const files = new Map();
   const locks = new Map();
+  // 建过的文件夹；文件夹也算存在：根目录、或者底下有文件。
+  const folders = new Set(['/团队文件-素材/']);
+  const folderExists = (key) => folders.has(key) || [...files.keys()].some((name) => name.startsWith(key));
   let nextToken = 1;
   const server = http.createServer((request, response) => {
     if (request.headers.authorization !== `Basic ${Buffer.from('user:pass').toString('base64')}`) {
@@ -18,8 +21,29 @@ export function startFakeNas() {
       const lockToken = locks.get(key);
       switch (request.method) {
         case 'PROPFIND':
-          response.writeHead(files.has(key) || key.endsWith('/') ? 207 : 404).end();
+          response.writeHead(files.has(key) || (key.endsWith('/') && folderExists(key)) ? 207 : 404).end();
           return;
+        case 'MKCOL':
+          if (folderExists(key)) return response.writeHead(405).end();
+          folders.add(key);
+          response.writeHead(201).end();
+          return;
+        case 'MOVE': {
+          const target = decodeURIComponent(new URL(request.headers.destination).pathname);
+          const isFolder = key.endsWith('/');
+          if (!(isFolder ? folderExists(key) : files.has(key))) return response.writeHead(404).end();
+          if (request.headers.overwrite === 'F' && (isFolder ? folderExists(target) : files.has(target))) return response.writeHead(412).end();
+          for (const name of [...files.keys()].filter((entry) => (isFolder ? entry.startsWith(key) : entry === key))) {
+            files.set(target + name.slice(key.length), files.get(name));
+            files.delete(name);
+          }
+          for (const name of [...folders].filter((entry) => entry.startsWith(key))) {
+            folders.add(target + name.slice(key.length));
+            folders.delete(name);
+          }
+          response.writeHead(201).end();
+          return;
+        }
         case 'GET':
           if (!files.has(key)) return response.writeHead(404).end();
           response.writeHead(200).end(files.get(key));
@@ -47,7 +71,7 @@ export function startFakeNas() {
   return new Promise((resolve) => {
     server.listen(0, '127.0.0.1', () => {
       const baseUrl = `http://127.0.0.1:${server.address().port}/团队文件-素材/`;
-      resolve({ files, locks, server, config: { baseUrl, username: 'user', password: 'pass' } });
+      resolve({ files, folders, locks, server, config: { baseUrl, username: 'user', password: 'pass' } });
     });
   });
 }

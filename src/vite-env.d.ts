@@ -89,6 +89,8 @@ type MaterialImportResult = MaterialLoadResult & {
 
 type DesktopMaterialsApi = {
   getConfig: () => Promise<NasConfig>;
+  // 素材库按云同步账号分开：告诉主进程当前账号（空串是没登录），返回从根目录搬进账号文件夹的旧数据。
+  setAccount: (email: string, adoptLegacy: boolean) => Promise<{ moved: string[] }>;
   saveConfig: (config: { baseUrl: string; username: string; password?: string }) => Promise<NasConfig>;
   load: () => Promise<MaterialLoadResult>;
   pickAndImport: (category: string) => Promise<MaterialImportResult | null>;

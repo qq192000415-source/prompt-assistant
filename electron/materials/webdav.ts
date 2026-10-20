@@ -161,6 +161,12 @@ export async function remove(config: DavConfig, relativePath: string): Promise<v
   await response.body?.cancel();
 }
 
+// 同一台 NAS 上改位置（文件夹整个搬），不复制内容。目标已存在时不覆盖，服务器回 412，按出错处理。
+export async function move(config: DavConfig, fromPath: string, toPath: string): Promise<void> {
+  const response = await dav(config, 'MOVE', fromPath, { headers: { Destination: davUrl(config, toPath), Overwrite: 'F' } });
+  await response.body?.cancel();
+}
+
 const LOCK_BODY =
   '<?xml version="1.0" encoding="utf-8"?><D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>';
 

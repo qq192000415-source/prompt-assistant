@@ -21,7 +21,7 @@ import {
 } from './canvasHistory.ts';
 import { deleteTemplate, markTemplateUsed, mutateTemplates, readTemplates, saveTemplate, type TemplateInput } from './canvasTemplates.ts';
 import { createCanvasQueue, type QueueSlot, type QueueTask } from './canvasQueue.ts';
-import { loadConfig } from './config.ts';
+import { getAccount, loadConfig } from './config.ts';
 import type { AiImageGenerationPayload } from './suyan/aiTypes.ts';
 import { commitImport, makeThumbnail, uploadBuffer } from './uploads.ts';
 import * as webdav from './webdav.ts';
@@ -79,7 +79,7 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Op
     pending = setTimeout(() => {
       pending = null;
       const window = getWindow();
-      if (window && !window.isDestroyed()) window.webContents.send('materials:canvas-queue', queue.snapshot());
+      if (window && !window.isDestroyed()) window.webContents.send('materials:canvas-queue', ownTasks());
     }, 150);
   };
 
@@ -96,9 +96,9 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Op
   // 只是附带：存不进去就记空的，不影响生成。
   const referencesByTask = new Map<string, Promise<HistoryMedia[]>>();
   const referencesOf = (task: QueueTask) => referencesByTask.get(task.id) ?? Promise.resolve([]);
-  const storeReferences = async (dataUrls: string[]) => {
+  const storeReferences = async (dataUrls: string[], account: string) => {
     try {
-      const config = loadConfig(userDataDir);
+      const config = loadConfig(userDataDir, account);
       const stored: HistoryMedia[] = [];
       for (const dataUrl of dataUrls) {
         const { buffer, ext } = decodeGeneratedMedia(dataUrl);
@@ -110,6 +110,10 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Op
       return [];
     }
   };
+
+  // 队列在主进程内存里，几个账号共用；界面只看得到当前账号提交的任务。
+  const accountByTask = new Map<string, string>();
+  const ownTasks = () => queue.snapshot().filter((task) => accountByTask.get(task.id) === getAccount());
 
   const queue = createCanvasQueue({
     generate: async (payload) => {
@@ -126,7 +130,7 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Op
       };
     },
     persist: async (task, slot, generated) => {
-      const config = loadConfig(userDataDir);
+      const config = loadConfig(userDataDir, accountByTask.get(task.id));
       const references = await referencesOf(task);
       const { buffer, ext } = decodeGeneratedMedia(generated.dataUrl);
       const media = await putHistoryMedia(config, buffer, ext);
@@ -138,7 +142,7 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Op
     },
     recordFailure: async (task, slot) => {
       const references = await referencesOf(task);
-      await mutateHistory(loadConfig(userDataDir), (history) => ({
+      await mutateHistory(loadConfig(userDataDir, accountByTask.get(task.id)), (history) => ({
         history: recordSlot(history, taskRecord(task, references), { index: slot.index, status: 'failed', media: null, revisedPrompt: null, error: slot.error, attempts: slot.attempts, savedToLibrary: false }, new Date().toISOString()),
         result: null,
       }));
@@ -149,7 +153,7 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Op
 
   // 内存里还有的图（存进历史失败的）优先用；否则从 NAS 的生成历史取。
   const memorySlot = (taskId: string, index: number): { task: QueueTask; slot: QueueSlot } | null => {
-    const task = queue.snapshot().find((entry) => entry.id === taskId);
+    const task = ownTasks().find((entry) => entry.id === taskId);
     const slot = task?.slots.find((entry) => entry.index === index);
     return task && slot?.dataUrl ? { task, slot } : null;
   };
@@ -171,6 +175,9 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Op
     if (!runtime.image) throw new Error('还没有设置生图模型，请在素材库设置的 AI 助手里填写');
     const payload = input?.payload;
     if (!payload?.prompt?.trim()) throw new Error('先写正向提示词');
+    // 任务记下提交时的账号：生成要一会儿，中途切换账号，图也存回提交时那个账号的生成记录。
+    const account = getAccount();
+    loadConfig(userDataDir, account);
     // 任务信息由主进程按实际提交的参数记录，不信界面另传的。
     const taskId = queue.submit(
       {
@@ -192,10 +199,11 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Op
       Number(input.count ?? payload.n ?? 1),
     );
     const dataUrls = payload.referenceImageDataUrls ?? [];
-    if (dataUrls.length) referencesByTask.set(taskId, storeReferences(dataUrls));
+    accountByTask.set(taskId, account);
+    if (dataUrls.length) referencesByTask.set(taskId, storeReferences(dataUrls, account));
     return taskId;
   });
-  ipcMain.handle('materials:canvas-queue', () => queue.snapshot());
+  ipcMain.handle('materials:canvas-queue', () => ownTasks());
   ipcMain.handle('materials:canvas-cancel', (_event, taskId) => queue.cancel(String(taskId)));
   ipcMain.handle('materials:canvas-retry', (_event, taskId, index) => queue.retry(String(taskId), Number(index)));
   ipcMain.handle('materials:canvas-dismiss', (_event, taskId) => queue.dismiss(String(taskId)));

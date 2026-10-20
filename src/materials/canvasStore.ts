@@ -16,6 +16,8 @@ export type CanvasState = {
   queue: MaterialCanvasTask[];
   history: MaterialCanvasTask[];
   historyLoaded: boolean;
+  // 这些队列、历史、参考图属于哪个云同步账号；换了账号就清掉，不让下一个账号看到。
+  account: string;
 };
 
 let state: CanvasState | null = null;
@@ -30,6 +32,7 @@ function current(): CanvasState {
     queue: [],
     history: [],
     historyLoaded: false,
+    account: '',
   };
   return state;
 }
@@ -136,6 +139,12 @@ export const canvas = {
   },
   showError(error: string) {
     set({ error });
+  },
+  // 提示词和参数是这台电脑的草稿，留着；参考图、来源组、队列、历史是上一个账号的，清掉。
+  switchAccount(account: string) {
+    const { account: previous, draft } = current();
+    if (previous === account) return;
+    set({ account, queue: [], history: [], historyLoaded: false, origin: null, error: '', draft: { ...draft, referenceImages: [], promptOrigin: null } });
   },
   setQueue(queue: MaterialCanvasTask[]) {
     set({ queue });

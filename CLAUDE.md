@@ -61,6 +61,7 @@ npm.cmd run release:publish                   # 打三类包 + 上传更新源 +
 
 **素材库（NAS）。**
 - 第三个库，和提示词、文档的数据完全分开。素材和索引只存在用户 NAS 的一个专用文件夹里（WebDAV），本机只存加密后的连接设置 `<userData>/materials-nas.json`。部分代码移植自 SuYan（MIT），见 `THIRD_PARTY_NOTICES.md`。
+- 按账号分开（1.9.6）：专用文件夹下每个云同步账号一个子文件夹，用登录邮箱（小写）命名，下面的布局都在这个子文件夹里。主进程 `config.ts` 的 `loadConfig` 统一拼上当前账号（界面登录、切换、退出时调 `materials:set-account`），没登录就报错，界面显示「请先登录」；画布任务记下提交时的账号，中途切换也存回原处，队列只给界面看当前账号的任务。管理员账号（`VITE_ADMIN_EMAILS`）第一次打开时，`accountFolder.ts` 用 WebDAV MOVE 把根下的旧数据整体搬进自己的文件夹（账号里已有 `library.json` 就不搬）。所有账号共用一个 NAS 用户，所以这只是软件里互相看不到，不是 NAS 权限隔离。
 - NAS 上的布局：`library.json`（全部条目）、`media/<sha256><ext>`（原文件）、`thumbs/<sha256>.jpg`（图片缩略图，主进程用 nativeImage 生成）。
 - 主进程代码是 TS，写在 `electron/materials/`，由 `vite.electron.config.ts` 打成被 Git 忽略的 `electron/materials.cjs`，`main.cjs` 直接 require。纯逻辑（归一、增删改、同组分组、筛选）在 `src/materials/library.ts`，主进程和界面共用。
 - fnOS 的 WebDAV 不认 `If-Match`，所以写 `library.json` 一律走 `libraryStore.ts` 的 `mutateLibrary`：加锁（30 秒自动过期）→ 读最新的 → 改 → 带锁令牌写回 → 解锁。别处不要直接 PUT `library.json`。所有 NAS 请求都走 `webdav.ts` 的 `dav()`，有超时（1.9.2）：等响应最多 60 秒，上传按最慢 50KB/s 加时间；`readText`、`readBytes` 连读内容一起算（`includeBody`）；`downloadToFile` 和 `nas-media://` 只限等响应，内容多长都行。以前没有超时，NAS 卡住时画布存历史的槽位会一直占着队列。

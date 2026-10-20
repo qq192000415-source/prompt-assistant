@@ -1236,6 +1236,9 @@ function App() {
         />
       ) : isMaterialsMode ? (
         <MaterialLibraryView
+          // 换账号时整个重新挂载，不留上一个账号的素材和画布状态。
+          key={cloud.cloudEmail ?? ''}
+          account={cloud.cloudEmail ? { email: cloud.cloudEmail, adoptLegacy: cloud.cloudSettings.adminEmails.length > 0 && cloud.canManageCloudSettings } : null}
           libraryMode={libraryMode}
           onChangeLibraryMode={changeLibraryMode}
           onOpenSettings={openSettings}
