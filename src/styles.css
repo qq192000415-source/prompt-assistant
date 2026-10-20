@@ -3575,7 +3575,39 @@ h2 {
   box-shadow: 0 0 0 3px var(--accent-weak);
 }
 
-.nas-grants-list {
+.nas-grants-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nas-grants-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.nas-grants-toolbar .materials-search {
+  max-width: none;
+  flex: 1 1 220px;
+}
+
+.nas-grants-toolbar .materials-search input {
+  flex: 1;
+  outline: none;
+}
+
+.nas-grants .canvas-segmented {
+  grid-auto-columns: auto;
+}
+
+.nas-grants .canvas-segmented button {
+  padding: 0 12px;
+}
+
+.nas-users {
   display: grid;
   gap: 6px;
   margin: 0;
@@ -3583,21 +3615,123 @@ h2 {
   list-style: none;
 }
 
-.nas-grants-list li {
+.nas-users > li {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  color: var(--muted);
-  font-size: 13px;
-  padding: 8px 10px;
+  background: var(--surface);
+  padding: 10px 12px;
 }
 
-.nas-grants-list li strong {
+.nas-users > li.is-granted {
+  border-color: color-mix(in srgb, var(--success) 35%, var(--border));
+}
+
+.nas-user-main {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
+}
+
+.nas-user-title {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.nas-user-title strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.nas-user-email {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  text-overflow: ellipsis;
+}
+
+.nas-user-email.is-primary {
   color: var(--text);
   font-weight: 600;
+}
+
+.nas-user-tag {
+  border-radius: 999px;
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-size: 12px;
+  padding: 1px 8px;
+}
+
+.nas-user-tag.is-self {
+  background: var(--surface-muted);
+  color: var(--muted);
+}
+
+.nas-user-meta {
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.nas-user-status {
+  flex: none;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 10px;
+}
+
+.nas-user-status.is-granted {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+}
+
+.nas-user-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+
+.nas-user-edit {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.nas-user-edit strong {
+  flex-basis: 100%;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.nas-user-edit input {
+  min-width: 140px;
+  height: 32px;
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  outline: 0;
+  padding: 0 10px;
+}
+
+.nas-user-edit input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-weak);
 }
 
 .ai-slot {

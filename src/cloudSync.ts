@@ -458,3 +458,33 @@ export const deleteNasGrant = async (email: string, settings: CloudSettings = lo
   const { error } = await getSupabaseClient(settings).from('nas_grants').delete().eq('email', normalizeCloudEmail(email));
   if (error) throw grantError(error.message);
 };
+
+// 授权管理的用户列表（函数 list_app_users，只给管理员）和备注（表 app_user_notes）。
+export type AppUser = { email: string; registeredAt: string | null; lastSignInAt: string | null; granted: boolean; grantedAt: string | null; note: string; tags: string[] };
+
+type AppUserRow = { email: string; registered_at: string | null; last_sign_in_at: string | null; granted: boolean; granted_at: string | null; note: string; tags: string[] | null };
+
+const userListError = (message: string) =>
+  /list_app_users|app_user_notes|schema cache|does not exist|Could not find/i.test(message)
+    ? new Error('Supabase 里还没有用户列表功能，请先执行 supabase-schema.sql 末尾的「授权管理的用户列表和备注」那段')
+    : new Error(message);
+
+export const listAppUsers = async (settings: CloudSettings = loadCloudSettings()) => {
+  const { data, error } = await getSupabaseClient(settings).rpc('list_app_users');
+  if (error) throw userListError(error.message);
+  return ((data ?? []) as AppUserRow[]).map((row) => ({
+    email: row.email,
+    registeredAt: row.registered_at,
+    lastSignInAt: row.last_sign_in_at,
+    granted: row.granted,
+    grantedAt: row.granted_at,
+    note: row.note ?? '',
+    tags: row.tags ?? [],
+  }));
+};
+
+export const saveAppUserNote = async (email: string, note: string, tags: string[], settings: CloudSettings = loadCloudSettings()) => {
+  const row = { email: normalizeCloudEmail(email), note: note.trim(), tags: [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))], updated_at: new Date().toISOString() };
+  const { error } = await getSupabaseClient(settings).from('app_user_notes').upsert(row);
+  if (error) throw userListError(error.message);
+};

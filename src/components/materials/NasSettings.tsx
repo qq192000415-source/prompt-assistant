@@ -1,9 +1,9 @@
 import { useEffect, useState, type FormEvent, type InputHTMLAttributes } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '../ui/button';
-import { deleteNasGrant, listNasGrants, normalizeCloudEmail, saveNasGrant, type NasGrant } from '../../cloudSync';
 import { useMaterialSettings } from '../../materials/useMaterialLibrary';
 import { AiSettingsForm } from './AiSettings';
+import { NasGrantsPanel } from './NasGrantsPanel';
 
 type NasSettingsFormProps = {
   config: NasConfig | null;
@@ -107,102 +107,6 @@ export function NasSettingsForm({ config, busy, onSubmit }: NasSettingsFormProps
         </Button>
       </div>
     </form>
-  );
-}
-
-// 管理员给其他账号开通 NAS 连接：对方登录后自动连上，素材放在自己邮箱命名的子文件夹里。
-// 授权的是管理员这台电脑上现在的连接；管理员改了连接（比如换密码）保存后，已授权的账号会一起更新。
-function NasGrantsPanel({ adminEmail, notify }: { adminEmail: string; notify: (message: string) => void }) {
-  const [grants, setGrants] = useState<NasGrant[] | null>(null);
-  const [loadError, setLoadError] = useState('');
-  const [email, setEmail] = useState('');
-  const [working, setWorking] = useState(false);
-  const [confirming, setConfirming] = useState('');
-  const self = normalizeCloudEmail(adminEmail);
-
-  const reload = () =>
-    listNasGrants().then(
-      (list) => {
-        setGrants(list);
-        setLoadError('');
-      },
-      (error) => setLoadError(messageOf(error)),
-    );
-  useEffect(() => {
-    void reload();
-  }, []);
-
-  const act = async (action: () => Promise<void>, done: string) => {
-    setWorking(true);
-    try {
-      await action();
-      notify(done);
-      await reload();
-    } catch (error) {
-      notify(messageOf(error));
-    } finally {
-      setWorking(false);
-      setConfirming('');
-    }
-  };
-
-  const grant = (target: string) =>
-    act(async () => {
-      const own = await window.promptAssistantDesktop!.materials!.revealConfig();
-      await saveNasGrant({ email: target, baseUrl: own.baseUrl, username: own.username, password: own.password });
-    }, `已给 ${target} 开通 NAS 连接，对方下次启动或登录时自动连上`);
-
-  return (
-    <section className="nas-grants" aria-labelledby="nas-grants-title">
-      <h3 id="nas-grants-title">授权管理</h3>
-      <p className="nas-form-note">给其他账号开通这台电脑上现在的 NAS 连接。对方登录后自动连上，看不到密码，素材放在自己邮箱命名的子文件夹里；收回后对方下次启动或登录时断开。大家共用同一个 NAS 用户，所以这只是软件里互相看不到，要彻底收回请在 NAS 上改密码。</p>
-      {loadError ? (
-        <p className="canvas-detail-error" role="alert">
-          {loadError}
-        </p>
-      ) : (
-        <>
-          <form
-            className="nas-grants-add"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const target = normalizeCloudEmail(email);
-              if (target) void grant(target).then(() => setEmail(''));
-            }}
-          >
-            <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="对方的登录邮箱" aria-label="对方的登录邮箱" required />
-            <Button className="button primary" type="submit" disabled={working}>
-              授权
-            </Button>
-          </form>
-          {grants === null ? (
-            <p className="nas-form-note">正在读取授权…</p>
-          ) : (
-            <ul className="nas-grants-list">
-              {grants.map((entry) => (
-                <li key={entry.email}>
-                  <span>
-                    <strong>{entry.email}</strong>
-                    {entry.email === self ? '（你自己：换电脑登录后自动填好）' : ''}
-                  </span>
-                  {entry.email !== self &&
-                    (confirming === entry.email ? (
-                      <Button className="button danger compact" type="button" disabled={working} onClick={() => void act(() => deleteNasGrant(entry.email), `已收回 ${entry.email} 的 NAS 连接`)}>
-                        确认收回
-                      </Button>
-                    ) : (
-                      <Button className="button ghost compact" type="button" onClick={() => setConfirming(entry.email)}>
-                        收回
-                      </Button>
-                    ))}
-                </li>
-              ))}
-              {grants.length === 0 && <li className="nas-form-note">还没有授权给任何账号。</li>}
-            </ul>
-          )}
-        </>
-      )}
-    </section>
   );
 }
 

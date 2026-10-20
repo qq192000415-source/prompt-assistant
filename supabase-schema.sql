@@ -138,3 +138,62 @@ on public.nas_grants
 for delete
 to authenticated
 using (public.is_app_admin());
+
+-- 授权管理的用户列表和备注（1.9.8）：管理员在设置里看到所有注册过的账号、是否已授权，并能写备注（姓名等）和标签。
+-- 备注单独一张表，收回授权后备注还在。只有管理员能读写。
+create table if not exists public.app_user_notes (
+  email text primary key check (email = lower(email)),
+  note text not null default '',
+  tags text[] not null default '{}',
+  updated_at timestamptz not null default now()
+);
+
+alter table public.app_user_notes enable row level security;
+alter table public.app_user_notes force row level security;
+revoke all on table public.app_user_notes from anon;
+grant select, insert, update, delete on table public.app_user_notes to authenticated;
+
+drop policy if exists app_user_notes_admin_all on public.app_user_notes;
+
+create policy app_user_notes_admin_all
+on public.app_user_notes
+for all
+to authenticated
+using (public.is_app_admin())
+with check (public.is_app_admin());
+
+-- 注册账号在 auth.users 里，普通请求读不到；这个函数只给管理员用，列出所有账号（加上已授权但还没注册的邮箱）。
+create or replace function public.list_app_users()
+returns table (email text, registered_at timestamptz, last_sign_in_at timestamptz, granted boolean, granted_at timestamptz, note text, tags text[])
+language plpgsql
+stable
+security definer
+set search_path = public, auth
+as $$
+begin
+  if not public.is_app_admin() then
+    raise exception '只有管理员能查看用户列表';
+  end if;
+  return query
+  with users as (
+    select lower(u.email)::text as email, min(u.created_at) as registered_at, max(u.last_sign_in_at) as last_sign_in_at
+    from auth.users u
+    where u.email is not null
+    group by lower(u.email)
+  ),
+  emails as (
+    select users.email from users
+    union
+    select nas_grants.email from public.nas_grants
+  )
+  select e.email, u.registered_at, u.last_sign_in_at, g.email is not null, g.updated_at, coalesce(n.note, ''), coalesce(n.tags, '{}'::text[])
+  from emails e
+  left join users u on u.email = e.email
+  left join public.nas_grants g on g.email = e.email
+  left join public.app_user_notes n on n.email = e.email
+  order by u.registered_at desc nulls last, e.email;
+end;
+$$;
+
+revoke all on function public.list_app_users() from public;
+grant execute on function public.list_app_users() to authenticated;
