@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
-import { BookOpen, BookmarkPlus, Check, ChevronLeft, ChevronRight, ClipboardPaste, Copy, Download, ImagePlus, PanelLeftClose, PanelLeftOpen, Play, RotateCcw, Save, Search, Settings, Sparkles, Trash2, TriangleAlert, Wand2, X } from 'lucide-react';
+import { BookOpen, BookmarkPlus, Check, ChevronLeft, ChevronRight, ClipboardPaste, Copy, Download, ImagePlus, PanelLeftClose, PanelLeftOpen, Pencil, Play, RotateCcw, Save, Search, Settings, Sparkles, Trash2, TriangleAlert, Wand2, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import type { MaterialLibraryController } from '../../materials/useMaterialLibrary';
 import {
@@ -17,7 +17,7 @@ import {
 import { copyToClipboard } from '../../promptUtils';
 import { useDetailResize } from '../../useDetailResize';
 import type { PromptItem } from '../../types';
-import { canvas, getCanvasState, isActive, isVideoModel, savedInHistory, useCanvasState, visibleTasks } from '../../materials/canvasStore';
+import { canvas, getCanvasState, isActive, isVideoModel, savedInHistory, useCanvasState, visibleTasks, type CanvasReference } from '../../materials/canvasStore';
 import {
   canvasAspectRatioOptions,
   extractPromptKeywords,
@@ -26,6 +26,7 @@ import {
   resolveCanvasGenerationSize,
 } from '../../materials/suyan/canvasGeneration.ts';
 import type { CanvasBaseResolution, CanvasReferenceImage, CanvasSizeMode } from '../../materials/suyan/canvasTypes.ts';
+import { ReferenceEditor, ReferencePreview, type EditorMode } from './ReferenceEditor';
 
 const SIZE_MODES: Array<{ value: CanvasSizeMode; label: string }> = [
   { value: 'auto', label: '自动' },
@@ -95,6 +96,9 @@ export function MaterialCanvas({ controller, onOpenSettings, templates, template
   // 参考图拖动排序：正在拖的是第几张、要放到第几张的位置。
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
+  // 参考图全图预览（第几张），和正在中间区域编辑的那张（编辑时生成记录先让位）。
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const [editing, setEditing] = useState<{ reference: CanvasReference; mode: EditorMode; opened: number } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const finishedSlots = useRef(-1);
   const busy = Boolean(controller.busy);
@@ -219,6 +223,17 @@ export function MaterialCanvas({ controller, onOpenSettings, templates, template
     canvas.addReferences([{ fileName: '', title: `生成的图 ${formatTime(task.createdAt)}`, dataUrl }]);
     showPanel();
     return `已加到参考图（现在共 ${getCanvasState().draft.referenceImages.length} 张）。`;
+  };
+
+  const editReference = (index: number) => {
+    const reference: CanvasReference = draft.referenceImages[index];
+    setPreviewIndex(null);
+    setEditing({ reference, mode: reference.maskDataUrl ? 'mask' : 'crop', opened: Date.now() });
+  };
+
+  const saveEditedReference = (next: CanvasReference) => {
+    if (editing && !canvas.replaceReference(editing.reference, next)) canvas.showError('编辑期间这张参考图被移除了，编辑结果没有保存');
+    setEditing(null);
   };
 
   const removeTask = async (task: MaterialCanvasTask) => {
@@ -407,7 +422,14 @@ export function MaterialCanvas({ controller, onOpenSettings, templates, template
                       setDragIndex(null);
                       setDropIndex(null);
                     }}
+                    onClick={(event) => {
+                      if (!(event.target as HTMLElement).closest('button')) setPreviewIndex(index);
+                    }}
                     onKeyDown={(event) => {
+                      if (event.key === 'Enter' && event.target === event.currentTarget) {
+                        setPreviewIndex(index);
+                        return;
+                      }
                       const step = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0;
                       if (!step || event.target !== event.currentTarget) return;
                       event.preventDefault();
@@ -420,13 +442,21 @@ export function MaterialCanvas({ controller, onOpenSettings, templates, template
                     <span className="canvas-reference-order" aria-hidden="true">
                       {index + 1}
                     </span>
+                    {(reference as CanvasReference).maskDataUrl && (
+                      <span className="canvas-reference-mask" title="已涂遮罩（局部重绘）">
+                        遮罩
+                      </span>
+                    )}
                     <button type="button" aria-label={`移除参考图 ${reference.title}`} onClick={() => canvas.removeReference(index)}>
                       <X size={12} />
+                    </button>
+                    <button type="button" className="canvas-reference-edit" aria-label={`编辑参考图 ${reference.title}`} title="编辑：裁剪、透视裁剪、局部重绘" onClick={() => editReference(index)}>
+                      <Pencil size={11} />
                     </button>
                   </div>
                 ))}
               </div>
-              {draft.referenceImages.length > 1 && <p className="nas-form-note">按顺序提交，拖动可以调整先后。</p>}
+              <p className="nas-form-note">点图看大图，右下角铅笔可以裁剪、透视裁剪、局部重绘。{draft.referenceImages.length > 1 ? '按顺序提交，拖动可以调整先后。' : ''}</p>
             </>
           ) : (
             <p className="nas-form-note">有参考图时按图生图。也可以在素材详情里点「发到画布」带图过来。</p>
@@ -577,7 +607,18 @@ export function MaterialCanvas({ controller, onOpenSettings, templates, template
       </form>
       )}
 
-      <section className="canvas-stage" aria-label="生成记录">
+      <section className="canvas-stage" aria-label={editing ? '编辑参考图' : '生成记录'}>
+        {editing ? (
+          <ReferenceEditor
+            key={editing.opened}
+            reference={editing.reference}
+            position={draft.referenceImages.indexOf(editing.reference) + 1}
+            initialMode={editing.mode}
+            onSave={saveEditedReference}
+            onCancel={() => setEditing(null)}
+          />
+        ) : (
+        <>
         <div className="canvas-stage-header">
           <div className="canvas-stage-title">
             <strong>生成记录</strong>
@@ -618,6 +659,8 @@ export function MaterialCanvas({ controller, onOpenSettings, templates, template
             )}
           </>
         )}
+        </>
+        )}
       </section>
 
       <aside className="canvas-detail" aria-label="记录详情">
@@ -649,6 +692,10 @@ export function MaterialCanvas({ controller, onOpenSettings, templates, template
           <p className="canvas-detail-empty">{historyLoaded ? '生成的记录会显示在这里，点一条看完整提示词和参数。' : '正在读取生成历史…'}</p>
         )}
       </aside>
+
+      {previewIndex !== null && (
+        <ReferencePreview references={draft.referenceImages} index={previewIndex} onChange={setPreviewIndex} onEdit={editReference} onClose={() => setPreviewIndex(null)} />
+      )}
 
       {viewing && (
         <CanvasViewer

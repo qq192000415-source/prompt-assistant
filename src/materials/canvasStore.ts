@@ -6,6 +6,9 @@ import type { MaterialItem } from './library.ts';
 import { buildCanvasImageGenerationPayload, canvasAspectRatioOptions, normalizeCanvasDraftSettings, resolveCanvasGenerationSize } from './suyan/canvasGeneration.ts';
 import type { CanvasBaseResolution, CanvasDraftSettings, CanvasReferenceImage } from './suyan/canvasTypes.ts';
 
+// 参考图编辑（局部重绘）后多两样：没涂之前的原图，和给 /images/edits 的遮罩 PNG（涂过的地方透明）。dataUrl 是涂了绿色标记的图，提交的就是它。
+export type CanvasReference = CanvasReferenceImage & { sourceDataUrl?: string; maskDataUrl?: string };
+
 export type CanvasState = {
   draft: CanvasDraftSettings;
   origin: MaterialCanvasOrigin | null;
@@ -109,6 +112,14 @@ export const canvas = {
   removeReference(index: number) {
     set({ draft: { ...current().draft, referenceImages: current().draft.referenceImages.filter((_, position) => position !== index) } });
   },
+  // 编辑完换掉原来那张：按对象找（编辑期间可能拖动换了位置），找不到（被删了）返回 false。
+  replaceReference(previous: CanvasReferenceImage, next: CanvasReference) {
+    const images = current().draft.referenceImages;
+    const index = images.indexOf(previous);
+    if (index < 0) return false;
+    set({ draft: { ...current().draft, referenceImages: images.map((image, position) => (position === index ? next : image)) } });
+    return true;
+  },
   clearReferences() {
     set({ draft: { ...current().draft, referenceImages: [] } });
   },
@@ -150,7 +161,14 @@ export const canvas = {
   // 把当前草稿提交进队列，立刻返回；提示词改过就不算来源组。
   async submit(model: string, request: (input: { payload: ReturnType<typeof buildCanvasImageGenerationPayload>; count: number; origin: MaterialCanvasOrigin | null }) => Promise<string>) {
     const { draft, origin } = current();
-    const payload = buildCanvasImageGenerationPayload(draft, { mediaType: isVideoModel(model) ? 'video' : 'image' });
+    // OpenAI 的 mask 只作用于第一张图，所以带遮罩的只能是第 1 张、只能有一张。
+    const masked = draft.referenceImages.filter((image: CanvasReference) => image.maskDataUrl);
+    const maskDataUrl = (draft.referenceImages[0] as CanvasReference | undefined)?.maskDataUrl;
+    if (masked.length > 1 || (masked.length === 1 && !maskDataUrl)) {
+      set({ error: '带遮罩（局部重绘）的参考图只能有一张，并且要放在第 1 张：拖动调整顺序后再生成' });
+      return false;
+    }
+    const payload = { ...buildCanvasImageGenerationPayload(draft, { mediaType: isVideoModel(model) ? 'video' : 'image' }), ...(maskDataUrl ? { maskDataUrl } : {}) };
     const keepOrigin = origin && origin.prompt.trim() === payload.prompt.trim() && origin.negativePrompt.trim() === (payload.negativePrompt ?? '').trim();
     set({ error: '' });
     try {

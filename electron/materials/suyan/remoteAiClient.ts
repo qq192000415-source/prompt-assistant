@@ -3226,6 +3226,12 @@ export function buildImageEditRequestForm(
       ref.fileName,
     );
   }
+  // 提示词助手改动（上游没有）：画布局部重绘的遮罩，按 OpenAI /images/edits 的 mask 字段发，作用于第一张图。
+  const maskDataUrl = (payload as { maskDataUrl?: string }).maskDataUrl;
+  if (maskDataUrl && referenceImages.length > 0) {
+    const mask = parseReferenceImageDataUrl(maskDataUrl, "mask.png");
+    form.append("mask", new Blob([new Uint8Array(mask.bytes)], { type: mask.mime }), mask.fileName);
+  }
   return form;
 }
 

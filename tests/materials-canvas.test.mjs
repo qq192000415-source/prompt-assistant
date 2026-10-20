@@ -272,3 +272,38 @@ test('参考图：拖动换顺序（顺序就是提交顺序），一键清空',
   canvas.clearReferences();
   assert.deepEqual(titles(), []);
 });
+
+test('局部重绘：编辑后按对象换掉参考图；遮罩只能在第 1 张，提交时带上，multipart 请求里多一个 mask 字段', async () => {
+  canvas.clearReferences();
+  canvas.setDraft({ prompt: '移除绿色标记区域' });
+  canvas.addReferences([{ fileName: '', title: '甲', dataUrl: pngDataUrl }, { fileName: '', title: '乙', dataUrl: pngDataUrl }]);
+  const [first, second] = getCanvasState().draft.referenceImages;
+  const masked = { fileName: '', title: '乙', dataUrl: pngDataUrl, sourceDataUrl: pngDataUrl, maskDataUrl: pngDataUrl };
+  canvas.moveReference(1, 0); // 编辑期间换了位置也能按对象找到
+  assert.equal(canvas.replaceReference(second, masked), true);
+  assert.equal(getCanvasState().draft.referenceImages[0], masked);
+  assert.equal(canvas.replaceReference({ ...first }, masked), false); // 已经不在列表里的不替换
+
+  const submitted = [];
+  const request = async (input) => (submitted.push(input), 'task-id');
+  assert.equal(await canvas.submit('gpt-image-2', request), true);
+  assert.equal(submitted[0].payload.maskDataUrl, pngDataUrl);
+
+  canvas.moveReference(0, 1);
+  assert.equal(await canvas.submit('gpt-image-2', request), false);
+  assert.match(getCanvasState().error, /第 1 张/);
+  assert.equal(submitted.length, 1);
+  canvas.clearReferences();
+  canvas.clearError();
+
+  const api = await startFakeImageApi();
+  try {
+    await generateMedia(runtimeWith({ provider: 'openai-compatible', baseUrl: api.baseUrl, apiKey: 'k', model: 'gpt-image-2' }), { prompt: '移除绿色标记区域', referenceImageDataUrls: [pngDataUrl], maskDataUrl: pngDataUrl });
+    assert.equal(api.requests[0].url, '/v1/images/edits');
+    assert.match(api.requests[0].body, /name="mask"; filename="mask\.png"/);
+    await generateMedia(runtimeWith({ provider: 'openai-compatible', baseUrl: api.baseUrl, apiKey: 'k', model: 'gpt-image-2' }), { prompt: '换成夜景', referenceImageDataUrls: [pngDataUrl] });
+    assert.doesNotMatch(api.requests[1].body, /name="mask"/);
+  } finally {
+    api.server.close();
+  }
+});
