@@ -169,17 +169,20 @@ export function markSavedToLibrary(history: CanvasHistory, taskId: string, index
 // 一个任务用到的所有文件：生成的图和参考图（同一张图可能既是某个任务的结果，又是另一个任务的参考图）。
 const taskMedia = (task: HistoryTask) => [...task.slots.flatMap((slot) => (slot.media ? [slot.media] : [])), ...(task.references ?? [])];
 
-// 删任务；orphaned 是删完后没有别的历史任务再用的文件，调用方据此删 NAS 上的原图和缩略图。
+// 删任务或单张：`任务 id` 删整个任务，`任务 id:图序号` 只删那一张，一张不剩时任务（连参考图）一起删。
+// orphaned 是删完后没有别的历史任务再用的文件，调用方据此删 NAS 上的原图和缩略图。
 export function deleteHistoryTasks(history: CanvasHistory, ids: readonly string[], now: string) {
   const removing = new Set(ids);
-  const tasks = history.tasks.filter((task) => !removing.has(task.id));
+  const tasks = history.tasks.flatMap((task) => {
+    if (removing.has(task.id)) return [];
+    const slots = task.slots.filter((slot) => !removing.has(`${task.id}:${slot.index}`));
+    if (slots.length === task.slots.length) return [task];
+    return slots.length ? [{ ...task, updatedAt: now, slots }] : [];
+  });
   const stillUsed = new Set(tasks.flatMap(taskMedia).map((media) => media.sha256));
   const orphaned = new Map<string, HistoryMedia>();
-  for (const task of history.tasks) {
-    if (!removing.has(task.id)) continue;
-    for (const media of taskMedia(task)) {
-      if (!stillUsed.has(media.sha256)) orphaned.set(media.sha256, media);
-    }
+  for (const media of history.tasks.flatMap(taskMedia)) {
+    if (!stillUsed.has(media.sha256)) orphaned.set(media.sha256, media);
   }
   return { history: { ...history, updatedAt: now, tasks }, orphaned: [...orphaned.values()] };
 }

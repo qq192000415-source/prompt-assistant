@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
-import { BookOpen, BookmarkPlus, Check, ChevronLeft, ChevronRight, ClipboardPaste, Copy, Download, ImagePlus, PanelLeftClose, PanelLeftOpen, Pencil, Play, RotateCcw, Save, Search, Settings, Sparkles, Trash2, TriangleAlert, Wand2, X } from 'lucide-react';
+import { BookOpen, BookmarkPlus, Check, ChevronLeft, ChevronRight, ClipboardPaste, Copy, Download, ImagePlus, ListChecks, PanelLeftClose, PanelLeftOpen, Pencil, Play, RotateCcw, Save, Search, Settings, Sparkles, Trash2, TriangleAlert, Wand2, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import type { MaterialLibraryController } from '../../materials/useMaterialLibrary';
 import {
@@ -105,7 +105,24 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
   const busy = Boolean(controller.busy);
   const video = Boolean(model && isVideoModel(model));
   const sizeLabel = getCanvasGenerationSizeLabel(resolveCanvasGenerationSize(draft));
-  const tasks = useMemo(() => visibleTasks(queue, history, query, sortOrder), [queue, history, query, sortOrder]);
+  // 尺寸比例筛选：null 是全部；选项按比例列表的顺序，后面跟自动和自定义尺寸，数字是生成好的图的张数。
+  const [ratioFilter, setRatioFilter] = useState<string | null>(null);
+  const searched = useMemo(() => visibleTasks(queue, history, query, sortOrder), [queue, history, query, sortOrder]);
+  const tasks = useMemo(() => (ratioFilter ? searched.filter((task) => ratioLabel(task) === ratioFilter) : searched), [searched, ratioFilter]);
+  const ratioOptions = useMemo(() => {
+    const counts = new Map<string, number>(ratioFilter ? [[ratioFilter, 0]] : []);
+    for (const task of searched) counts.set(ratioLabel(task), (counts.get(ratioLabel(task)) ?? 0) + task.slots.filter((slot) => slot.status === 'done').length);
+    const order = (label: string) => {
+      const index = canvasAspectRatioOptions.findIndex((option) => option.value === label);
+      return index < 0 ? canvasAspectRatioOptions.length : index;
+    };
+    return [...counts].sort(([left], [right]) => order(left) - order(right));
+  }, [searched, ratioFilter]);
+  // 批量管理：picked 是选中的 `任务 id:图序号`，null 是不在批量管理里。
+  const [picked, setPicked] = useState<ReadonlySet<string> | null>(null);
+  const [confirmingBatchDelete, setConfirmingBatchDelete] = useState(false);
+  // 右键菜单：在哪张图上点的。
+  const [menu, setMenu] = useState<{ x: number; y: number; task: MaterialCanvasTask; slot: MaterialCanvasSlot } | null>(null);
   const queueIds = useMemo(() => new Set(queue.map((task) => task.id)), [queue]);
   const totalCount = useMemo(() => queue.length + history.filter((task) => !queueIds.has(task.id)).length, [queue, history, queueIds]);
   const activeCount = queue.filter(isActive).length;
@@ -267,9 +284,34 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
     setEditing(null);
   };
 
-  const removeTask = async (task: MaterialCanvasTask) => {
-    const remaining = await controller.canvasHistoryDelete([task.id]);
-    if (remaining) canvas.setHistory(remaining.tasks);
+  // ids 是任务 id 或 `任务 id:图序号`；详情栏正在看的被删了就换回第一条。
+  const removeRecords = async (ids: string[]) => {
+    const remaining = await controller.canvasHistoryDelete(ids);
+    if (!remaining) return false;
+    canvas.setHistory(remaining.tasks);
+    if (selectedKey && ids.some((id) => selectedKey === id || selectedKey.startsWith(`${id}:`))) setSelectedKey(null);
+    return true;
+  };
+
+  const exitPicking = () => {
+    setPicked(null);
+    setConfirmingBatchDelete(false);
+  };
+  // 点的这些都已选中就全取消，否则全选上（列表里点任务信息是整个任务的图一起选）。
+  const togglePicked = (keys: string[]) =>
+    setPicked((current) => {
+      const next = new Set(current);
+      const on = keys.some((key) => !next.has(key));
+      for (const key of keys) {
+        if (on) next.add(key);
+        else next.delete(key);
+      }
+      return next;
+    });
+  const openMenu = (event: React.MouseEvent, task: MaterialCanvasTask, slot: MaterialCanvasSlot) => {
+    if (isVideoSlot(slot) && isActive(task)) return;
+    event.preventDefault();
+    setMenu({ x: event.clientX, y: event.clientY, task, slot });
   };
 
   const viewerEntries = tasks.flatMap((task) => task.slots.filter((slot) => slot.status === 'done').map((slot) => ({ task, slot })));
@@ -283,6 +325,12 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
           {saved ? <Check size={13} /> : <Save size={13} />}
           {saved ? '已存入' : '存入素材库'}
         </Button>
+        {!isVideoSlot(slot) && (
+          <Button className="button ghost compact" type="button" disabled={busy} onClick={() => void controller.canvasCopyImage(task.id, slot.index)}>
+            <Copy size={13} />
+            复制图片
+          </Button>
+        )}
         <Button className="button ghost compact" type="button" disabled={busy} onClick={() => void controller.canvasSaveAs(task.id, slot.index)}>
           <Download size={13} />
           另存为
@@ -324,14 +372,25 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
   const currentKey = selected ? slotKey(selected.task, selected.slot) : null;
   const imageCount = tasks.reduce((sum, task) => sum + task.slots.filter((slot) => slot.status === 'done').length, 0);
   const countLine = [
-    query.trim() ? `找到 ${tasks.length} 个任务（共 ${totalCount} 个）` : `共 ${tasks.length} 个任务 · ${imageCount} 张图`,
+    query.trim() || ratioFilter ? `找到 ${tasks.length} 个任务（共 ${totalCount} 个）` : `共 ${tasks.length} 个任务 · ${imageCount} 张图`,
     activeCount ? `${activeCount} 个进行中` : '',
   ]
     .filter(Boolean)
     .join(' · ');
-  const renderRow = (task: MaterialCanvasTask) => (
-    <CanvasTaskRow key={task.id} task={task} inQueue={queueIds.has(task.id)} currentKey={currentKey} isSaved={slotSaved} onSelect={setSelectedKey} />
-  );
+  // 批量管理能选的：已结束任务里的图（网格里只有生成好的，列表里失败的也能选）。进行中的不能删。
+  const pickable = pageTasks
+    .filter((task) => !isActive(task))
+    .flatMap((task) => task.slots.filter((slot) => recordView === 'tasks' || slot.status === 'done').map((slot) => slotKey(task, slot)));
+  const recordProps: RecordProps = {
+    currentKey,
+    isSaved: slotSaved,
+    onSelect: setSelectedKey,
+    picked,
+    onPick: togglePicked,
+    onMenu: openMenu,
+    onDelete: (key) => void removeRecords([key]),
+  };
+  const renderRow = (task: MaterialCanvasTask) => <CanvasTaskRow key={task.id} task={task} inQueue={queueIds.has(task.id)} {...recordProps} />;
 
   return (
     <div className={`canvas-layout ${panelCollapsed ? 'is-panel-collapsed' : ''}`} style={{ '--canvas-detail-width': `${detailWidth}px` } as CSSProperties}>
@@ -661,14 +720,77 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
               <Search size={15} aria-hidden="true" />
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索提示词、模型" aria-label="搜索生成记录" />
             </label>
+            {totalCount > 0 && (
+              <Button className={`button ghost compact ${picked ? 'accent' : ''}`} type="button" aria-pressed={Boolean(picked)} onClick={() => (picked ? exitPicking() : setPicked(new Set()))}>
+                <ListChecks size={14} />
+                {picked ? '完成' : '批量管理'}
+              </Button>
+            )}
           </div>
+          {(ratioOptions.length > 1 || ratioFilter) && (
+            <div className="canvas-template-chips canvas-ratio-filter" role="group" aria-label="按尺寸比例筛选">
+              <button type="button" className={ratioFilter ? '' : 'is-active'} aria-pressed={!ratioFilter} onClick={() => setRatioFilter(null)}>
+                全部尺寸
+              </button>
+              {ratioOptions.map(([label, count]) => (
+                <button
+                  key={label}
+                  type="button"
+                  className={label === ratioFilter ? 'is-active' : ''}
+                  aria-pressed={label === ratioFilter}
+                  title={label === ratioFilter ? '再点一次显示全部' : `只看 ${label} 的结果`}
+                  onClick={() => setRatioFilter(label === ratioFilter ? null : label)}
+                >
+                  {label} <span>{count}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
+
+        {picked && (
+          <div className="materials-batch-bar" role="toolbar" aria-label="批量操作">
+            <span className="materials-batch-count">已选 {picked.size} 张</span>
+            <Button className="button ghost compact" type="button" disabled={pickable.length === 0} onClick={() => setPicked(new Set([...picked, ...pickable]))}>
+              全选当前 {pickable.length} 张
+            </Button>
+            {picked.size > 0 && (
+              <Button className="button ghost compact" type="button" onClick={() => setPicked(new Set())}>
+                清空
+              </Button>
+            )}
+            <span className="materials-batch-spacer" />
+            {confirmingBatchDelete ? (
+              <>
+                <span className="materials-batch-warning">从 NAS 的生成历史里删掉这 {picked.size} 张？已存入素材库的不受影响。</span>
+                <Button className="button ghost compact" type="button" onClick={() => setConfirmingBatchDelete(false)}>
+                  取消
+                </Button>
+                <Button
+                  className="button solid-danger compact"
+                  type="button"
+                  disabled={busy}
+                  onClick={async () => {
+                    if (await removeRecords([...picked])) exitPicking();
+                  }}
+                >
+                  删除
+                </Button>
+              </>
+            ) : (
+              <Button className="button ghost danger compact" type="button" disabled={busy || picked.size === 0} onClick={() => setConfirmingBatchDelete(true)}>
+                <Trash2 size={13} />
+                删除
+              </Button>
+            )}
+          </div>
+        )}
 
         {tasks.length === 0 ? (
           <div className="canvas-empty">
             <Sparkles size={22} aria-hidden="true" />
-            <strong>{query ? '没有匹配的记录' : historyLoaded ? '写好提示词，点生成' : '正在读取生成历史…'}</strong>
-            {!query && historyLoaded && <span>可以连续提交多个任务，它们会排队生成；生成的图自动存进 NAS 的生成历史，满意的再存入素材库。</span>}
+            <strong>{query || ratioFilter ? '没有匹配的记录' : historyLoaded ? '写好提示词，点生成' : '正在读取生成历史…'}</strong>
+            {!query && !ratioFilter && historyLoaded && <span>可以连续提交多个任务，它们会排队生成；生成的图自动存进 NAS 的生成历史，满意的再存入素材库。</span>}
           </div>
         ) : (
           <>
@@ -678,7 +800,7 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
               <>
                 {/* 进行中的任务照常按列表显示，看得到每张的进度；生成好的图平铺成网格。 */}
                 {pageTasks.filter(isActive).map(renderRow)}
-                <CanvasGrid tasks={pageTasks.filter((task) => !isActive(task))} newIds={queueIds} currentKey={currentKey} isSaved={slotSaved} onSelect={setSelectedKey} />
+                <CanvasGrid tasks={pageTasks.filter((task) => !isActive(task))} newIds={queueIds} {...recordProps} />
               </>
             )}
             {tasks.length > shown && (
@@ -714,7 +836,7 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
             onBackfill={(slot) => backfillReference(selected.task, slot)}
             onCancel={() => void controller.canvasCancel(selected.task.id)}
             onRetry={(slot) => void controller.canvasRetry(selected.task.id, slot.index)}
-            onDelete={() => void removeTask(selected.task)}
+            onDelete={() => void removeRecords([selected.task.id])}
             actions={resultActions}
           />
         ) : (
@@ -735,6 +857,18 @@ export function MaterialCanvas({ controller, onOpenSettings }: MaterialCanvasPro
           onChange={setTemplates}
           onUse={applyTemplate}
           onClose={() => setTemplatePanel(null)}
+        />
+      )}
+
+      {menu && (
+        <SlotMenu
+          x={menu.x}
+          y={menu.y}
+          canCopy={!isVideoSlot(menu.slot)}
+          canDelete={!isActive(menu.task)}
+          onCopy={() => void controller.canvasCopyImage(menu.task.id, menu.slot.index)}
+          onDelete={() => void removeRecords([slotKey(menu.task, menu.slot)])}
+          onClose={() => setMenu(null)}
         />
       )}
 
@@ -778,6 +912,8 @@ const mediaRatio = (slot: MaterialCanvasSlot) => (slot.media?.width && slot.medi
 const formatTime = (iso: string, withYear = false) =>
   new Date(iso).toLocaleString('zh-CN', { ...(withYear ? { year: 'numeric' } : {}), month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 const sizeText = (task: MaterialCanvasTask) => (task.params.size && task.params.size !== 'auto' ? task.params.size.replace('x', '×') : '自动尺寸');
+// 筛选用的尺寸比例：按比例选的就是比例，自动算一类，自定义宽高按宽高各算一类。
+const ratioLabel = (task: MaterialCanvasTask) => task.params.ratio || sizeText(task);
 const QUALITY_LABELS: Record<string, string> = { auto: '自动', low: '低', medium: '中', high: '高' };
 
 // 选的尺寸对应的宽高比：生成中的占位块按这个比例画，等图出来时不跳。auto 时按方形。
@@ -859,10 +995,98 @@ type RecordProps = {
   currentKey: string | null;
   isSaved: (task: MaterialCanvasTask, slot: MaterialCanvasSlot) => boolean;
   onSelect: (key: string) => void;
+  // 批量管理时选中的 `任务 id:图序号`，null 是不在批量管理里。
+  picked: ReadonlySet<string> | null;
+  onPick: (keys: string[]) => void;
+  onMenu: (event: React.MouseEvent, task: MaterialCanvasTask, slot: MaterialCanvasSlot) => void;
+  onDelete: (key: string) => void;
 };
 
+function PickCheck({ on }: { on: boolean }) {
+  return (
+    <span className={`material-card-check canvas-pick-check ${on ? 'is-on' : ''}`} aria-hidden="true">
+      {on && <Check size={14} strokeWidth={3} />}
+    </span>
+  );
+}
+
+// 图右上角的删除：悬停才出现，点一下变成「删除」确认，再点才删；鼠标移开就恢复。
+function SlotDelete({ onDelete }: { onDelete: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  return (
+    <button
+      type="button"
+      className={`canvas-slot-delete ${confirming ? 'is-confirming' : ''}`}
+      aria-label={confirming ? '确认从 NAS 删除这张' : '删除这张'}
+      title={confirming ? '再点一次，从 NAS 的生成历史里删掉这张' : '删除这张'}
+      onClick={() => (confirming ? onDelete() : setConfirming(true))}
+      onMouseLeave={() => setConfirming(false)}
+      onBlur={() => setConfirming(false)}
+    >
+      <Trash2 size={12} />
+      {confirming && '删除'}
+    </button>
+  );
+}
+
+// 生成好的图上点右键：复制图片、删除这张（删除要再点一次确认）。点别处、按 Esc、滚动、切走窗口都会关掉。
+function SlotMenu({ x, y, canCopy, canDelete, onCopy, onDelete, onClose }: { x: number; y: number; canCopy: boolean; canDelete: boolean; onCopy: () => void; onDelete: () => void; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [confirming, setConfirming] = useState(false);
+  useEffect(() => {
+    ref.current?.querySelector('button')?.focus();
+    const outside = (event: Event) => {
+      if (!(event.target instanceof Node && ref.current?.contains(event.target))) onClose();
+    };
+    const onKeyDown = (event: KeyboardEvent) => event.key === 'Escape' && onClose();
+    document.addEventListener('mousedown', outside);
+    document.addEventListener('scroll', outside, true);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('blur', onClose);
+    return () => {
+      document.removeEventListener('mousedown', outside);
+      document.removeEventListener('scroll', outside, true);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('blur', onClose);
+    };
+  }, []);
+  return (
+    <div ref={ref} className="top-dropdown-menu canvas-context-menu" role="menu" style={{ left: Math.min(x, window.innerWidth - 190), top: Math.min(y, window.innerHeight - 90) }}>
+      {canCopy && (
+        <button
+          className="top-dropdown-item"
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            onCopy();
+            onClose();
+          }}
+        >
+          <Copy size={15} />
+          <span>复制图片</span>
+        </button>
+      )}
+      {canDelete && (
+        <button
+          className="top-dropdown-item is-danger"
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            if (!confirming) return setConfirming(true);
+            onDelete();
+            onClose();
+          }}
+        >
+          <Trash2 size={15} />
+          <span>{confirming ? '确认从 NAS 删除' : '删除这张'}</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
 // 网格：已结束任务里生成好的图按排序平铺，每格正方形，图按原比例完整放在格子里。失败、取消的不上网格，在「列表」里看。
-function CanvasGrid({ tasks, newIds, currentKey, isSaved, onSelect }: RecordProps & { tasks: MaterialCanvasTask[]; newIds: ReadonlySet<string> }) {
+function CanvasGrid({ tasks, newIds, currentKey, isSaved, onSelect, picked, onPick, onMenu, onDelete }: RecordProps & { tasks: MaterialCanvasTask[]; newIds: ReadonlySet<string> }) {
   const entries = tasks.flatMap((task) => task.slots.filter((slot) => slot.status === 'done').map((slot) => ({ task, slot })));
   const notShown = tasks.reduce((sum, task) => sum + task.slots.filter((slot) => slot.status !== 'done').length, 0);
   return (
@@ -871,9 +1095,17 @@ function CanvasGrid({ tasks, newIds, currentKey, isSaved, onSelect }: RecordProp
         <div className="canvas-wall">
           {entries.map(({ task, slot }) => {
             const key = slotKey(task, slot);
+            const on = picked ? picked.has(key) : key === currentKey;
             return (
-              <figure key={key} className={`canvas-wall-item ${key === currentKey ? 'is-selected' : ''}`}>
-                <SlotThumb slot={slot} isNew={newIds.has(task.id)} selected={key === currentKey} label={`查看详情：${task.prompt.slice(0, 40)}`} onClick={() => onSelect(key)} />
+              <figure key={key} className={`canvas-wall-item ${on ? 'is-selected' : ''}`} onContextMenu={(event) => onMenu(event, task, slot)}>
+                <SlotThumb
+                  slot={slot}
+                  isNew={newIds.has(task.id)}
+                  selected={on}
+                  label={picked ? `${on ? '取消选择' : '选择'}：${task.prompt.slice(0, 40)}` : `查看详情：${task.prompt.slice(0, 40)}`}
+                  onClick={() => (picked ? onPick([key]) : onSelect(key))}
+                />
+                {picked ? <PickCheck on={on} /> : <SlotDelete onDelete={() => onDelete(key)} />}
                 {isSaved(task, slot) && (
                   <span className="canvas-saved-badge" title="已存入素材库">
                     <Check size={12} />
@@ -902,17 +1134,21 @@ function CanvasGrid({ tasks, newIds, currentKey, isSaved, onSelect }: RecordProp
 
 // 列表的一行：左边时间、模型、尺寸和三行提示词（双击展开全文），右边按原比例的缩略图。
 // 生成中、排队、失败的槽位只画一个按目标比例的占位块和一句状态，原因、进度、重试都在右侧详情栏，不重复堆在这里。
-function CanvasTaskRow({ task, inQueue, currentKey, isSaved, onSelect }: RecordProps & { task: MaterialCanvasTask; inQueue: boolean }) {
+function CanvasTaskRow({ task, inQueue, currentKey, isSaved, onSelect, picked: pickedAll, onPick, onMenu, onDelete }: RecordProps & { task: MaterialCanvasTask; inQueue: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const active = isActive(task);
+  // 进行中的任务不能选、不能删，批量管理时照常点开详情。
+  const picked = active ? null : pickedAll;
+  const isOn = (key: string) => (picked ? picked.has(key) : key === currentKey);
   // 历史里没记录的槽位（取消了的，或别的电脑上还没结束的）补成占位，保证张数对得上。
   const slots = Array.from({ length: task.total }, (_, index) => task.slots.find((slot) => slot.index === index) ?? null);
-  const selectedTask = currentKey?.startsWith(`${task.id}:`) ?? false;
+  const taskKeys = task.slots.map((slot) => slotKey(task, slot));
+  const selectedTask = picked ? taskKeys.length > 0 && taskKeys.every((key) => picked.has(key)) : (currentKey?.startsWith(`${task.id}:`) ?? false);
   const ratio = targetRatio(task);
 
   return (
     <article className={`canvas-task ${active ? 'is-active' : ''} ${selectedTask ? 'is-selected' : ''}`}>
-      <button type="button" className="canvas-task-info" aria-pressed={selectedTask} onClick={() => onSelect(slotKey(task, preferredSlot(task)))}>
+      <button type="button" className="canvas-task-info" aria-pressed={selectedTask} onClick={() => (picked ? onPick(taskKeys) : onSelect(slotKey(task, preferredSlot(task))))}>
         <span className="canvas-task-meta">
           {formatTime(task.createdAt)} · {task.model} · {sizeText(task)}
           {task.referenceCount ? ` · ${task.referenceCount} 张参考图` : ''}
@@ -934,10 +1170,18 @@ function CanvasTaskRow({ task, inQueue, currentKey, isSaved, onSelect }: RecordP
           const key = slot ? slotKey(task, slot) : '';
           const status = slot?.status ?? (active ? 'queued' : 'missing');
           return (
-            <figure key={index} className={`canvas-slot is-${status}`}>
+            <figure key={index} className={`canvas-slot is-${status}`} onContextMenu={slot?.status === 'done' ? (event) => onMenu(event, task, slot) : undefined}>
+              {picked && slot && <PickCheck on={picked.has(key)} />}
               {slot?.status === 'done' ? (
                 <>
-                  <SlotThumb slot={slot} isNew={inQueue} selected={key === currentKey} label={`查看第 ${index + 1} 张的详情`} onClick={() => onSelect(key)} />
+                  <SlotThumb
+                    slot={slot}
+                    isNew={inQueue}
+                    selected={isOn(key)}
+                    label={picked ? `${isOn(key) ? '取消选择' : '选择'}第 ${index + 1} 张` : `查看第 ${index + 1} 张的详情`}
+                    onClick={() => (picked ? onPick([key]) : onSelect(key))}
+                  />
+                  {!pickedAll && !active && <SlotDelete onDelete={() => onDelete(key)} />}
                   {isSaved(task, slot) && (
                     <span className="canvas-saved-badge" title="已存入素材库">
                       <Check size={12} />
@@ -952,10 +1196,10 @@ function CanvasTaskRow({ task, inQueue, currentKey, isSaved, onSelect }: RecordP
               ) : (
                 <button
                   type="button"
-                  className={`canvas-slot-placeholder ${key && key === currentKey ? 'is-selected' : ''}`}
+                  className={`canvas-slot-placeholder ${key && isOn(key) ? 'is-selected' : ''}`}
                   style={{ '--media-ratio': ratio } as CSSProperties}
-                  aria-label={`第 ${index + 1} 张：${slot ? STATUS_LABELS[slot.status] : active ? '排队中' : '没有结果'}，查看详情`}
-                  onClick={() => onSelect(slot ? key : slotKey(task, null))}
+                  aria-label={`第 ${index + 1} 张：${slot ? STATUS_LABELS[slot.status] : active ? '排队中' : '没有结果'}，${picked && slot ? (isOn(key) ? '取消选择' : '选择') : '查看详情'}`}
+                  onClick={() => (picked && slot ? onPick([key]) : onSelect(slot ? key : slotKey(task, null)))}
                 >
                   {status === 'running' && <span className="canvas-skeleton" aria-hidden="true" />}
                   <span className="canvas-slot-state">

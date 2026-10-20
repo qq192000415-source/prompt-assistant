@@ -132,6 +132,7 @@ type DesktopMaterialsApi = {
   canvasRetry: (taskId: string, index: number) => Promise<void>;
   canvasDismiss: (taskId: string) => Promise<void>;
   canvasHistory: () => Promise<{ history: MaterialCanvasHistory; dropped: number }>;
+  // ids 是任务 id（删整个任务）或 `任务 id:图序号`（只删那一张）。
   canvasHistoryDelete: (ids: string[]) => Promise<{ history: MaterialCanvasHistory; dropped: number; warnings: string[] }>;
   canvasTemplates: () => Promise<MaterialCanvasTemplateResult>;
   canvasTemplateSave: (input: { id?: string; title: string; content: string; category: string }) => Promise<MaterialCanvasTemplateResult & { result: { id: string; duplicate: boolean } }>;
@@ -139,6 +140,7 @@ type DesktopMaterialsApi = {
   canvasTemplateUse: (id: string) => Promise<MaterialCanvasTemplateResult>;
   canvasSave: (taskId: string, index: number) => Promise<MaterialImportResult>;
   canvasSaveAs: (taskId: string, index: number) => Promise<string | null>;
+  canvasCopyImage: (taskId: string, index: number) => Promise<void>;
   onCanvasQueue: (callback: (tasks: MaterialCanvasTask[]) => void) => () => void;
   canvasReference: (id: string) => Promise<{ dataUrl: string; title: string }>;
   canvasClipboardImage: () => Promise<string>;

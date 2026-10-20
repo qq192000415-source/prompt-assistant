@@ -5279,6 +5279,77 @@ h2 {
   font-size: 12px;
 }
 
+/* 图右上角的删除：悬停（或键盘聚焦）才出现，盖住「已存入」小勾；点一下变红色「删除」等确认 */
+.canvas-slot-delete {
+  position: absolute;
+  z-index: 1;
+  top: 5px;
+  right: 5px;
+  display: inline-flex;
+  height: 22px;
+  min-width: 22px;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  opacity: 0;
+  padding: 0 5px;
+  transition: opacity 120ms ease, background-color 120ms ease;
+}
+
+.canvas-wall-item:hover .canvas-slot-delete,
+.canvas-slot:hover .canvas-slot-delete,
+.canvas-slot-delete:focus-visible,
+.canvas-slot-delete.is-confirming {
+  opacity: 1;
+}
+
+.canvas-slot-delete:hover,
+.canvas-slot-delete.is-confirming {
+  background: var(--danger);
+}
+
+/* 批量管理的勾选框：左上角，盖住提醒和播放图标 */
+.canvas-pick-check {
+  z-index: 1;
+  top: 6px;
+  left: 6px;
+  pointer-events: none;
+}
+
+/* 右键菜单：沿用顶部下拉菜单的样子，位置跟着鼠标 */
+.canvas-context-menu {
+  position: fixed;
+  z-index: 60;
+  width: 180px;
+}
+
+.canvas-context-menu .top-dropdown-item {
+  grid-template-columns: 20px minmax(0, 1fr);
+}
+
+.canvas-context-menu .is-danger,
+.canvas-context-menu .is-danger:hover {
+  color: var(--danger);
+}
+
+/* 尺寸比例筛选：标题、工具下面单独一行 */
+.canvas-stage-header > .canvas-ratio-filter {
+  display: flex;
+  flex: 1 1 100%;
+}
+
+.canvas-ratio-filter button span {
+  margin-left: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* 详情栏：跟参数栏一样贴顶，自己滚动 */
 .canvas-detail {
   position: sticky;

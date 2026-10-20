@@ -223,14 +223,25 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem }: Op
         await webdav.remove(config, target).catch((error) => warnings.push(`${target}：${error instanceof Error ? error.message : error}`));
       }
     }
-    for (const id of wanted) {
+    const removing = new Set(wanted);
+    for (const task of ownTasks()) {
+      if (!wanted.some((id) => id === task.id || id.startsWith(`${task.id}:`))) continue;
+      // 只删了几张时，留下的图里还有只在内存里（没存进历史）的，任务就不从队列拿掉，免得那几张跟着没了。
+      if (!removing.has(task.id) && task.slots.some((slot) => slot.dataUrl && !removing.has(`${task.id}:${slot.index}`))) continue;
       try {
-        queue.dismiss(id);
+        queue.dismiss(task.id);
       } catch {
         // 还在进行的任务不从队列里拿掉，界面上照常显示。
       }
     }
     return { history, dropped, warnings };
+  });
+
+  ipcMain.handle('materials:canvas-copy-image', async (_event, taskId, index) => {
+    const { buffer } = await resultBytes(String(taskId), Number(index));
+    const image = nativeImage.createFromBuffer(buffer);
+    if (image.isEmpty()) throw new Error('这种图片格式不能放进剪贴板');
+    clipboard.writeImage(image);
   });
 
   // 画布模板：和提示词库分开，存在 NAS 的 canvas-templates.json。

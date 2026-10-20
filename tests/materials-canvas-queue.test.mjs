@@ -247,7 +247,7 @@ test('槽位开始生成时记下开始时间，排队中和重试前清空', as
   assert.equal(queue.snapshot()[0].slots[0].startedAt, null);
 });
 
-test('生成历史存参考图：建记录时写入，删任务时参考图和生成的图一起算「还在用」', () => {
+test('生成历史存参考图：建记录时写入，删任务或单张时参考图和生成的图一起算「还在用」', () => {
   const now = '2026-10-19T00:00:00.000Z';
   const media = (n) => ({ sha256: sha(n), ext: '.png', kind: 'image', size: 1, width: 1, height: 1, hasThumb: true });
   const done = (n) => ({ index: 0, status: 'done', media: media(n), revisedPrompt: null, error: '', attempts: 1, savedToLibrary: false });
@@ -264,6 +264,18 @@ test('生成历史存参考图：建记录时写入，删任务时参考图和�
   assert.deepEqual(orphaned.map((entry) => entry.sha256), [sha(9)]);
   // 两个都删：三个文件都没人用
   assert.deepEqual(deleteHistoryTasks(history, ['t1', 't2'], now).orphaned.map((entry) => entry.sha256).sort(), [sha(1), sha(2), sha(9)].sort());
+
+  // 只删单张：t1 只有一张，删了整个任务没了（参考图 sha(9) 跟着成孤儿）；t2 不动
+  const single = deleteHistoryTasks(history, ['t1:0'], now);
+  assert.deepEqual(single.history.tasks.map((task) => task.id), ['t2']);
+  assert.deepEqual(single.orphaned.map((entry) => entry.sha256), [sha(9)]);
+  // 多张的任务删一张：留下另一张，任务和参考图都在；删掉的图别的任务没用就是孤儿
+  const two = recordSlot(history, { id: 't1', createdAt: now, ...meta('a'), total: 2 }, { ...done(3), index: 1 }, now);
+  const partial = deleteHistoryTasks(two, ['t1:1', 'missing:0'], now);
+  assert.deepEqual(partial.history.tasks.find((task) => task.id === 't1').slots.map((slot) => slot.index), [0]);
+  assert.deepEqual(partial.orphaned.map((entry) => entry.sha256), [sha(3)]);
+  // 删 t1 生成的 sha(1)：t2 还拿它当参考图，不能删文件
+  assert.deepEqual(deleteHistoryTasks(two, ['t1:0'], now).orphaned, []);
 
   // 读历史：老记录没有 references 时是空数组，坏的参考图条目丢掉
   const { history: normalized } = normalizeHistory({ tasks: [{ id: 'old', createdAt: now, slots: [] }, { id: 'new', createdAt: now, slots: [], references: [media(3), { sha256: 'x' }] }] });

@@ -260,6 +260,13 @@ export function useMaterialLibrary(notify: (message: string) => void, account: M
       const saved = await run('正在保存…', () => api!.canvasSaveAs(taskId, index));
       if (saved) notify(`已保存到 ${saved}`);
     },
+    canvasCopyImage: async (taskId: string, index: number) => {
+      const done = await run('正在复制图片…', async () => {
+        await api!.canvasCopyImage(taskId, index);
+        return true;
+      });
+      if (done) notify('图片已复制');
+    },
     canvasReference: (id: string) => run('正在读取参考图…', () => api!.canvasReference(id)),
     canvasClipboardImage: () => run('正在读取剪贴板…', () => api!.canvasClipboardImage()),
     canvasHistoryImage: (media: { sha256: string; ext: string }) => run('正在读取图片…', () => api!.canvasHistoryImage(media.sha256, media.ext)),

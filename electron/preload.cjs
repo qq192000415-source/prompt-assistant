@@ -78,6 +78,7 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     canvasTemplateUse: (id) => ipcRenderer.invoke('materials:canvas-template-use', id),
     canvasSave: (taskId, index) => ipcRenderer.invoke('materials:canvas-save', taskId, index),
     canvasSaveAs: (taskId, index) => ipcRenderer.invoke('materials:canvas-save-as', taskId, index),
+    canvasCopyImage: (taskId, index) => ipcRenderer.invoke('materials:canvas-copy-image', taskId, index),
     onCanvasQueue: (callback) => {
       const listener = (_event, tasks) => callback(tasks);
       ipcRenderer.on('materials:canvas-queue', listener);
