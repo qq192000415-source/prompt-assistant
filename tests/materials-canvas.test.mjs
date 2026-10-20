@@ -220,7 +220,7 @@ test('生图请求的提示词里带上比例规则，和用户自己的生成�
   }
 });
 
-test('模型给的图横竖和选的不一样时给出提示，相近尺寸不算不对', async () => {
+test('模型给的图横竖不对、或宽高比偏差超过 8% 时给出提示，小偏差不算不对', async () => {
   const { sizeMismatchWarning } = await import('../electron/materials/canvas.ts');
   const pngOf = (width, height) => {
     const png = Buffer.from(PNG);
@@ -230,8 +230,12 @@ test('模型给的图横竖和选的不一样时给出提示，相近尺寸不�
   };
   const warning = sizeMismatchWarning({ size: '1312x736', ratio: '16:9' }, pngOf(1024, 1536));
   assert.match(warning, /选的是 16:9 横版，模型给的是 1024×1536 竖版/);
-  assert.equal(sizeMismatchWarning({ size: '1312x736', ratio: '16:9' }, pngOf(1536, 1024)), '');
+  // 2026-10-20 真实网关验收：9:16 偶尔给出 850×1851（偏 18%），之前只比横竖，没有提示
+  assert.match(sizeMismatchWarning({ size: '736x1312', ratio: '9:16' }, pngOf(850, 1851)), /比例偏了：选的是 9:16（736×1312），模型给的是 850×1851，宽高比差了 18%/);
+  // 16:9 给成 1536×1024 其实是 3:2，也提示
+  assert.match(sizeMismatchWarning({ size: '1312x736', ratio: '16:9' }, pngOf(1536, 1024)), /宽高比差了 16%/);
   assert.equal(sizeMismatchWarning({ size: '1312x736', ratio: '16:9' }, pngOf(1673, 940)), '');
+  assert.equal(sizeMismatchWarning({ size: '736x1312', ratio: '9:16' }, pngOf(941, 1672)), '');
   assert.equal(sizeMismatchWarning({ size: '1024x1024' }, pngOf(1050, 1000)), '');
   assert.equal(sizeMismatchWarning({ size: 'auto' }, pngOf(1024, 1536)), '');
   assert.equal(sizeMismatchWarning({ size: '1312x736' }, Buffer.from('不是图片')), '');

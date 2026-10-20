@@ -1,10 +1,10 @@
 {
   "name": "prompt-library",
   "private": true,
-  "version": "1.9.3",
+  "version": "1.9.4",
   "description": "提示词管理、分类与云同步桌面工具",
   "author": "提示词助手",
-  "productName": "提示词助手1.9.3",
+  "productName": "提示词助手1.9.4",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
@@ -25,8 +25,8 @@
   },
   "build": {
     "appId": "com.promptassistant.desktop",
-    "productName": "提示词助手1.9.3",
-    "artifactName": "提示词助手安装版1.9.3.${ext}",
+    "productName": "提示词助手1.9.4",
+    "artifactName": "提示词助手安装版1.9.4.${ext}",
     "directories": {
       "output": "release"
     },
@@ -46,7 +46,7 @@
       ]
     },
     "portable": {
-      "artifactName": "提示词助手便携版1.9.3.${ext}"
+      "artifactName": "提示词助手便携版1.9.4.${ext}"
     },
     "nsis": {
       "oneClick": false,

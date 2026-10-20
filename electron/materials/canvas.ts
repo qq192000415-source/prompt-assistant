@@ -29,15 +29,24 @@ export function aspectRatioRule(payload: Pick<AiImageGenerationPayload, 'size' |
   return `画面比例必须是 ${ratio}${SHAPE_LABELS[shape]}（${size.width}×${size.height}），按这个比例构图，不要改成别的比例。Output aspect ratio must be ${ratio}${SHAPE_EN[shape]}, ${size.width}x${size.height}.`;
 }
 
-// 模型给的图横竖和选的不一样时返回提示，显示在这张图下面，不悄悄存一张比例不对的图。
+// 宽高比偏差超过这么多就提示。网关按自己的档位出图，像素数和选的不一样很正常，只比比例。
+const RATIO_TOLERANCE = 0.08;
+
+// 模型给的图横竖不对、或宽高比偏差太大时返回提示，显示在这张图下面，不悄悄存一张比例不对的图。
+// 2026-10-20 真实网关验收：gpt-image-2.5-sunburst 绝大多数比例误差在 0.1% 以内，但 9:16 偶尔给出 850×1851（偏 18%），只比横竖时没有提示。
 export function sizeMismatchWarning(payload: Pick<AiImageGenerationPayload, 'size' | 'ratio'>, buffer: Buffer) {
   const size = parseSize(payload.size);
   const header = size ? readImageHeader(buffer) : null;
   if (!size || !header) return '';
   const wanted = shapeOf(size.width, size.height);
   const got = shapeOf(header.width, header.height);
-  if (wanted === got) return '';
-  return `比例不对：选的是${payload.ratio ? ` ${payload.ratio} ` : ''}${SHAPE_LABELS[wanted]}，模型给的是 ${header.width}×${header.height} ${SHAPE_LABELS[got]}。这个模型或接口没按选的尺寸出图，可以在提示词里写明横版或竖版构图后重试，或者换一个模型`;
+  if (wanted !== got) {
+    return `比例不对：选的是${payload.ratio ? ` ${payload.ratio} ` : ''}${SHAPE_LABELS[wanted]}，模型给的是 ${header.width}×${header.height} ${SHAPE_LABELS[got]}。这个模型或接口没按选的尺寸出图，可以在提示词里写明横版或竖版构图后重试，或者换一个模型`;
+  }
+  const wantedRatio = size.width / size.height;
+  const deviation = Math.abs(header.width / header.height - wantedRatio) / wantedRatio;
+  if (deviation <= RATIO_TOLERANCE) return '';
+  return `比例偏了：选的是 ${payload.ratio || SHAPE_LABELS[wanted]}（${size.width}×${size.height}），模型给的是 ${header.width}×${header.height}，宽高比差了 ${Math.round(deviation * 100)}%。模型偶尔会这样，可以再生成一次`;
 }
 
 export function generateMedia(runtime: AiRuntime, payload: AiImageGenerationPayload) {
