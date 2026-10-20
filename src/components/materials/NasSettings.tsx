@@ -194,7 +194,7 @@ type MaterialSettingsSectionProps = {
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-// 设置页里素材库相关的三块：NAS 连接、AI 助手、网络。
+// 设置页里素材库相关的三块：NAS 连接、API 配置（AI 模型）、网络。
 export function MaterialSettingsSection({ section, notify, adminEmail }: MaterialSettingsSectionProps) {
   const settings = useMaterialSettings(notify, adminEmail);
   const nas = useNasStatus();

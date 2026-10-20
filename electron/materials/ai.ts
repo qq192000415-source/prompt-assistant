@@ -51,12 +51,12 @@ export const toSettings = (slot: AiSlot): AiProviderSettings => ({
 
 function textModel(runtime: AiRuntime) {
   const slot = runtime.text ?? runtime.vision;
-  if (!slot) throw new Error('还没有设置 AI 模型，请在素材库设置里填写');
+  if (!slot) throw new Error('还没有设置 AI 模型，请在「设置 > API 配置」里填写');
   return toSettings(slot);
 }
 
 function visionModel(runtime: AiRuntime) {
-  if (!runtime.vision) throw new Error('看图需要视觉模型，请在素材库设置里填写视觉模型');
+  if (!runtime.vision) throw new Error('看图需要视觉模型，请在「设置 > API 配置」里填写视觉模型');
   return toSettings(runtime.vision);
 }
 

@@ -209,7 +209,7 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem, onPe
 
   ipcMain.handle('materials:canvas-submit', (_event, input: { payload?: AiImageGenerationPayload; count?: unknown; origin?: CanvasOrigin | null }) => {
     const runtime = loadAiRuntime(userDataDir);
-    if (!runtime.image) throw new Error('还没有设置生图模型，请在素材库设置的 AI 助手里填写');
+    if (!runtime.image) throw new Error('还没有设置生图模型，请在「设置 > API 配置」里填写');
     const payload = input?.payload;
     if (!payload?.prompt?.trim()) throw new Error('先写正向提示词');
     // 任务记下提交时的账号：生成要一会儿，中途切换账号，图也存回提交时那个账号的生成记录。

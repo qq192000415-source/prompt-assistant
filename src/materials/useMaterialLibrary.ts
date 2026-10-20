@@ -334,8 +334,8 @@ export function useMaterialSettings(notify: (message: string) => void, adminEmai
     saveProxy: (settings: MaterialProxySettings) => run('正在测试网络…', () => api!.saveProxy(settings)),
     aiGetSettings: () => api!.aiGetSettings(),
     aiSaveSettings: async (settings: MaterialAiSettingsInput) => {
-      const saved = await run('正在保存 AI 设置…', () => api!.aiSaveSettings(settings));
-      if (saved) notify('AI 设置已保存');
+      const saved = await run('正在保存 API 配置…', () => api!.aiSaveSettings(settings));
+      if (saved) notify('API 配置已保存');
       return saved;
     },
     aiListModels: (slot: MaterialAiSlotName, input: MaterialAiSlotInput) => run('正在查询模型…', () => api!.aiListModels(slot, input)),

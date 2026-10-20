@@ -131,7 +131,7 @@ export function setImageModel(userDataDir: string, model: unknown) {
   const name = asText(model).trim();
   if (!name) throw new Error('模型名不能为空');
   const stored = readStored(userDataDir);
-  if (!stored.image) throw new Error('还没有设置生图模型，请先在设置的 AI 助手里填写');
+  if (!stored.image) throw new Error('还没有设置生图模型，请先在「设置 > API 配置」里填写');
   fs.writeFileSync(settingsPath(userDataDir), JSON.stringify({ ...stored, image: { ...stored.image, model: name } }, null, 2));
   return getPublicAiSettings(userDataDir);
 }

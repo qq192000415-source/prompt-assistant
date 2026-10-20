@@ -50,7 +50,7 @@ export function sizeMismatchWarning(payload: Pick<AiImageGenerationPayload, 'siz
 }
 
 export function generateMedia(runtime: AiRuntime, payload: AiImageGenerationPayload) {
-  if (!runtime.image) throw new Error('还没有设置生图模型，请在素材库设置的 AI 助手里填写');
+  if (!runtime.image) throw new Error('还没有设置生图模型，请在「设置 > API 配置」里填写');
   if (!payload.prompt?.trim()) throw new Error('先写正向提示词');
   const settings = toSettings(runtime.image);
   const rules = [runtime.instructions('image-generation'), payload.mediaType === 'video' ? '' : aspectRatioRule(payload)].filter(Boolean).join('\n');

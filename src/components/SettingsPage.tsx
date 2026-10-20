@@ -15,7 +15,7 @@ const SECTIONS = [
   { key: 'general', label: '通用' },
   { key: 'sync', label: '云同步' },
   { key: 'nas', label: '素材库（NAS）' },
-  { key: 'ai', label: 'AI 助手' },
+  { key: 'ai', label: 'API 配置' },
   { key: 'network', label: '网络' },
   { key: 'about', label: '关于与更新' },
 ] as const;

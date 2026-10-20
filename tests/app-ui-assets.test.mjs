@@ -290,7 +290,7 @@ test('顶部栏是主导航，搜索、视图和导入导出在侧栏，设置�
 
   // 设置页：替换内容区，六个分类；素材库设置不再是弹窗
   assert.match(appSource, /\{settingsSection \? \(\s*<SettingsPage/);
-  for (const label of ['通用', '云同步', '素材库（NAS）', 'AI 助手', '网络', '关于与更新']) {
+  for (const label of ['通用', '云同步', '素材库（NAS）', 'API 配置', '网络', '关于与更新']) {
     assert.match(appSource, new RegExp(`\\{ key: '\\w+', label: '${escapeRegExp(label)}' \\}`));
   }
   assert.match(settingsSource, /<MaterialSettingsSection section=\{section\}/);

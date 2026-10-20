@@ -266,7 +266,7 @@ export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, te
       <p className="nas-form-note">设置和 API Key 只保存在这台电脑上，Key 用系统加密，不会传到 NAS。规则和预设来自素言（SuYan）。</p>
       <div className="nas-form-actions">
         <Button className="button primary" type="submit" disabled={busy}>
-          保存 AI 设置
+          保存 API 配置
         </Button>
       </div>
     </form>
