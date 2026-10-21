@@ -1,0 +1,27 @@
+{
+  "id": "mono",
+  "name": "极简黑白",
+  "note": "没有壁纸，只留黑白灰",
+  "author": "提示词助手",
+  "version": "1.0.0",
+  "base": "light",
+  "tokens": {
+    "--sidebar": "#f4f4f4",
+    "--surface": "#ffffff",
+    "--surface-quiet": "#fafafa",
+    "--surface-raised": "rgba(255, 255, 255, 0.96)",
+    "--surface-muted": "#f2f2f2",
+    "--overlay-surface": "#ffffff",
+    "--hover": "rgba(0, 0, 0, 0.05)",
+    "--border": "#e2e2e2",
+    "--border-strong": "#cfcfcf",
+    "--text": "#111111",
+    "--muted": "#5c5c5c",
+    "--faint": "#9a9a9a",
+    "--accent": "#111111",
+    "--accent-hover": "#333333",
+    "--accent-weak": "rgba(0, 0, 0, 0.07)",
+    "--on-accent": "#ffffff"
+  },
+  "preview": "preview.webp"
+}

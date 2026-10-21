@@ -92,7 +92,11 @@ type DesktopSkinsApi = {
   // 返回导出到的路径，取消是 null。
   exportSkin: (id: string) => Promise<string | null>;
   pathForFile: (file: File) => string;
+  // 主题市场：先读更新服务器的镜像，读不到再读 GitHub；base 是读到的那个 themes/ 地址，预览图在 base + preview。
+  market: () => Promise<{ source: 'mirror' | 'github'; base: string; themes: DesktopMarketTheme[]; errors: string[] }>;
+  marketInstall: (id: string) => Promise<{ id: string; name: string; replaced: boolean }>;
 };
+type DesktopMarketTheme = { id: string; name: string; note: string; author: string; version: string; base: 'light' | 'dark'; size: number; sha256: string; preview: string };
 
 type NasConfig = { baseUrl: string; username: string; hasPassword: boolean; source: "manual" | "grant" };
 

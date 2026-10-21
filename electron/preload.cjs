@@ -36,6 +36,8 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     installPaths: (paths) => ipcRenderer.invoke('skins:install-paths', paths),
     remove: (id) => ipcRenderer.invoke('skins:remove', id),
     exportSkin: (id) => ipcRenderer.invoke('skins:export', id),
+    market: () => ipcRenderer.invoke('skins:market'),
+    marketInstall: (id) => ipcRenderer.invoke('skins:market-install', id),
     pathForFile: (file) => webUtils.getPathForFile(file),
   },
   materials: {

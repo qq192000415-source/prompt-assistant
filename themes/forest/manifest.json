@@ -1,0 +1,31 @@
+{
+  "id": "forest",
+  "name": "森林夜",
+  "note": "松林萤火、墨绿",
+  "author": "提示词助手",
+  "version": "1.0.0",
+  "base": "dark",
+  "tokens": {
+    "--sidebar": "rgba(10, 20, 16, 0.82)",
+    "--surface": "rgba(18, 30, 25, 0.86)",
+    "--surface-quiet": "rgba(6, 14, 11, 0.4)",
+    "--surface-raised": "rgba(18, 30, 25, 0.95)",
+    "--surface-muted": "rgba(28, 42, 36, 0.84)",
+    "--overlay-surface": "#16231e",
+    "--hover": "rgba(134, 239, 172, 0.07)",
+    "--border": "rgba(134, 239, 172, 0.12)",
+    "--border-strong": "rgba(134, 239, 172, 0.24)",
+    "--text": "#ecf5ef",
+    "--muted": "#a7bdb1",
+    "--faint": "#6f8379",
+    "--accent": "#86efac",
+    "--accent-hover": "#bbf7d0",
+    "--accent-weak": "rgba(134, 239, 172, 0.14)",
+    "--on-accent": "#05140c"
+  },
+  "wallpaper": {
+    "file": "wallpaper.webp",
+    "overlay": "rgba(0, 8, 4, 0.25)"
+  },
+  "preview": "preview.webp"
+}

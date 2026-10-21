@@ -73,4 +73,10 @@ icons/<名字>.png   可选，同上，保留彩色
 
 ## 投稿到主题市场
 
-（下一个版本上线）把皮肤文件夹放进本目录 `themes/<id>/`，提 Pull Request。
+软件的「设置 → 皮肤 → 主题市场」列出的就是本目录里的皮肤（`_` 开头的文件夹除外）。
+
+1. 把皮肤文件夹放进 `themes/<id>/`，文件夹名和 `manifest.json` 里的 `id` 一致，不能和内置皮肤、已有的皮肤重名。
+2. 运行 `npm run themes:build`：会用软件里同一套规则校验每个皮肤，生成 `themes/dist/<id>.zip`、预览图和 `themes/index.json`。校验不过会说明原因。
+3. 把 `themes/<id>/`、`themes/dist/`、`themes/index.json` 一起提 Pull Request。更新皮肤时把 `version` 改大，用户那边会显示「更新到 vX」。
+
+请只投自己有权使用的图片。

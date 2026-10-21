@@ -115,7 +115,7 @@ export function register({ ipcMain, userDataDir, updateBaseUrl, getWindow }: Reg
   protocol.handle(SCHEME, handleMediaRequest(userDataDir));
   // 皮肤包（src/skins/）和素材库无关，只是借这里的主进程打包和协议登记。
   protocol.handle(SKIN_SCHEME, handleSkinRequest(userDataDir));
-  registerSkins({ ipcMain, userDataDir, getWindow });
+  registerSkins({ ipcMain, userDataDir, updateBaseUrl, getWindow });
 
   // NAS 连接状态推给界面，带上当前账号本机待上传的数量；从断开变成连上时补传。
   const nasStatus = () => ({ ...monitor.status(), pending: canvasService.pendingStats() });

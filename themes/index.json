@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "themes": [
+    {
+      "id": "forest",
+      "name": "森林夜",
+      "note": "松林萤火、墨绿",
+      "author": "提示词助手",
+      "version": "1.0.0",
+      "base": "dark",
+      "size": 72419,
+      "sha256": "86c0ee95374da78e6d6a47c8ee895f5f9c27883963d148ec90280759157da6b4",
+      "preview": "dist/forest.webp"
+    },
+    {
+      "id": "mono",
+      "name": "极简黑白",
+      "note": "没有壁纸，只留黑白灰",
+      "author": "提示词助手",
+      "version": "1.0.0",
+      "base": "light",
+      "size": 896,
+      "sha256": "974e5573c130ea569db6c91ae145140785d53c51d23cb271a1694fa304703326",
+      "preview": "dist/mono.webp"
+    },
+    {
+      "id": "ocean",
+      "name": "海盐",
+      "note": "晴空海岸、清透蓝绿",
+      "author": "提示词助手",
+      "version": "1.0.0",
+      "base": "light",
+      "size": 68028,
+      "sha256": "3d21f2a5eeb6bfcfdfb4fedbd8a2544dcadf043ff67a71b86d23de65b7114cd9",
+      "preview": "dist/ocean.webp"
+    }
+  ]
+}

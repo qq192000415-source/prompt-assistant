@@ -1,5 +1,7 @@
 node_modules
 dist
+# 主题市场打好的包要提交（GitHub 是市场的备用来源）
+!themes/dist/
 release
 .DS_Store
 *.local

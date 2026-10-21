@@ -5927,6 +5927,37 @@ html[data-skin] .settings-form-footer {
   gap: 6px;
 }
 
+.skin-market-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.skin-market-card {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: 8px;
+}
+
+.skin-market-preview {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--surface-muted);
+}
+
+.settings-note.is-error {
+  color: var(--danger);
+}
+
 html[data-skin] .top-menu-bar {
   background: var(--surface-raised);
   backdrop-filter: blur(16px);

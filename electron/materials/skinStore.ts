@@ -1,6 +1,7 @@
 // 皮肤包（src/skins/skinPack.ts 的格式）落盘：装到 <userData>/skins/<id>/，用 skin://<id>/<文件> 给界面读，能导出成 zip、删除。
 // 皮肤包来自别人，所有文件名、大小、manifest 都在这里查过才落盘，界面拿到的只是校验过的 manifest 和图标文件名。
 // 不依赖 Electron，Node 测试能直接加载；IPC 和对话框在 skins.ts。
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import JSZip from 'jszip';
@@ -148,4 +149,65 @@ export function handleSkinRequest(userDataDir: string) {
       return new Response('not found', { status: 404 });
     }
   };
+}
+
+// ---------- 主题市场：仓库 themes/ 由 scripts/build-theme-index.cjs 生成 index.json 和 dist/<id>.zip、dist/<id>.<图>，
+// 镜像在 UPDATE_BASE_URL/themes/，GitHub 上是同样的相对路径。先读镜像，读不到再读 GitHub。
+
+export type MarketTheme = { id: string; name: string; note: string; author: string; version: string; base: 'light' | 'dark'; size: number; sha256: string; preview: string };
+type FetchLike = (url: string, init?: { signal?: AbortSignal }) => Promise<Response>;
+
+const marketText = (value: unknown, max: number) => (typeof value === 'string' && value.length <= max ? value : null);
+
+// 市场索引里每一条都单独查，坏掉的那条放进 errors，不连累别的。
+export function parseMarketIndex(raw: unknown) {
+  const themes: MarketTheme[] = [];
+  const errors: string[] = [];
+  const list = raw && typeof raw === 'object' && Array.isArray((raw as { themes?: unknown }).themes) ? (raw as { themes: unknown[] }).themes : null;
+  if (!list) throw new Error('主题市场的索引格式不对');
+  for (const entry of list) {
+    const item = (entry ?? {}) as Record<string, unknown>;
+    const id = typeof item.id === 'string' && ID_PATTERN.test(item.id) ? item.id : null;
+    const theme = id && {
+      id,
+      name: marketText(item.name, 20),
+      note: marketText(item.note ?? '', 40),
+      author: marketText(item.author, 40),
+      version: marketText(item.version, 20),
+      base: item.base === 'light' || item.base === 'dark' ? item.base : null,
+      size: typeof item.size === 'number' && item.size > 0 && item.size <= LIMITS.pack ? item.size : null,
+      sha256: typeof item.sha256 === 'string' && /^[0-9a-f]{64}$/.test(item.sha256) ? item.sha256 : null,
+      preview: typeof item.preview === 'string' && new RegExp(`^dist/${id}\\.(webp|png|jpg|jpeg)$`).test(item.preview) ? item.preview : null,
+    };
+    if (theme && Object.values(theme).every((value) => value !== null)) themes.push(theme as MarketTheme);
+    else errors.push(`市场里的「${typeof item.id === 'string' ? item.id : '?'}」信息不全，没有列出`);
+  }
+  return { themes, errors };
+}
+
+// sources 是几个 themes/ 目录地址（结尾带 /），按顺序试，全都不通才报错，并写明每个为什么不通。
+export async function fetchMarketIndex(sources: string[], fetchImpl: FetchLike) {
+  const failures: string[] = [];
+  for (const base of sources) {
+    try {
+      const response = await fetchImpl(`${base}index.json`, { signal: AbortSignal.timeout(15_000) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return { base, ...parseMarketIndex(await response.json()) };
+    } catch (error) {
+      failures.push(`${new URL(base).host}：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  throw new Error(`主题市场连不上（${failures.join('；')}）`);
+}
+
+// 下载并核对大小和 SHA256，对不上就不装。
+export async function downloadMarketTheme(base: string, theme: MarketTheme, fetchImpl: FetchLike) {
+  const response = await fetchImpl(`${base}dist/${theme.id}.zip`, { signal: AbortSignal.timeout(120_000) });
+  if (!response.ok) throw new Error(`下载「${theme.name}」失败：HTTP ${response.status}`);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+  if (bytes.byteLength !== theme.size || sha256 !== theme.sha256) {
+    throw new Error(`「${theme.name}」下载的文件和市场里登记的对不上（大小或校验值不同），可能没下完整或被改过，没有安装`);
+  }
+  return bytes;
 }
