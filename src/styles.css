@@ -5380,6 +5380,16 @@ h2 {
   background: var(--danger);
 }
 
+/* API 配置的模型状态：有没保存的改动 */
+.nas-status.is-unsaved {
+  border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
+  background: var(--warning-weak);
+}
+
+.nas-status.is-unsaved .nas-status-dot {
+  background: var(--warning);
+}
+
 .nas-status-detail {
   flex: 1 1 100%;
   margin: 0;

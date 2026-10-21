@@ -44,6 +44,18 @@ const draftOf = (slot: MaterialAiSlot | null): SlotDraft => ({
 // 发给主进程的模型设置；Key 留空表示沿用已保存的。
 const inputOf = ({ hasApiKey: _hasApiKey, ...slot }: SlotDraft): MaterialAiSlotInput => slot;
 
+// 这一块和已保存的不一样（填了新 Key 也算）。
+const slotChanged = (draft: SlotDraft, saved: MaterialAiSlot | null) => {
+  const base = draftOf(saved);
+  return draft.provider !== base.provider || draft.baseUrl.trim() !== base.baseUrl || draft.model.trim() !== base.model || Boolean(draft.apiKey);
+};
+
+type Drafts = { slots: Record<MaterialAiSlotName, SlotDraft>; actions: MaterialAiAction[]; canvas: MaterialCanvasOptions };
+// 切到别的设置分区时表单会卸载。没保存的改动和查到的模型留在这里，切回来接着用；软件关了就没了。
+// 草稿只在已保存的设置没被别处改过时才沿用（比如画布的模型下拉会直接改生图模型），否则作废。
+let kept: { baseline: string; drafts: Drafts } | null = null;
+let keptModels: Record<MaterialAiSlotName, ModelOption[]> = { text: [], vision: [], image: [] };
+
 type AiSettingsFormProps = {
   busy: boolean;
   getSettings: () => Promise<MaterialAiSettings>;
@@ -55,23 +67,44 @@ type AiSettingsFormProps = {
 export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, testModel }: AiSettingsFormProps) {
   const [slots, setSlots] = useState<Record<MaterialAiSlotName, SlotDraft> | null>(null);
   const [actions, setActions] = useState<MaterialAiAction[]>([]);
-  const [models, setModels] = useState<Record<MaterialAiSlotName, ModelOption[]>>({ text: [], vision: [], image: [] });
+  const [saved, setSaved] = useState<MaterialAiSettings | null>(null);
+  const [droppedDraft, setDroppedDraft] = useState(false);
+  const [models, setModels] = useState<Record<MaterialAiSlotName, ModelOption[]>>(keptModels);
   const [modelQuery, setModelQuery] = useState<Record<MaterialAiSlotName, string>>({ text: '', vision: '', image: '' });
   const [actionIndex, setActionIndex] = useState(0);
   const [canvasOptions, setCanvasOptions] = useState<MaterialCanvasOptions>({ concurrency: 2, retries: 2 });
 
-  const load = (settings: MaterialAiSettings) => {
-    setSlots({ text: draftOf(settings.text), vision: draftOf(settings.vision), image: draftOf(settings.image) });
-    setActions(settings.actions);
-    setCanvasOptions(settings.canvas);
+  const load = (settings: MaterialAiSettings, drafts?: Drafts) => {
+    setSaved(settings);
+    setSlots(drafts?.slots ?? { text: draftOf(settings.text), vision: draftOf(settings.vision), image: draftOf(settings.image) });
+    setActions(drafts?.actions ?? settings.actions);
+    setCanvasOptions(drafts?.canvas ?? settings.canvas);
   };
 
   // 只在打开时读一次：getSettings 每次渲染都是新函数。
   useEffect(() => {
-    void getSettings().then(load);
+    void getSettings().then((settings) => {
+      const usable = kept && kept.baseline === JSON.stringify(settings);
+      if (kept && !usable) setDroppedDraft(true);
+      load(settings, usable ? kept!.drafts : undefined);
+    });
   }, []);
 
-  if (!slots) return null;
+  const dirty =
+    Boolean(saved && slots) &&
+    (SLOTS.some((name) => slotChanged(slots![name], saved![name])) ||
+      JSON.stringify(actions) !== JSON.stringify(saved!.actions) ||
+      JSON.stringify(canvasOptions) !== JSON.stringify(saved!.canvas));
+  useEffect(() => {
+    // 还没读到已保存的设置时不动它，否则一挂载就把上次留下的草稿清掉了
+    if (!saved || !slots) return;
+    kept = dirty ? { baseline: JSON.stringify(saved), drafts: { slots, actions, canvas: canvasOptions } } : null;
+  });
+  useEffect(() => {
+    keptModels = models;
+  }, [models]);
+
+  if (!slots || !saved) return null;
 
   const setSlot = (name: MaterialAiSlotName, patch: Partial<SlotDraft>) => setSlots({ ...slots, [name]: { ...slots[name], ...patch } });
   const action = actions[actionIndex];
@@ -86,7 +119,10 @@ export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, te
       canvas: canvasOptions,
       actions: Object.fromEntries(actions.map((entry) => [entry.action, { rulePresetIds: entry.rulePresetIds, customInstructions: entry.customInstructions }])),
     });
-    if (saved) load(saved);
+    if (saved) {
+      setDroppedDraft(false);
+      load(saved);
+    }
   };
 
   const queryModels = async (name: MaterialAiSlotName) => {
@@ -96,11 +132,32 @@ export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, te
 
   return (
     <form className="nas-form" onSubmit={(event) => void submit(event)}>
+      {droppedDraft && <p className="nas-form-note">上次离开时没保存的改动已作废：API 配置在别处改过了（比如画布里换了生图模型）。</p>}
       {SLOTS.map((name) => {
         const slot = slots[name];
+        const savedModel = saved[name]?.model ?? '';
+        const changed = slotChanged(slot, saved[name]);
         return (
           <fieldset key={name} className="ai-slot">
             <legend>{SLOT_LABELS[name].title}</legend>
+            {/* 当前状态：已保存的模型、没保存的改动、还没设置，样式照 NAS 的连接状态 */}
+            <div className={`nas-status ${changed ? 'is-unsaved' : savedModel ? 'is-connected' : ''}`} role="status">
+              <span className="nas-status-line">
+                <span className="nas-status-dot" aria-hidden="true" />
+                {changed ? (
+                  <>
+                    <strong>未保存</strong>：{slot.model.trim() || '（没填模型）'}
+                  </>
+                ) : savedModel ? (
+                  <>
+                    <strong>已保存</strong>：{savedModel}
+                  </>
+                ) : (
+                  <strong>未设置</strong>
+                )}
+              </span>
+              {changed && <p className="nas-status-detail">点「保存」才生效{savedModel ? `，现在用的还是 ${savedModel}` : ''}。</p>}
+            </div>
             {name !== 'image' && (
               <label className="field">
                 接口类型
@@ -213,6 +270,9 @@ export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, te
               </Button>
               <Button className="button ghost compact" type="button" disabled={busy || !slot.baseUrl.trim() || !slot.model.trim()} onClick={() => void testModel(name, inputOf(slot))}>
                 测试连接
+              </Button>
+              <Button className="button primary compact" type="submit" disabled={busy || !changed} title="保存整页 API 配置（三个模型和功能规则）">
+                保存
               </Button>
             </div>
           </fieldset>
