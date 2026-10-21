@@ -6,7 +6,8 @@ const materials = require('./materials.cjs');
 const { migrateLegacyUserData } = require('./userDataMigration.cjs');
 const { parseLatestYml, isNewerVersion } = require('./portableUpdate.cjs');
 const { updaterCacheDir, installedUpdateLeftovers } = require('./updateCache.cjs');
-const { autoUpdater } = require('electron-updater');
+const { autoUpdater, CancellationToken } = require('electron-updater');
+const { downloadSources, downloadWithFallback, createMirrorProvider } = require('./updateSources.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 const { version: appVersion } = require('../package.json');
@@ -84,6 +85,11 @@ let materialsService = null;
 let automaticUpdateTimer = null;
 let lastPromptedUpdateVersion = '';
 const activeUpdateNotifications = new Set();
+// 最近一次检查到的清单（含 downloadMirrors），下载时按它挑来源。
+let latestUpdateInfo = null;
+const updateSource = createMirrorProvider();
+// 正在试的下载来源：{ host, last, startedAt, lastProgressAt, transferred }；不是最后一个源时出错不报给界面，换下一个。
+let downloadAttempt = null;
 let updateStatus = {
   status: 'idle',
   currentVersion: appVersion,
@@ -95,6 +101,8 @@ autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = false;
 autoUpdater.allowPrerelease = false;
 autoUpdater.disableWebInstaller = true;
+// 镜像站不一定支持增量下载要的多段 Range，自己的服务器也不留旧版 blockmap；整包下载，镜像上一两分钟就下完。
+autoUpdater.disableDifferentialDownload = true;
 
 // 更新过程写日志 <userData>/logs/update.log（超过 1MB 从头写），装不上时看这里。
 function updateLog(level, message) {
@@ -253,7 +261,8 @@ function ensureUpdaterReady() {
   }
 
   autoUpdater.setFeedURL({
-    provider: 'generic',
+    provider: 'custom',
+    updateProvider: updateSource.MirrorProvider,
     url: UPDATE_BASE_URL,
   });
   updaterInitialized = true;
@@ -282,7 +291,7 @@ function getUpdatePromptVersion(info = {}) {
 }
 
 function buildUpdateToastXml(version) {
-  const title = '提示词小助手已有新版本';
+  const title = '灵匣已有新版本';
   const body = version ? `发现新版本 ${version}，是否下载最新版本？` : '是否下载最新版本？';
 
   return [
@@ -315,9 +324,17 @@ async function downloadAvailableUpdate() {
     return setUpdateStatus({ status: 'error', message: '请先检查并发现可用更新', progress: undefined });
   }
 
+  // 按清单里的镜像依次试，最后是自己的服务器；镜像出错或太慢就换下一个（electron/updateSources.cjs）。
+  setUpdateStatus({ status: 'downloading', message: '正在准备下载更新', progress: { percent: 0 } });
   try {
-    setUpdateStatus({ status: 'downloading', message: '正在准备下载更新', progress: { percent: 0 } });
-    await autoUpdater.downloadUpdate();
+    await downloadWithFallback({
+      updater: autoUpdater,
+      sources: downloadSources(latestUpdateInfo),
+      useSource: updateSource.useSource,
+      CancellationToken,
+      log: updateLog,
+      onAttempt: (attempt) => (downloadAttempt = attempt),
+    });
     return updateStatus;
   } catch (error) {
     return setUpdateStatus({ status: 'error', message: normalizeUpdateError(error), progress: undefined });
@@ -402,7 +419,7 @@ function showUpdateTrayBalloonPrompt(version) {
   currentTray.once('balloon-click', handleBalloonClick);
   currentTray.once('balloon-closed', handleBalloonClosed);
   currentTray.displayBalloon({
-    title: '提示词小助手已有新版本',
+    title: '灵匣已有新版本',
     content: version
       ? `发现新版本 ${version}，是否下载最新版本？点击此提示下载，关闭则暂不下载。`
       : '是否下载最新版本？点击此提示下载，关闭则暂不下载。',
@@ -425,7 +442,7 @@ function showUpdateAvailablePrompt(info) {
     void dialog
       .showMessageBox(mainWindow, {
         type: 'info',
-        title: '提示词小助手已有新版本',
+        title: '灵匣已有新版本',
         message: `发现新版本 ${version}`,
         detail: `当前版本 ${appVersion}。点「下载」会在后台下载，下完自动关闭软件安装新版本，装好后自动重新打开；也可以以后在「设置 > 关于与更新」里手动下载。`,
         buttons: ['下载', '稍后'],
@@ -457,7 +474,7 @@ function showUpdateAvailablePrompt(info) {
   }
 
   let handled = false;
-  const promptTitle = '提示词小助手已有新版本';
+  const promptTitle = '灵匣已有新版本';
   const promptBody = version ? `发现新版本 ${version}，是否下载最新版本？` : '是否下载最新版本？';
   const notification =
     process.platform === 'win32'
@@ -528,7 +545,7 @@ async function checkPortableUpdate() {
     if (!latest || !isNewerVersion(latest.version, appVersion) || !mainWindow || mainWindow.isDestroyed()) return;
     const { response: choice } = await dialog.showMessageBox(mainWindow, {
       type: 'info',
-      title: '提示词小助手已有新版本',
+      title: '灵匣已有新版本',
       message: `发现新版本 ${latest.version}`,
       detail: `当前版本 ${appVersion}。便携版不能自动更新，点「下载」用浏览器下载新版安装包；想继续用便携版，请向发布者要新的便携版文件。`,
       buttons: latest.path ? ['下载', '稍后'] : ['知道了'],
@@ -567,6 +584,7 @@ autoUpdater.on('checking-for-update', () => {
 });
 
 autoUpdater.on('update-available', (info) => {
+  latestUpdateInfo = info;
   setUpdateStatus({
     status: 'available',
     availableVersion: info?.version,
@@ -583,7 +601,7 @@ autoUpdater.on('update-not-available', () => {
 autoUpdater.on('download-progress', (progress) => {
   setUpdateStatus({
     status: 'downloading',
-    message: `正在下载更新 ${Math.round(progress.percent || 0)}%`,
+    message: `正在下载更新 ${Math.round(progress.percent || 0)}%${downloadAttempt ? `（${downloadAttempt.host}）` : ''}`,
     progress: {
       percent: Number(progress.percent) || 0,
       transferred: Number(progress.transferred) || 0,
@@ -605,6 +623,8 @@ autoUpdater.on('update-downloaded', (info) => {
 });
 
 autoUpdater.on('error', (error) => {
+  // 还有下一个下载来源可试：downloadAvailableUpdate 会换源，不把这次的错误显示给用户。
+  if (downloadAttempt && !downloadAttempt.last) return;
   // 安装程序没启动起来：软件不退出了，关窗口恢复成平时的行为。
   if (updateStatus.status === 'installing') forceQuit = false;
   setUpdateStatus({ status: 'error', message: normalizeUpdateError(error), progress: undefined });

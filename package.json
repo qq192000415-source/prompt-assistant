@@ -1,10 +1,10 @@
 {
   "name": "prompt-library",
   "private": true,
-  "version": "1.15.1",
+  "version": "1.16.0",
   "description": "提示词管理、分类与云同步桌面工具",
   "author": "提示词助手",
-  "productName": "灵匣1.15.1",
+  "productName": "灵匣1.16.0",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
@@ -28,8 +28,8 @@
   },
   "build": {
     "appId": "com.promptassistant.desktop",
-    "productName": "灵匣1.15.1",
-    "artifactName": "灵匣安装版1.15.1.${ext}",
+    "productName": "灵匣1.16.0",
+    "artifactName": "灵匣安装版1.16.0.${ext}",
     "directories": {
       "output": "release"
     },
@@ -49,7 +49,7 @@
       ]
     },
     "portable": {
-      "artifactName": "灵匣便携版1.15.1.${ext}"
+      "artifactName": "灵匣便携版1.16.0.${ext}"
     },
     "nsis": {
       "oneClick": false,

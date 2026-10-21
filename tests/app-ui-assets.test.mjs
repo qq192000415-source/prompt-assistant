@@ -89,7 +89,9 @@ test('desktop updater uses the deployer generic feed', () => {
   assert.match(packageJson.scripts['package:all'], /write-update-source\.cjs/);
   assert.ok(!packageJson.scripts['server:install']);
   assert.ok(!packageJson.scripts['server:start']);
-  assert.match(mainProcess, /const \{ autoUpdater \} = require\('electron-updater'\);/);
+  assert.match(mainProcess, /const \{ autoUpdater, CancellationToken \} = require\('electron-updater'\);/);
+  // 1.16.0：清单仍从 UPDATE_BASE_URL 读，安装包按清单里的镜像下载（electron/updateSources.cjs）
+  assert.match(mainProcess, /provider: 'custom',\s*updateProvider: updateSource\.MirrorProvider,\s*url: UPDATE_BASE_URL/);
   assert.match(mainProcess, /readPackagedUpdateUrl/);
   assert.match(mainProcess, /app-update-source/);
   assert.match(mainProcess, /未配置更新地址/);
