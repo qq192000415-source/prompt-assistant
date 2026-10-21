@@ -426,27 +426,15 @@ export const downloadCloudFile = async (userId: string, sha256: string, settings
 };
 
 // 素材库 NAS 授权（表 nas_grants，见 supabase-schema.sql）：管理员给账号开通 NAS 连接，对方登录后自动连上。
-// recommendedApiUrl：管理员推荐的 API 地址（1.14.0），空表示不推荐；没加这一列的部署读出来也是空。
-export type NasGrant = { email: string; baseUrl: string; username: string; password: string; recommendedApiUrl: string; updatedAt: string };
+export type NasGrant = { email: string; baseUrl: string; username: string; password: string; updatedAt: string };
 
-type NasGrantRow = { email: string; base_url: string; username: string; password: string; api_base_url?: string; updated_at: string };
+type NasGrantRow = { email: string; base_url: string; username: string; password: string; updated_at: string };
 
-const rowToGrant = (row: NasGrantRow): NasGrant => ({
-  email: row.email,
-  baseUrl: row.base_url,
-  username: row.username,
-  password: row.password,
-  recommendedApiUrl: row.api_base_url ?? '',
-  updatedAt: row.updated_at,
-});
+const rowToGrant = (row: NasGrantRow): NasGrant => ({ email: row.email, baseUrl: row.base_url, username: row.username, password: row.password, updatedAt: row.updated_at });
 
-// 没执行过建表 SQL 时 Supabase 报找不到表（或找不到推荐 API 地址那一列），换成能看懂的话。
+// 没执行过建表 SQL 时 Supabase 报找不到表，换成能看懂的话。
 const grantError = (message: string) =>
-  /api_base_url/i.test(message)
-    ? new Error('Supabase 的 NAS 授权表还没有「推荐 API 地址」这一列，请先执行 supabase-schema.sql 里「推荐 API 地址」那一句')
-    : /nas_grants|schema cache|does not exist/i.test(message)
-      ? new Error('Supabase 里还没有 NAS 授权表，请先执行 supabase-schema.sql 末尾的「素材库 NAS 授权」那段')
-      : new Error(message);
+  /nas_grants|schema cache|does not exist/i.test(message) ? new Error('Supabase 里还没有 NAS 授权表，请先执行 supabase-schema.sql 末尾的「素材库 NAS 授权」那段') : new Error(message);
 
 export const loadOwnNasGrant = async (email: string, settings: CloudSettings = loadCloudSettings()) => {
   const { data, error } = await getSupabaseClient(settings).from('nas_grants').select('*').eq('email', normalizeCloudEmail(email)).maybeSingle();
@@ -460,23 +448,9 @@ export const listNasGrants = async (settings: CloudSettings = loadCloudSettings(
   return (data as NasGrantRow[]).map(rowToGrant);
 };
 
-// 不传 recommendedApiUrl 时不动这一列：已有的行保留原来的推荐地址（upsert 只改传了的列）。
-export const saveNasGrant = async (grant: Omit<NasGrant, 'updatedAt' | 'recommendedApiUrl'> & { recommendedApiUrl?: string }, settings: CloudSettings = loadCloudSettings()) => {
-  const row = {
-    email: normalizeCloudEmail(grant.email),
-    base_url: grant.baseUrl,
-    username: grant.username,
-    password: grant.password,
-    ...(grant.recommendedApiUrl === undefined ? {} : { api_base_url: grant.recommendedApiUrl }),
-    updated_at: new Date().toISOString(),
-  };
+export const saveNasGrant = async (grant: Omit<NasGrant, 'updatedAt'>, settings: CloudSettings = loadCloudSettings()) => {
+  const row = { email: normalizeCloudEmail(grant.email), base_url: grant.baseUrl, username: grant.username, password: grant.password, updated_at: new Date().toISOString() };
   const { error } = await getSupabaseClient(settings).from('nas_grants').upsert(row);
-  if (error) throw grantError(error.message);
-};
-
-// 推荐 API 地址对所有授权一样：一次写进全部行（含管理员自己那一行）。
-export const saveRecommendedApiUrl = async (recommendedApiUrl: string, settings: CloudSettings = loadCloudSettings()) => {
-  const { error } = await getSupabaseClient(settings).from('nas_grants').update({ api_base_url: recommendedApiUrl }).neq('email', '');
   if (error) throw grantError(error.message);
 };
 
@@ -485,10 +459,10 @@ export const deleteNasGrant = async (email: string, settings: CloudSettings = lo
   if (error) throw grantError(error.message);
 };
 
-// 授权管理的用户列表（函数 list_app_users，只给管理员）和备注（表 app_user_notes）。
-export type AppUser = { email: string; registeredAt: string | null; lastSignInAt: string | null; granted: boolean; grantedAt: string | null; note: string; tags: string[] };
+// 授权管理的用户列表（函数 list_app_users，只给管理员）和备注（表 app_user_notes）。apiUrl 是给这个账号推荐的 API 地址（表 api_recommendations），空表示不推荐。
+export type AppUser = { email: string; registeredAt: string | null; lastSignInAt: string | null; granted: boolean; grantedAt: string | null; note: string; tags: string[]; apiUrl: string };
 
-type AppUserRow = { email: string; registered_at: string | null; last_sign_in_at: string | null; granted: boolean; granted_at: string | null; note: string; tags: string[] | null };
+type AppUserRow = { email: string; registered_at: string | null; last_sign_in_at: string | null; granted: boolean; granted_at: string | null; note: string; tags: string[] | null; api_base_url?: string | null };
 
 const userListError = (message: string) =>
   /list_app_users|app_user_notes|schema cache|does not exist|Could not find/i.test(message)
@@ -506,6 +480,7 @@ export const listAppUsers = async (settings: CloudSettings = loadCloudSettings()
     grantedAt: row.granted_at,
     note: row.note ?? '',
     tags: row.tags ?? [],
+    apiUrl: row.api_base_url ?? '',
   }));
 };
 
@@ -513,4 +488,26 @@ export const saveAppUserNote = async (email: string, note: string, tags: string[
   const row = { email: normalizeCloudEmail(email), note: note.trim(), tags: [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))], updated_at: new Date().toISOString() };
   const { error } = await getSupabaseClient(settings).from('app_user_notes').upsert(row);
   if (error) throw userListError(error.message);
+};
+
+// 推荐 API 地址（1.14.1，表 api_recommendations）：管理员按账号填，本人登录后提示把 API 配置的接口地址换成它。
+const recommendationError = (message: string) =>
+  /api_recommendations|schema cache|does not exist|Could not find/i.test(message)
+    ? new Error('Supabase 里还没有推荐 API 地址的表，请先执行 supabase-schema.sql 里「推荐 API 地址」那段')
+    : new Error(message);
+
+// 空地址表示不再推荐，删掉这一行。
+export const saveApiRecommendation = async (email: string, apiUrl: string, settings: CloudSettings = loadCloudSettings()) => {
+  const client = getSupabaseClient(settings);
+  const target = normalizeCloudEmail(email);
+  const { error } = apiUrl
+    ? await client.from('api_recommendations').upsert({ email: target, api_base_url: apiUrl, updated_at: new Date().toISOString() })
+    : await client.from('api_recommendations').delete().eq('email', target);
+  if (error) throw recommendationError(error.message);
+};
+
+export const loadOwnApiRecommendation = async (email: string, settings: CloudSettings = loadCloudSettings()) => {
+  const { data, error } = await getSupabaseClient(settings).from('api_recommendations').select('api_base_url').eq('email', normalizeCloudEmail(email)).maybeSingle();
+  if (error) throw recommendationError(error.message);
+  return (data as { api_base_url: string } | null)?.api_base_url ?? '';
 };

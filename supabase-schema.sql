@@ -104,10 +104,6 @@ create table if not exists public.nas_grants (
   updated_at timestamptz not null default now()
 );
 
--- 推荐 API 地址（1.14.0）：管理员在授权管理里填一次，写进每个已授权账号那一行；对方登录后软件提示把 API 配置里的接口地址换成它（Key 不变）。
--- 没执行这一句时 NAS 授权照常能用，只是保存推荐地址会报错。
-alter table public.nas_grants add column if not exists api_base_url text not null default '';
-
 alter table public.nas_grants enable row level security;
 alter table public.nas_grants force row level security;
 revoke all on table public.nas_grants from anon;
@@ -166,9 +162,43 @@ to authenticated
 using (public.is_app_admin())
 with check (public.is_app_admin());
 
+-- 推荐 API 地址（1.14.1）：管理员按账号单独填（和 NAS 授权无关，没授权 NAS 的账号也能填），对方登录后软件提示把 API 配置里的接口地址换成它（Key 不变）。
+-- 本人只读得到自己那一行，只有管理员能增删改。1.14.0 曾把它放在 nas_grants.api_base_url（所有授权共用一个），已删掉。
+create table if not exists public.api_recommendations (
+  email text primary key check (email = lower(email)),
+  api_base_url text not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.nas_grants drop column if exists api_base_url;
+
+alter table public.api_recommendations enable row level security;
+alter table public.api_recommendations force row level security;
+revoke all on table public.api_recommendations from anon;
+grant select, insert, update, delete on table public.api_recommendations to authenticated;
+
+drop policy if exists api_recommendations_select on public.api_recommendations;
+drop policy if exists api_recommendations_admin_write on public.api_recommendations;
+
+create policy api_recommendations_select
+on public.api_recommendations
+for select
+to authenticated
+using (email = lower(coalesce(auth.jwt() ->> 'email', '')) or public.is_app_admin());
+
+create policy api_recommendations_admin_write
+on public.api_recommendations
+for all
+to authenticated
+using (public.is_app_admin())
+with check (public.is_app_admin());
+
 -- 注册账号在 auth.users 里，普通请求读不到；这个函数只给管理员用，列出所有账号（加上已授权但还没注册的邮箱）。
-create or replace function public.list_app_users()
-returns table (email text, registered_at timestamptz, last_sign_in_at timestamptz, granted boolean, granted_at timestamptz, note text, tags text[])
+-- 1.14.1 起多返回 api_base_url（推荐 API 地址），返回列变了要先删掉旧函数。
+drop function if exists public.list_app_users();
+
+create function public.list_app_users()
+returns table (email text, registered_at timestamptz, last_sign_in_at timestamptz, granted boolean, granted_at timestamptz, note text, tags text[], api_base_url text)
 language plpgsql
 stable
 security definer
@@ -190,11 +220,12 @@ begin
     union
     select nas_grants.email from public.nas_grants
   )
-  select e.email, u.registered_at, u.last_sign_in_at, g.email is not null, g.updated_at, coalesce(n.note, ''), coalesce(n.tags, '{}'::text[])
+  select e.email, u.registered_at, u.last_sign_in_at, g.email is not null, g.updated_at, coalesce(n.note, ''), coalesce(n.tags, '{}'::text[]), coalesce(r.api_base_url, '')
   from emails e
   left join users u on u.email = e.email
   left join public.nas_grants g on g.email = e.email
   left join public.app_user_notes n on n.email = e.email
+  left join public.api_recommendations r on r.email = e.email
   order by u.registered_at desc nulls last, e.email;
 end;
 $$;

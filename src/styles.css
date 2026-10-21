@@ -3599,17 +3599,6 @@ h2 {
   box-shadow: 0 0 0 3px var(--accent-weak);
 }
 
-.nas-grants-api {
-  display: grid;
-  gap: 6px;
-}
-
-.nas-grants-api label {
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 600;
-}
-
 .api-recommend code {
   overflow-wrap: anywhere;
   font-size: 13px;
@@ -3804,6 +3793,10 @@ h2 {
   font: inherit;
   outline: 0;
   padding: 0 10px;
+}
+
+.nas-user-edit input.is-wide {
+  flex-basis: 100%;
 }
 
 .nas-user-edit input:focus {

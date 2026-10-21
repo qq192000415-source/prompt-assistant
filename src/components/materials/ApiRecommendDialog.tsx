@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '../ui/button';
 import { loadHandledApiRecommendation, saveHandledApiRecommendation } from '../../localState';
 
-// 管理员推荐的 API 地址（1.14.0）：授权账号登录后，API 配置里有接口地址和推荐的不一样时提示一键替换，Key 和模型不变。
+// 管理员推荐的 API 地址（1.14.0 起，1.14.1 改成按账号单独设）：登录后，API 配置里有接口地址和推荐的不一样时提示一键替换，Key 和模型不变。
 // 同一个推荐地址只问一次（换了或点「暂不」都记下），管理员换了新地址才再问。
 
 const SLOT_LABELS: Record<MaterialAiSlotName, string> = { text: '文本模型', vision: '视觉模型', image: '生图模型' };

@@ -7,7 +7,7 @@ import { applyTheme, isDarkTheme, readTheme, skinOf, type ThemeMode } from './li
 import { useSkins } from './skins/useSkins';
 import { toast as pushToast } from 'sonner';
 import type { CloudSnapshot } from './cloudSync';
-import { loadOwnNasGrant } from './cloudSync';
+import { loadOwnApiRecommendation, loadOwnNasGrant } from './cloudSync';
 import {
   DOCUMENT_CATEGORY_STORAGE_KEY,
   DOCUMENT_SUBCATEGORY_STORAGE_KEY,
@@ -645,29 +645,40 @@ function App() {
   // NAS 授权（1.9.7）：登录后按授权表同步本机的 NAS 连接；连接变了就让素材库重新挂载、按新连接重读。
   // 没建授权表、网络不通时只记日志（普通用户不用管这张表）；有授权却连不上 NAS 时告诉用户。
   const [nasGrantVersion, setNasGrantVersion] = useState(0);
-  // 授权里附带的管理员推荐 API 地址（1.14.0），由 ApiRecommendDialog 决定要不要提示。
-  const [recommendedApiUrl, setRecommendedApiUrl] = useState('');
   const isNasAdmin = Boolean(cloud.cloudEmail) && cloud.cloudSettings.adminEmails.length > 0 && cloud.canManageCloudSettings;
   useEffect(() => {
     const materialsApi = window.promptAssistantDesktop?.materials;
     const email = cloud.cloudEmail;
-    setRecommendedApiUrl('');
     if (!materialsApi || !email) return;
     let alive = true;
     void loadOwnNasGrant(email).then(
-      (grant) => {
-        if (alive) setRecommendedApiUrl(grant?.recommendedApiUrl ?? '');
-        return materialsApi.applyGrant(grant && { baseUrl: grant.baseUrl, username: grant.username, password: grant.password }, isNasAdmin).then(
+      (grant) =>
+        materialsApi.applyGrant(grant && { baseUrl: grant.baseUrl, username: grant.username, password: grant.password }, isNasAdmin).then(
           (result) => alive && result.changed && setNasGrantVersion((version) => version + 1),
           (error) => alive && showToast(`自动连接管理员授权的 NAS 失败：${error instanceof Error ? error.message : error}`),
-        );
-      },
+        ),
       (error) => console.warn('读取 NAS 授权失败', error),
     );
     return () => {
       alive = false;
     };
   }, [cloud.cloudEmail, isNasAdmin]);
+
+  // 管理员给这个账号推荐的 API 地址（1.14.1，和 NAS 授权无关），由 ApiRecommendDialog 决定要不要提示。没建表、网络不通时只记日志。
+  const [recommendedApiUrl, setRecommendedApiUrl] = useState('');
+  useEffect(() => {
+    const email = cloud.cloudEmail;
+    setRecommendedApiUrl('');
+    if (!window.promptAssistantDesktop?.materials || !email) return;
+    let alive = true;
+    void loadOwnApiRecommendation(email).then(
+      (url) => alive && setRecommendedApiUrl(url),
+      (error) => console.warn('读取推荐 API 地址失败', error),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [cloud.cloudEmail]);
 
   const duplicatePrompt = (prompt: PromptItem) => {
     const now = new Date().toISOString();
