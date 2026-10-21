@@ -32,6 +32,7 @@ import {
   stampSnapshot,
 } from './librarySync';
 import type { DocumentFile, SyncRecord } from './types';
+import { getDocumentsApi } from './webDocuments';
 
 // 云同步的时机和网络读写：登录后合并、改动后防抖自动保存、冲突时先合并再写、回到窗口时拉取、文档文件补传。
 // 合并规则本身在 librarySync.ts；这里只决定什么时候做、结果交给 App。
@@ -48,7 +49,7 @@ type UseCloudSyncOptions = {
 };
 
 const AUTO_SAVE_DELAY_MS = 900;
-const documentsApi = () => window.promptAssistantDesktop?.documents;
+const documentsApi = getDocumentsApi;
 const errorMessage = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 
 export function useCloudSync({ library, syncRecords, applySnapshot, addSyncRecord, notify }: UseCloudSyncOptions) {

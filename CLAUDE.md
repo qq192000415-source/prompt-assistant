@@ -29,7 +29,7 @@ npm.cmd run release:publish                   # 打三类包 + 上传更新源 +
 改了会被打包的代码（`src/`、`electron/`、`index.html`、`package.json`）就要发新版：
 
 1. 版本号改 8 处：`package.json` 的 version、productName、build.productName、artifactName、portable.artifactName；`package-lock.json` 第 3、9 行；`index.html` 的 title。`tests/app-ui-assets.test.mjs` 会校验这些一致。`nsis.shortcutName` 固定为 `灵匣`，不带版本号：带版本号时每次升级换一个快捷方式名，旧的失效快捷方式会让任务栏图标变白。1.14.3 起软件从「提示词助手」改名「灵匣」（MuseBox），只改显示名（productName、安装包名、快捷方式、窗口标题、关于页、皮肤作者）；appId、`name`（prompt-library，决定安装目录和更新缓存目录）、数据目录 `prompt-assistant`、仓库目录名、tag 前缀 `stable-提示词助手` 都没变。升级时旧版卸载程序会保留旧名字的快捷方式（指向已删除的旧 exe），`build/installer.nsh` 的 `customInstall` 在安装时删掉它。
-2. 跑 `npm.cmd test`、`npx.cmd tsc -b`，以及所有 `.cjs` 的 `node --check`，然后 `npm.cmd run release:publish`。
+2. 跑 `npm.cmd test`、`npx.cmd tsc -b`，以及所有 `.cjs` 的 `node --check`，然后 `npm.cmd run release:publish`，再 `npm.cmd run web:publish`（网页版和桌面版同一份前端）。
    改了 `themes/` 下的皮肤（主题市场）时另外跑 `npm.cmd run themes:publish`：重新打包、上传到更新服务器的 `themes/` 并做公网校验。不改不用跑。
 3. 在发布提交上打 annotated tag `stable-提示词助手X.Y.Z`。tag 只留本地。
 4. 同步公开仓库：本地 `master` 有含旧服务器信息的完整历史，**绝不能直接推**。流程是 `git checkout public-source` → `git read-tree -u --reset master` → 扫描 IP、邮箱、域名、密钥 → 提交 → `git push origin public-source:main` → 切回 `master`。不要对 origin 用 `git fetch --prune-tags`，远端没有 tag，会把本地 stable tag 全删掉。
@@ -55,6 +55,8 @@ npm.cmd run release:publish                   # 打三类包 + 上传更新源 +
 - 防抖保存的触发依赖故意不含 `syncRecords`。每次保存成功都会追加一条同步记录，如果算进依赖，就会无限保存。
 - 合并规则在 `mergeCloudSnapshot`：同 id 以较新的 `updatedAt` 为准；删除记录比条目新就不复活；删除记录两边取并集（1.8.4 起，以前谁新整份用谁的，并发删除会互相撤销）；恢复、移除、清空删除记录只给记录打 `hidden`，不真删，否则另一台设备的副本会把记录和提示词带回来；提示词和文档的分类各自过滤。
 - 文档分类存在 `export_settings.documentLibrary` 里，没有给表加列，避免没执行 SQL 的部署同步失败。
+
+**网页版（第一期：提示词库 + 文档库）。** 同一份 `dist/` 既给 Electron 用也能当静态网站部署（`vite.config.ts` 是 `base: './'`）。界面里调桌面功能的地方本来都判断了 `window.promptAssistantDesktop`，浏览器里素材、画布显示「需要在桌面版里使用」，设置里的桌面选项显示「桌面版运行时可用」。文档文件统一从 `src/webDocuments.ts` 的 `getDocumentsApi()` 拿：桌面版是主进程的 `documents`，网页版是同一接口的浏览器实现，文件按 sha256 存 IndexedDB `musebox-documents`，云端上传下载照旧走 `useCloudSync`；浏览器做不到的（文件进剪贴板、拖出、在文件夹显示）改成下载，`isWebDocuments` 控制按钮文字和隐藏项。只有 PDF、txt/md、常见图片在新标签页打开，HTML/SVG 一律下载，不在本站点执行。桌面版「设置 › 关于与更新」的网页版入口读 `.env` 的 `VITE_WEB_URL`，没配就不显示。部署（1.15.0）：飞牛 NAS 上一个团队文件夹 + Docker Compose 跑 Caddy（`deploy/web-nas/docker-compose.yml`，同目录 NAS 上的 `.env` 写 `CERT_DOMAIN`，真实域名不进仓库），复用飞牛自动续签的证书（`/usr/trim/var/trim_connect/ssls/<域名>/<签发时间>/`，续签后数字目录会变，容器启动和每天挑最新的）。网页文件在该文件夹的 `site/`，`npm.cmd run web:publish` 打包后经 WebDAV（专用账号只对这个文件夹有读写，`.env` 的 `WEB_DEPLOY_DAV_*`）先传资源、最后换 `index.html`、删旧资源，再从公网核对 `index.html`。改了会被打包的代码发版时，`release:publish` 之后也跑一次 `web:publish`。改 compose 要在飞牛 Docker 里先停止项目再「构建」（运行中只能看不能改，「构建」读的是磁盘上的文件，不是编辑器里没保存的内容）。
 
 **文档文件。**
 - 本机存储由主进程 `electron/attachmentStore.cjs` 负责，路径是 `<userData>/attachments/<sha256>`，单文件上限 50MB。

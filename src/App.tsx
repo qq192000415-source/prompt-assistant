@@ -88,6 +88,7 @@ import { TopMenuBar } from './components/TopMenuBar';
 import { MaterialLibraryView } from './components/materials/MaterialLibraryView';
 import { ApiRecommendDialog } from './components/materials/ApiRecommendDialog';
 import { useNasStatus } from './materials/useNasStatus';
+import { getDocumentsApi, isWebDocuments } from './webDocuments';
 
 const emptyDraft: PromptDraft = {
   title: '',
@@ -957,7 +958,7 @@ function App() {
     }
   };
 
-  const documentsApi = window.promptAssistantDesktop?.documents;
+  const documentsApi = getDocumentsApi();
 
   const addDocuments = async (category?: string) => {
     if (!documentsApi) {
@@ -1046,7 +1047,7 @@ function App() {
       const now = new Date().toISOString();
       markLibraryChanged();
       setPrompts((items) => items.map((entry) => (entry.id === item.id ? { ...entry, lastUsedAt: now } : entry)));
-      showToast('文件已复制，到微信、QQ、邮件或文件夹里粘贴即可发送');
+      showToast(isWebDocuments ? '已下载。网页版不能把文件放进剪贴板，到微信、QQ、邮件里选这个文件发送' : '文件已复制，到微信、QQ、邮件或文件夹里粘贴即可发送');
     } catch (error) {
       showToast(error instanceof Error ? error.message : '复制文件失败');
     }

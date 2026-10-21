@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
-import { Copy, ExternalLink, FilePlus } from 'lucide-react';
+import { Copy, Download, ExternalLink, FilePlus } from 'lucide-react';
 import { Button } from './ui/button';
 import { documentKind, documentKindCounts, filterDocumentsByKind, sortDocuments, type DocumentKind, type DocumentSort } from '../documentBrowser';
 import { loadDocumentPaneWidth, loadDocumentSort, saveDocumentPaneWidth, saveDocumentSort } from '../localState';
 import { formatFileSize } from '../promptUtils';
 import type { PromptItem } from '../types';
 import { useDetailResize } from '../useDetailResize';
+import { getDocumentsApi, isWebDocuments } from '../webDocuments';
 
 type DocumentBrowserProps = {
   title: string;
@@ -34,7 +35,7 @@ const shortDate = (iso: string | undefined) => {
 // 文档库的文件夹视图：中间文件列表，右边预览和操作。和提示词库的「整条展开」卡片流区分开：
 // 文档要做的是找到文件、复制文件或拖出去，所以一屏放下尽量多的文件，正文只在右边预览。
 export function DocumentBrowser({ title, query, documents, selectedId, onSelect, onNew, onCopyFile, onOpenFile, renderPane }: DocumentBrowserProps) {
-  const api = window.promptAssistantDesktop?.documents;
+  const api = getDocumentsApi();
   const [sort, setSort] = useState<DocumentSort>(loadDocumentSort);
   const [kind, setKind] = useState<DocumentKind | 'all'>('all');
   const { width: paneWidth, resizerProps } = useDetailResize(loadDocumentPaneWidth, saveDocumentPaneWidth);
@@ -153,9 +154,9 @@ export function DocumentBrowser({ title, query, documents, selectedId, onSelect,
                   role="option"
                   aria-selected={isSelected}
                   tabIndex={isSelected ? 0 : -1}
-                  className={`document-row ${isSelected ? 'is-selected' : ''} ${local ? 'is-draggable' : ''}`}
-                  draggable={local}
-                  title={local ? `${file?.name}：拖到微信、QQ、邮件或文件夹里即可发送` : `${file?.name}：文件还在云端，选中后会自动下载，下载好就能拖出去`}
+                  className={`document-row ${isSelected ? 'is-selected' : ''} ${local && !isWebDocuments ? 'is-draggable' : ''}`}
+                  draggable={local && !isWebDocuments}
+                  title={isWebDocuments ? file?.name : local ? `${file?.name}：拖到微信、QQ、邮件或文件夹里即可发送` : `${file?.name}：文件还在云端，选中后会自动下载，下载好就能拖出去`}
                   onClick={() => onSelect(item.id)}
                   onDragStart={(event) => {
                     event.preventDefault();
@@ -175,14 +176,14 @@ export function DocumentBrowser({ title, query, documents, selectedId, onSelect,
                     <Button
                       className="icon-button"
                       type="button"
-                      aria-label={`复制文件 ${item.title}`}
-                      title="复制文件"
+                      aria-label={`${isWebDocuments ? '下载文件' : '复制文件'} ${item.title}`}
+                      title={isWebDocuments ? '下载文件' : '复制文件'}
                       onClick={(event) => {
                         event.stopPropagation();
                         void onCopyFile(item);
                       }}
                     >
-                      <Copy size={15} />
+                      {isWebDocuments ? <Download size={15} /> : <Copy size={15} />}
                     </Button>
                     <Button
                       className="icon-button"
@@ -217,7 +218,7 @@ export function DocumentBrowser({ title, query, documents, selectedId, onSelect,
           )}
         </div>
       </div>
-      <p className="document-browser-hint">选中一行后按 ↑↓ 换文件，Enter 复制文件；本机已有的文件整行都能拖出去发送。</p>
+      <p className="document-browser-hint">{isWebDocuments ? '选中一行后按 ↑↓ 换文件，Enter 下载文件。' : '选中一行后按 ↑↓ 换文件，Enter 复制文件；本机已有的文件整行都能拖出去发送。'}</p>
     </section>
   );
 }

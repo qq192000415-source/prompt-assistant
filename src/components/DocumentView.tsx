@@ -8,6 +8,7 @@ import type { DocumentFile, PromptItem } from '../types';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
+import { getDocumentsApi, isWebDocuments } from '../webDocuments';
 
 function MarkdownView({ text }: { text: string }) {
   return (
@@ -204,7 +205,7 @@ export function DocumentView({
   onReady,
 }: DocumentViewProps) {
   const file = item.file;
-  const api = window.promptAssistantDesktop?.documents;
+  const api = getDocumentsApi();
   const [status, setStatus] = useState<'checking' | 'ready' | 'missing'>('checking');
   const [problem, setProblem] = useState('');
   const [text, setText] = useState<string | null>(null);
@@ -261,9 +262,9 @@ export function DocumentView({
     <article className={`full-prompt-card document-card ${variant === 'pane' ? 'document-pane' : ''}`}>
       <header className="full-prompt-header">
         <div
-          className={`full-prompt-title document-title ${ready ? 'is-draggable' : ''}`}
-          draggable={ready}
-          title={ready ? '拖到微信、QQ、邮件或文件夹里即可发送' : undefined}
+          className={`full-prompt-title document-title ${ready && !isWebDocuments ? 'is-draggable' : ''}`}
+          draggable={ready && !isWebDocuments}
+          title={ready && !isWebDocuments ? '拖到微信、QQ、邮件或文件夹里即可发送' : undefined}
           onDragStart={(event) => {
             event.preventDefault();
             api?.startDrag(file.sha256, file.name);
@@ -279,8 +280,8 @@ export function DocumentView({
         </div>
         <div className="preview-actions">
           <Button className="button primary compact" type="button" disabled={!ready} onClick={() => void onCopyFile(item)}>
-            <Copy size={16} />
-            复制文件
+            {isWebDocuments ? <Download size={16} /> : <Copy size={16} />}
+            {isWebDocuments ? '下载文件' : '复制文件'}
           </Button>
           {isText && (
             <Button
@@ -308,28 +309,33 @@ export function DocumentView({
             <ExternalLink size={16} />
             打开
           </Button>
-          <Button
-            className="icon-button"
-            type="button"
-            title="另存为"
-            disabled={!ready}
-            onClick={() =>
-              void runFileAction(async () => {
-                if (await api!.saveAs(file.sha256, file.name)) pushToast('已另存');
-              }, '另存失败')
-            }
-          >
-            <Download size={16} />
-          </Button>
-          <Button
-            className="icon-button"
-            type="button"
-            title="在文件夹中显示"
-            disabled={!ready}
-            onClick={() => void runFileAction(() => api!.showInFolder(file.sha256, file.name), '打开文件夹失败')}
-          >
-            <FolderOpen size={16} />
-          </Button>
+          {/* 网页版的「另存为」「在文件夹中显示」都只能是下载，和「下载文件」重复，不显示。 */}
+          {!isWebDocuments && (
+            <Button
+              className="icon-button"
+              type="button"
+              title="另存为"
+              disabled={!ready}
+              onClick={() =>
+                void runFileAction(async () => {
+                  if (await api!.saveAs(file.sha256, file.name)) pushToast('已另存');
+                }, '另存失败')
+              }
+            >
+              <Download size={16} />
+            </Button>
+          )}
+          {!isWebDocuments && (
+            <Button
+              className="icon-button"
+              type="button"
+              title="在文件夹中显示"
+              disabled={!ready}
+              onClick={() => void runFileAction(() => api!.showInFolder(file.sha256, file.name), '打开文件夹失败')}
+            >
+              <FolderOpen size={16} />
+            </Button>
+          )}
           <Button
             className={`icon-button ${item.favorite ? 'is-active' : ''}`}
             type="button"

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, Cloud, Download, FolderOpen, LogIn, LogOut, RotateCcw } from 'lucide-react';
+import { Check, Cloud, Copy, Download, ExternalLink, FolderOpen, LogIn, LogOut, RotateCcw } from 'lucide-react';
 import { Button } from './ui/button';
 import { Separator } from './ui/separator';
 import { MaterialSettingsSection } from './materials/NasSettings';
@@ -9,9 +9,12 @@ import type { SkinsController } from '../skins/useSkins';
 import type { CloudSettings } from '../cloudSync';
 import type { ExportSettings } from '../librarySync';
 import { type DesktopSettingsInput, normalizeDesktopSettings } from '../desktopSettings';
-import { formatDate } from '../promptUtils';
+import { copyToClipboard, formatDate } from '../promptUtils';
 import type { SyncRecord } from '../types';
 import { APP_VERSION } from '../appMeta';
+
+// 网页版地址（.env 的 VITE_WEB_URL，构建时写进去）；没配就不显示网页版入口。
+const WEB_URL = import.meta.env.VITE_WEB_URL?.trim() ?? '';
 
 const SECTIONS = [
   { key: 'general', label: '通用' },
@@ -503,6 +506,30 @@ export function SettingsPage({
                 </p>
               )}
             </section>
+
+            {WEB_URL && desktopAvailable && (
+              <section className="settings-section" aria-labelledby="web-version-title">
+                <div className="settings-section-title">
+                  <div>
+                    <h3 id="web-version-title">网页版</h3>
+                    <p>浏览器里打开就能用提示词库和文档库，登录同一个账号自动同步。素材库和画布只在桌面版里。</p>
+                  </div>
+                </div>
+                <p className="update-download-dir">
+                  <span>
+                    地址：<code>{WEB_URL}</code>
+                  </span>
+                  <Button className="button ghost compact" type="button" onClick={() => void copyToClipboard(WEB_URL).then(() => notify('网页版地址已复制，发给别人用浏览器打开即可'))}>
+                    <Copy size={14} />
+                    复制链接
+                  </Button>
+                  <Button className="button ghost compact" type="button" onClick={() => window.open(WEB_URL, '_blank')}>
+                    <ExternalLink size={14} />
+                    在浏览器打开
+                  </Button>
+                </p>
+              </section>
+            )}
 
             <section className="settings-section about-section" id="software-about-panel" aria-labelledby="software-about-title">
               <div>

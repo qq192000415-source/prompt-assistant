@@ -1,0 +1,41 @@
+# 灵匣网页版：飞牛 fnOS 上的 Caddy 静态站点，复用飞牛自动续签的证书。
+# 放在 NAS 团队文件夹（网页版专用）根目录，同目录的 .env 写 CERT_DOMAIN=<证书域名>（真实域名不进仓库）；
+# 改了要在飞牛 Docker 的 Compose 里重新「构建」。网页文件在 ./site，由 npm.cmd run web:publish 经 WebDAV 上传。
+services:
+  web:
+    image: caddy:2.10-alpine
+    container_name: lingxia-web
+    restart: unless-stopped
+    ports:
+      - "5020:5020"
+    volumes:
+      - ./site:/srv:ro
+      # 飞牛续签后中间那级数字目录会变，启动时和每天挑最新的一份拷到 /certs
+      - /usr/trim/var/trim_connect/ssls/${CERT_DOMAIN:?在同目录 .env 里写 CERT_DOMAIN}:/fnos-certs:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        cat > /etc/caddy/Caddyfile <<'EOF'
+        {
+            auto_https disable_redirects
+        }
+        :5020 {
+            tls /certs/cert.crt /certs/cert.key
+            root * /srv
+            encode zstd gzip
+            header /assets/* Cache-Control "public, max-age=31536000, immutable"
+            header / Cache-Control "no-cache"
+            header /index.html Cache-Control "no-cache"
+            try_files {path} /index.html
+            file_server
+        }
+        EOF
+        pick() {
+          dir=$$(ls -1d /fnos-certs/*/ | sort | tail -n 1)
+          mkdir -p /certs
+          cp "$${dir}fullchain.crt" /certs/cert.crt
+          cp "$${dir}"*.key /certs/cert.key
+        }
+        pick
+        ( while sleep 86400; do pick && caddy reload --config /etc/caddy/Caddyfile --force; done ) &
+        exec caddy run --config /etc/caddy/Caddyfile
