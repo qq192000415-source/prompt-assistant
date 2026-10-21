@@ -17,6 +17,7 @@ import {
 import { copyToClipboard } from '../../promptUtils';
 import { useDetailResize } from '../../useDetailResize';
 import { canvas, getCanvasState, isActive, isVideoModel, savedInHistory, useCanvasState, visibleTasks, type CanvasReference } from '../../materials/canvasStore';
+import { isGeminiImageModel } from '../../materials/library';
 import {
   canvasAspectRatioOptions,
   extractPromptKeywords,
@@ -588,6 +589,11 @@ export function MaterialCanvas({ controller, nas, onOpenSettings }: MaterialCanv
           {draft.sizeMode === 'ratio' && (
             <>
               <Segmented label="分辨率" value={draft.baseResolution} options={RESOLUTIONS} onChange={(baseResolution) => canvas.setDraft({ baseResolution })} />
+              {/* 2026-10-21 实测：GPT 生图经中转（ChatGPT 订阅通道）上游丢掉 size，固定约 160 万像素；Gemini 生图的 2K/4K 是真的。 */}
+              {/gpt-image/i.test(model ?? '') && draft.baseResolution !== '1k' && (
+                <p className="nas-form-note">GPT 生图模型经中转出图时固定约 160 万像素，选 2K、4K 不会变大。要大图请换 Gemini 生图模型（如 gemini-3.1-flash-image）。</p>
+              )}
+              {isGeminiImageModel(model ?? '') && draft.aspectRatio === '9:21' && <p className="nas-form-note">Gemini 生图不支持 9:21，请换一个比例。</p>}
               <div className="canvas-ratios" role="radiogroup" aria-label="比例">
                 {canvasAspectRatioOptions.map((option) => (
                   <button

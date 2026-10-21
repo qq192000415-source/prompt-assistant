@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { safeStorage } from 'electron';
+import { isGeminiImageModel } from '../../src/materials/library.ts';
 import type { AiProvider, AiRuntime, AiSlot } from './ai.ts';
 import { normalizeAiBaseUrlForProvider } from './suyan/aiBaseUrl.ts';
 import { aiFeatureActionMeta, buildAiActionInstructions, normalizeAiRuleSelectionIds, type AiFeatureAction } from './suyan/aiTypes.ts';
@@ -187,7 +188,8 @@ export async function listModels(userDataDir: string, name: SlotName, input: Slo
     .map((model) => ({
       id: model.id,
       vision: model.capabilities.includes('vision'),
-      generation: model.capabilities.includes('image-generation') || model.capabilities.includes('video-generation'),
+      // SuYan 按名称把 gemini-*-image 当成视觉模型，它其实能生图（走 canvas.ts 的 Gemini 通道）。
+      generation: model.capabilities.includes('image-generation') || model.capabilities.includes('video-generation') || isGeminiImageModel(model.id),
     }));
 }
 

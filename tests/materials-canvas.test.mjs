@@ -239,6 +239,51 @@ test('模型给的图横竖不对、或宽高比偏差超过 8% 时给出提示�
   assert.equal(sizeMismatchWarning({ size: '1024x1024' }, pngOf(1050, 1000)), '');
   assert.equal(sizeMismatchWarning({ size: 'auto' }, pngOf(1024, 1536)), '');
   assert.equal(sizeMismatchWarning({ size: '1312x736' }, Buffer.from('不是图片')), '');
+  // 2026-10-21 实测：GPT 生图经中转选 4K 也只给约 157 万像素，像素不到选的一半就提示；网关按自己档位多给或略少不算
+  assert.match(sizeMismatchWarning({ size: '3328x4992', ratio: '2:3' }, pngOf(1024, 1536)), /分辨率不够：选的是 3328×4992（约 1661 万像素），模型给的是 1024×1536（约 157 万像素）/);
+  assert.equal(sizeMismatchWarning({ size: '832x1248', ratio: '2:3' }, pngOf(1024, 1536)), '');
+  assert.equal(sizeMismatchWarning({ size: '1664x2496', ratio: '2:3' }, pngOf(1376, 2064)), '');
+});
+
+test('Gemini 生图走 /chat/completions：image_config 带比例和 1K/2K/4K，参考图按顺序带上，从 message.images 取图；不支持的比例不发请求', async () => {
+  const requests = [];
+  let reply = { choices: [{ message: { content: '', images: [{ type: 'image_url', image_url: { url: pngDataUrl } }] } }] };
+  const server = http.createServer((request, response) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      requests.push({ url: request.url, body: JSON.parse(Buffer.concat(chunks).toString('utf8')) });
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify(reply));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const runtime = runtimeWith({ provider: 'openai-compatible', baseUrl: `http://127.0.0.1:${server.address().port}/v1`, apiKey: 'k', model: 'gemini-3.1-flash-image' }, '保持写实');
+  try {
+    const result = await generateMedia(runtime, { prompt: '窗边的女孩', negativePrompt: '模糊', size: '6272x2688', ratio: '21:9', n: 1, referenceImageDataUrls: [pngDataUrl, pngDataUrl.replace('image/png', 'image/x-png')] });
+    assert.equal(result.images[0].dataUrl, pngDataUrl);
+    assert.equal(result.model, 'gemini-3.1-flash-image');
+    const [first] = requests;
+    assert.equal(first.url, '/v1/chat/completions');
+    assert.deepEqual(first.body.image_config, { aspect_ratio: '21:9', image_size: '4K' });
+    const [text, ...images] = first.body.messages[0].content;
+    assert.match(text.text, /窗边的女孩[\s\S]*保持写实[\s\S]*21:9 横版[\s\S]*模糊/);
+    assert.deepEqual(images.map((part) => part.image_url.url.split(';')[0]), ['data:image/png', 'data:image/x-png']);
+
+    await generateMedia(runtime, { prompt: '猫', size: '736x1312', ratio: '9:16' });
+    await generateMedia(runtime, { prompt: '猫', size: '2624x1472', ratio: '16:9' });
+    await generateMedia(runtime, { prompt: '猫', size: 'auto' });
+    assert.deepEqual(requests.slice(1).map((request) => request.body.image_config), [{ aspect_ratio: '9:16', image_size: '1K' }, { aspect_ratio: '16:9', image_size: '2K' }, undefined]);
+
+    await assert.rejects(generateMedia(runtime, { prompt: '猫', size: '672x1568', ratio: '9:21' }), /Gemini 生图不支持 9:21 这个比例/);
+    assert.equal(requests.length, 4);
+
+    // 模型拒绝出图时只回文字，把原因带给用户
+    reply = { choices: [{ message: { content: '这个内容不能生成。' } }] };
+    await assert.rejects(generateMedia(runtime, { prompt: '猫', size: '1024x1024', ratio: '1:1' }), /模型没有返回图片：这个内容不能生成。/);
+  } finally {
+    server.close();
+  }
 });
 
 test('全量恢复：从历史参数反推尺寸（比例+分辨率 / 自定义 / 自动）、质量、格式、张数、透明背景，参考图换成当时的', async () => {

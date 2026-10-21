@@ -287,3 +287,6 @@ export function categoryCounts(groups: readonly MaterialGroup[]): Array<{ name: 
     ...(uncategorized ? [{ name: UNCATEGORIZED, count: uncategorized }] : []),
   ];
 }
+
+// Gemini 生图模型（Nano Banana）：主进程按它走 /chat/completions 的 Gemini 通道，界面按它显示分辨率和比例提示。
+export const isGeminiImageModel = (model: string) => /gemini.*image|nano-?banana/i.test(model);

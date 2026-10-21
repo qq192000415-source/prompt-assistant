@@ -39,7 +39,7 @@ type Deps = {
 };
 
 // 重试也不会成功的错误：参数、Key、权限、内容审核、接口不支持。其余（超时、断网、限流、5xx、返回空）都算临时失败。
-const PERMANENT = /状态码 (400|401|402|403|404|405|413|415|422)\b|AI_SETTINGS_INCOMPLETE|AI_PROMPT_EMPTY|AI_BASE_URL_INVALID|AI_REFERENCE_|AI_VIDEO_(PROVIDER|MODEL)_UNSUPPORTED|AI_VIDEO_REFERENCE_LIMIT|AI_VIDEO_TASK_FAILED|还没有设置生图模型|先写正向提示词/;
+const PERMANENT = /状态码 (400|401|402|403|404|405|413|415|422)\b|AI_SETTINGS_INCOMPLETE|AI_PROMPT_EMPTY|AI_BASE_URL_INVALID|AI_REFERENCE_|AI_VIDEO_(PROVIDER|MODEL)_UNSUPPORTED|AI_VIDEO_REFERENCE_LIMIT|AI_VIDEO_TASK_FAILED|还没有设置生图模型|先写正向提示词|生图不支持/;
 
 export function isRetryable(error: unknown) {
   const code = typeof (error as { code?: unknown })?.code === 'string' ? (error as { code: string }).code : '';
