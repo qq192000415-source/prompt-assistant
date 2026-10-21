@@ -17,6 +17,8 @@ task_plan.md
 findings.md
 progress.md
 .playwright-mcp
+# 生图插件（cc-cockpit）出的图
+output/
 # 本机开发工具（Impeccable 技能和钩子，含可执行文件）
 .claude/
 

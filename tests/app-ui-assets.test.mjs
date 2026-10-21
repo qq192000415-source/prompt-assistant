@@ -374,19 +374,26 @@ test('分类列表按内容高度紧凑排列', () => {
   assert.match(sidebarBlock, /padding:\s*14px 16px;/);
 });
 
-test('桌面、托盘、悬浮窗图标资源使用新的 PNG 图案', () => {
+// 1.15.1 换成「灵匣」图标：48px 及以下（ICO 里的小尺寸、悬浮窗、网页 favicon）用简化版，更大的用完整版。
+test('桌面、托盘、悬浮窗、网页图标资源', () => {
   const iconPng = readBytes('assets', 'icon.png');
+  const iconSmall = readBytes('assets', 'icon-small.png');
   const iconIco = readBytes('assets', 'icon.ico');
+  const favicon = readBytes('public', 'favicon.png');
   const floatingHtml = readText('electron', 'floating.html');
   const packageJson = JSON.parse(readText('package.json'));
+  const pngSize = (png) => [png.readUInt32BE(16), png.readUInt32BE(20)];
 
-  assert.deepEqual([...iconPng.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
-  assert.equal(iconPng.readUInt32BE(16), 906);
-  assert.equal(iconPng.readUInt32BE(20), 976);
+  for (const png of [iconPng, iconSmall, favicon]) assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+  assert.deepEqual(pngSize(iconPng), [512, 512]);
+  assert.deepEqual(pngSize(iconSmall), [128, 128]);
   assert.equal(iconIco.readUInt16LE(0), 0);
   assert.equal(iconIco.readUInt16LE(2), 1);
-  assert.ok(iconIco.readUInt16LE(4) >= 6);
-  assert.match(floatingHtml, /<img src="\.\.\/assets\/icon\.png" alt="" \/>/);
+  // ICO 目录项的宽度字节，256 记作 0；Windows 任务栏、资源管理器各取所需的尺寸
+  const icoSizes = Array.from({ length: iconIco.readUInt16LE(4) }, (_, index) => iconIco.readUInt8(6 + index * 16) || 256);
+  assert.deepEqual(icoSizes, [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]);
+  assert.match(floatingHtml, /<img src="\.\.\/assets\/icon-small\.png" alt="" \/>/);
+  assert.match(readText('index.html'), /<link rel="icon" type="image\/png" href="\.\/favicon\.png" \/>/);
   assert.match(floatingHtml, /border:\s*0;/);
   assert.match(floatingHtml, /background:\s*transparent;/);
   assert.match(floatingHtml, /box-shadow:\s*none;/);
