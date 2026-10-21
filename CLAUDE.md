@@ -28,7 +28,7 @@ npm.cmd run release:publish                   # 打三类包 + 上传更新源 +
 
 改了会被打包的代码（`src/`、`electron/`、`index.html`、`package.json`）就要发新版：
 
-1. 版本号改 8 处：`package.json` 的 version、productName、build.productName、artifactName、portable.artifactName；`package-lock.json` 第 3、9 行；`index.html` 的 title。`tests/app-ui-assets.test.mjs` 会校验这些一致。`nsis.shortcutName` 固定为 `提示词助手`，不带版本号：带版本号时每次升级换一个快捷方式名，旧的失效快捷方式会让任务栏图标变白。
+1. 版本号改 8 处：`package.json` 的 version、productName、build.productName、artifactName、portable.artifactName；`package-lock.json` 第 3、9 行；`index.html` 的 title。`tests/app-ui-assets.test.mjs` 会校验这些一致。`nsis.shortcutName` 固定为 `灵匣`，不带版本号：带版本号时每次升级换一个快捷方式名，旧的失效快捷方式会让任务栏图标变白。1.14.3 起软件从「提示词助手」改名「灵匣」（MuseBox），只改显示名（productName、安装包名、快捷方式、窗口标题、关于页、皮肤作者）；appId、`name`（prompt-library，决定安装目录和更新缓存目录）、数据目录 `prompt-assistant`、仓库目录名、tag 前缀 `stable-提示词助手` 都没变。升级时旧版卸载程序会保留旧名字的快捷方式（指向已删除的旧 exe），`build/installer.nsh` 的 `customInstall` 在安装时删掉它。
 2. 跑 `npm.cmd test`、`npx.cmd tsc -b`，以及所有 `.cjs` 的 `node --check`，然后 `npm.cmd run release:publish`。
    改了 `themes/` 下的皮肤（主题市场）时另外跑 `npm.cmd run themes:publish`：重新打包、上传到更新服务器的 `themes/` 并做公网校验。不改不用跑。
 3. 在发布提交上打 annotated tag `stable-提示词助手X.Y.Z`。tag 只留本地。

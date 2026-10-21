@@ -5,33 +5,33 @@
       "id": "forest",
       "name": "森林夜",
       "note": "松林萤火、墨绿",
-      "author": "提示词助手",
+      "author": "灵匣",
       "version": "1.0.0",
       "base": "dark",
-      "size": 72419,
-      "sha256": "86c0ee95374da78e6d6a47c8ee895f5f9c27883963d148ec90280759157da6b4",
+      "size": 72412,
+      "sha256": "729d82b510c42d857a0bd0855c23df24a6ff901a7407c556441a34a06eff0378",
       "preview": "dist/forest.webp"
     },
     {
       "id": "mono",
       "name": "极简黑白",
       "note": "没有壁纸，只留黑白灰",
-      "author": "提示词助手",
+      "author": "灵匣",
       "version": "1.0.0",
       "base": "light",
-      "size": 896,
-      "sha256": "974e5573c130ea569db6c91ae145140785d53c51d23cb271a1694fa304703326",
+      "size": 886,
+      "sha256": "d954c29d4f1b043d618d2cd637d21961001536f5e69101d5ba4c55f3995a7212",
       "preview": "dist/mono.webp"
     },
     {
       "id": "ocean",
       "name": "海盐",
       "note": "晴空海岸、清透蓝绿",
-      "author": "提示词助手",
+      "author": "灵匣",
       "version": "1.0.0",
       "base": "light",
-      "size": 68028,
-      "sha256": "3d21f2a5eeb6bfcfdfb4fedbd8a2544dcadf043ff67a71b86d23de65b7114cd9",
+      "size": 68016,
+      "sha256": "27ea28cd7f7e93e42a90a0414a28c117b80b06b7e8bd9c6e30b31a1681ad2b3d",
       "preview": "dist/ocean.webp"
     }
   ]

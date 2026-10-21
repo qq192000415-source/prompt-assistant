@@ -1,10 +1,10 @@
-# 提示词助手
+# 灵匣（MuseBox）
 
 Windows 桌面工具，用来管理、分类、编辑、复制、导入导出提示词，也能把 Word、PDF、记事本、Markdown 等文件放进文档库，一键复制文件发给别人。数据默认存在本机。需要多设备同步时，连接你自己的 Supabase。需要安装版自动更新时，把安装包放到你自己的 HTTPS 目录。
 
 本仓库是源代码。别人可以克隆后换成自己的服务器，再继续改功能和发自己的版本。
 
-![提示词助手主界面](docs/app-home.jpg)
+![灵匣主界面](docs/app-home.jpg)
 
 ## 环境
 
@@ -57,8 +57,8 @@ npm run package:all
 
 ```text
 release/latest.yml
-release/提示词助手安装版X.Y.Z.exe
-release/提示词助手安装版X.Y.Z.exe.blockmap
+release/灵匣安装版X.Y.Z.exe
+release/灵匣安装版X.Y.Z.exe.blockmap
 ```
 
 5. 以后发新版本时，先提高 `package.json` 里的 `version`，以及界面标题和安装包文件名里的同一版本号，再重新打包并替换服务器上的这三个文件。先传安装包和 blockmap，最后传 `latest.yml`。目录里只保留当前版本的安装包和 blockmap。

@@ -261,7 +261,7 @@ export function register({ ipcMain, userDataDir, updateBaseUrl, getWindow }: Reg
     const stamp = new Date().toLocaleString('sv-SE').replace(/[: ]/g, '-');
     const options: Electron.SaveDialogOptions = {
       title: '导出分享包',
-      defaultPath: path.join(typeof defaultDir === 'string' ? defaultDir : '', `提示词助手-素材-${stamp}.zip`),
+      defaultPath: path.join(typeof defaultDir === 'string' ? defaultDir : '', `灵匣-素材-${stamp}.zip`),
       filters: [{ name: '分享包', extensions: ['zip'] }],
     };
     const result = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options);

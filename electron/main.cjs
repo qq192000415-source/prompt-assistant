@@ -11,7 +11,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { version: appVersion } = require('../package.json');
 
-const APP_VERSION_LABEL = `提示词助手${appVersion}`;
+const APP_VERSION_LABEL = `灵匣${appVersion}`;
 
 // 数据目录固定为不带版本号的 prompt-assistant，升级不再换目录；首次启动从最近的旧版本目录搬数据。
 // PROMPT_ASSISTANT_USER_DATA 只给开发和测试用，避免测试数据写进真实目录。
@@ -993,7 +993,7 @@ function removeDeadStartMenuShortcuts() {
   for (const folder of folders) {
     let names = [];
     try {
-      names = fs.readdirSync(folder).filter((name) => /^提示词助手.*\.lnk$/i.test(name));
+      names = fs.readdirSync(folder).filter((name) => /^(提示词助手|灵匣).*\.lnk$/i.test(name));
     } catch {
       continue;
     }

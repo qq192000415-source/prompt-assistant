@@ -2,7 +2,7 @@
   "id": "pokemon",
   "name": "宝可梦",
   "note": "精灵球红、晴空草原",
-  "author": "提示词助手",
+  "author": "灵匣",
   "version": "1.0.0",
   "base": "light",
   "tokens": {

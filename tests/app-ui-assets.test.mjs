@@ -21,21 +21,24 @@ test('应用版本、窗口标题和打包文件名保持一致', () => {
   const packageJson = JSON.parse(readText('package.json'));
   const version = packageJson.version;
 
-  assert.equal(packageJson.productName, `提示词助手${version}`);
-  assert.equal(packageJson.build.productName, `提示词助手${version}`);
-  assert.equal(packageJson.build.artifactName, `提示词助手安装版${version}.\${ext}`);
-  assert.equal(packageJson.build.portable.artifactName, `提示词助手便携版${version}.\${ext}`);
+  assert.equal(packageJson.productName, `灵匣${version}`);
+  assert.equal(packageJson.build.productName, `灵匣${version}`);
+  assert.equal(packageJson.build.artifactName, `灵匣安装版${version}.\${ext}`);
+  assert.equal(packageJson.build.portable.artifactName, `灵匣便携版${version}.\${ext}`);
   // 快捷方式名不带版本号：升级时覆盖同一个快捷方式，不留下指向旧 exe 的失效快捷方式（会让任务栏图标变白）。
-  assert.equal(packageJson.build.nsis.shortcutName, '提示词助手');
+  assert.equal(packageJson.build.nsis.shortcutName, '灵匣');
+  // 1.14.3 从「提示词助手」改名：安装时删掉旧名字的快捷方式（升级时旧版卸载程序会保留它，指向已删除的旧 exe）。
+  assert.equal(packageJson.build.nsis.include, 'build/installer.nsh');
+  assert.match(readText('build', 'installer.nsh'), /!macro customInstall[\s\S]*Delete "\$DESKTOP\\提示词助手\.lnk"[\s\S]*Delete "\$SMPROGRAMS\\提示词助手\.lnk"/);
   assert.equal(JSON.parse(readText('package-lock.json')).version, version);
 
   assert.match(readText('src', 'appMeta.ts'), /packageInfo\.version/);
   assert.match(readText('electron', 'main.cjs'), /const \{ version: appVersion \} = require\('\.\.\/package\.json'\);/);
-  assert.match(readText('index.html'), new RegExp(`<title>提示词助手${escapeRegExp(version)}</title>`));
+  assert.match(readText('index.html'), new RegExp(`<title>灵匣${escapeRegExp(version)}</title>`));
   assert.match(readText('scripts', 'clean-release.cjs'), /const \{ version: appVersion \} = require\('\.\.\/package\.json'\);/);
-  assert.match(readText('scripts', 'clean-release.cjs'), /提示词助手安装版\$\{appVersion\}\.exe/);
-  assert.match(readText('scripts', 'clean-release.cjs'), /提示词助手安装版\$\{appVersion\}\.exe\.blockmap/);
-  assert.match(readText('scripts', 'clean-release.cjs'), /提示词助手便携版\$\{appVersion\}\.exe/);
+  assert.match(readText('scripts', 'clean-release.cjs'), /灵匣安装版\$\{appVersion\}\.exe/);
+  assert.match(readText('scripts', 'clean-release.cjs'), /灵匣安装版\$\{appVersion\}\.exe\.blockmap/);
+  assert.match(readText('scripts', 'clean-release.cjs'), /灵匣便携版\$\{appVersion\}\.exe/);
   assert.match(readText('scripts', 'clean-release.cjs'), /'latest\.yml'/);
 });
 

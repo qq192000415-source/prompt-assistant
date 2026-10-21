@@ -462,7 +462,7 @@ export function SettingsPage({
               <div className={`update-status-card ${updateStatus.status}`}>
                 <div>
                   <span>当前版本</span>
-                  <strong>提示词助手{updateStatus.currentVersion || APP_VERSION}</strong>
+                  <strong>灵匣{updateStatus.currentVersion || APP_VERSION}</strong>
                 </div>
                 <div>
                   <span>更新状态</span>
@@ -507,7 +507,7 @@ export function SettingsPage({
             <section className="settings-section about-section" id="software-about-panel" aria-labelledby="software-about-title">
               <div>
                 <h3 id="software-about-title">软件说明</h3>
-                <p>提示词助手采用安静、紧凑的工作台设计，提示词、文档、素材和创作画布各占一个标签页。</p>
+                <p>灵匣采用安静、紧凑的工作台设计，提示词、文档、素材和创作画布各占一个标签页。</p>
               </div>
 
               <div className="about-layout-grid">
