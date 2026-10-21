@@ -3833,6 +3833,70 @@ h2 {
   font-size: 13px;
 }
 
+/* 功能规则列表（AiRulesPanel）：一行一条，点开在下面看或改内容 */
+.ai-rules {
+  display: grid;
+  gap: 4px;
+}
+
+.ai-rule {
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+.ai-rule.is-open {
+  border-color: var(--border);
+  background: var(--surface-quiet);
+}
+
+.ai-rule-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 4px 0 8px;
+}
+
+.ai-rule.is-hidden .ai-preset {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.ai-rule-badge {
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.ai-rule-badge.is-muted {
+  background: var(--surface-muted);
+  color: var(--muted);
+}
+
+.ai-rule-editor {
+  display: grid;
+  gap: 10px;
+  padding: 4px 10px 10px;
+}
+
+.ai-rule-editor textarea {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.ai-rule-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-rule-add {
+  justify-self: start;
+}
+
 .materials-drop-hint {
   position: absolute;
   z-index: 5;
@@ -4404,6 +4468,21 @@ h2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+/* 同时生成选「自定义」时，数字框跟在下拉框右边 */
+.concurrency-field {
+  display: flex;
+  gap: 8px;
+}
+
+.concurrency-field select {
+  flex: 1;
+  min-width: 0;
+}
+
+.concurrency-field input {
+  width: 84px;
 }
 
 .canvas-advanced {
@@ -5901,6 +5980,283 @@ html[data-skin] .settings-form-footer {
   backdrop-filter: blur(16px);
 }
 
+/* 设置页「皮肤 › 做一套皮肤」（SkinStudio）：选图来源，然后左边缩小的窗口预览、右边调摆法和配色 */
+.skin-studio-sources {
+  max-width: 420px;
+}
+
+.skin-studio-sources button {
+  padding: 6px 10px;
+}
+
+.skin-studio-source {
+  display: grid;
+  gap: 10px;
+}
+
+.skin-studio-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.skin-studio-row .canvas-segmented button {
+  padding: 5px 12px;
+  white-space: nowrap;
+}
+
+.skin-studio-query {
+  flex: 1;
+  min-width: 220px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  padding: 7px 10px;
+}
+
+.skin-studio-results {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.skin-studio-results.is-grid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+
+.skin-studio-results.is-portrait:not(.is-grid) {
+  grid-template-columns: repeat(2, minmax(0, 200px));
+}
+
+.skin-studio-results.is-grid.is-portrait {
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+}
+
+.skin-studio-results button,
+.skin-studio-thumb button {
+  position: relative;
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  cursor: pointer;
+  padding: 0;
+}
+
+.skin-studio-results button:hover {
+  border-color: var(--accent);
+}
+
+.skin-studio-results img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+}
+
+.skin-studio-results.is-portrait img {
+  aspect-ratio: 9 / 16;
+}
+
+.skin-studio-thumb {
+  display: grid;
+  gap: 3px;
+}
+
+.skin-studio-thumb button span {
+  position: absolute;
+  inset: auto 0 0;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 12px;
+  padding: 4px;
+}
+
+.skin-studio-thumb a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.skin-studio-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .skin-studio-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 预览窗口：颜色令牌由组件按图片算好写在 style 上，和真的皮肤一样 */
+.skin-studio-preview {
+  position: relative;
+  height: 260px;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  color: var(--text);
+  font-size: 10px;
+}
+
+.skin-studio-wall {
+  position: absolute;
+  background-repeat: no-repeat;
+}
+
+.skin-studio-mock {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: 26px 1fr;
+}
+
+.skin-studio-mock-top,
+.skin-studio-mock-side,
+.skin-studio-mock-card {
+  background: var(--surface);
+  backdrop-filter: blur(14px) saturate(1.4);
+}
+
+.skin-studio-mock-top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.skin-studio-mock span,
+.skin-studio-mock i {
+  border-radius: 5px;
+  color: var(--muted);
+  font-style: normal;
+  font-weight: 600;
+  padding: 2px 7px;
+}
+
+.skin-studio-mock .is-on {
+  background: var(--accent-weak);
+  color: var(--accent);
+}
+
+.skin-studio-mock .is-accent {
+  justify-self: start;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.skin-studio-mock-body {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  min-height: 0;
+}
+
+.skin-studio-mock-side {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  padding: 10px 8px;
+  border-right: 1px solid var(--border);
+}
+
+.skin-studio-mock-main {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 12px;
+}
+
+.skin-studio-mock-card {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.skin-studio-mock-card p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.skin-studio-controls {
+  display: grid;
+  gap: 12px;
+}
+
+.skin-studio-controls .canvas-segmented button {
+  padding: 5px 8px;
+}
+
+.skin-studio-swatches {
+  display: flex;
+  gap: 8px;
+}
+
+.skin-studio-swatches button {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--surface);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--border-strong);
+  cursor: pointer;
+}
+
+.skin-studio-swatches button.is-active {
+  box-shadow: 0 0 0 2px var(--text);
+}
+
+.skin-studio-focus {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: crosshair;
+  padding: 0;
+}
+
+.skin-studio-focus img {
+  display: block;
+  width: 100%;
+}
+
+.skin-studio-focus i {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+.skin-studio-report {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  color: var(--muted);
+  font-size: 12px;
+  list-style: none;
+}
+
+.skin-studio-report .is-warn {
+  color: var(--warning);
+}
+
 /* 设置页「皮肤」：已安装的皮肤包列表，整块能拖进 .zip 安装 */
 .skin-format-link {
   color: var(--accent);
@@ -6007,6 +6363,41 @@ html[data-skin] .settings-form-footer {
 html[data-skin] .top-menu-bar {
   background: var(--surface-raised);
   backdrop-filter: blur(16px);
+}
+
+/* 皮肤壁纸（1.17.0）：半透明的大块面板做成磨砂玻璃，壁纸透过来是模糊的，字不会被图案干扰。素材卡片太多，不加（看图页的壁纸本来就变淡了）。 */
+html[data-skin] .sidebar,
+html[data-skin] .full-prompt-card,
+html[data-skin] .document-pane,
+html[data-skin] .document-list-scroll,
+html[data-skin] .settings-nav,
+html[data-skin] .settings-section,
+html[data-skin] .canvas-panel,
+html[data-skin] .canvas-stage,
+html[data-skin] .canvas-detail {
+  backdrop-filter: blur(22px) saturate(1.4);
+}
+
+/* 素材、画布页满屏都是用户自己的图：壁纸自动变淡退到后面，不抢作品的风头（App.tsx 把当前页写进 html[data-view]） */
+html[data-skin][data-view='materials'] body::before,
+html[data-skin][data-view='canvas'] body::before {
+  opacity: 0.4;
+  filter: blur(8px) saturate(0.6);
+}
+
+/* 侧边立绘靠右时，提示词、文档页的内容区让出人物的位置，在剩下的地方居中（往左挪让出宽度的一半）；
+   窗口窄了内容最窄留 640px，人物退到磨砂玻璃后面。没有立绘的皮肤 --room 是 0，什么都不变。 */
+html[data-skin][data-view='prompts'] .workspace,
+html[data-skin][data-view='documents'] .workspace {
+  container-type: inline-size;
+}
+
+html[data-skin][data-view='prompts'] .workspace > *,
+html[data-skin][data-view='documents'] .workspace > * {
+  --room: min(var(--wallpaper-room-right, 0px), max(0px, 100cqw - 640px));
+  position: relative;
+  left: calc(var(--room) / -2);
+  max-width: calc(100cqw - var(--room));
 }
 
 .theme-menu {

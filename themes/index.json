@@ -2,6 +2,94 @@
   "schemaVersion": 1,
   "themes": [
     {
+      "id": "astronaut",
+      "name": "星际旅人",
+      "note": "宇航员立绘、深蓝星云",
+      "author": "灵匣",
+      "version": "1.0.0",
+      "base": "dark",
+      "size": 189238,
+      "sha256": "ac4f115ba350c207a9b59e5f09f44ff4bd2d5e2351e3524a8d8a9fb8d0766e9f",
+      "preview": "dist/astronaut.webp"
+    },
+    {
+      "id": "aurora",
+      "name": "极光",
+      "note": "极光湖面、墨绿与紫",
+      "author": "灵匣",
+      "version": "1.0.0",
+      "base": "dark",
+      "size": 124337,
+      "sha256": "4613ba3090c0236fdb020f0fb041aeb5f1a1470dc560515749b6c2d89077b1f3",
+      "preview": "dist/aurora.webp"
+    },
+    {
+      "id": "autumn",
+      "name": "秋枫",
+      "note": "红枫古寺、暖金",
+      "author": "灵匣",
+      "version": "1.0.0",
+      "base": "light",
+      "size": 246549,
+      "sha256": "ccf9921d2d9d268f23dd04efefe43e2e13f16e3fd4efcbae277df3a1376a0ac0",
+      "preview": "dist/autumn.webp"
+    },
+    {
+      "id": "bamboo",
+      "name": "竹林清风",
+      "note": "翠竹晨光、清新绿",
+      "author": "灵匣",
+      "version": "1.0.0",
+      "base": "light",
+      "size": 189089,
+      "sha256": "b45f799d67e32e8d344e3f0d23df559774aa98977e9369c94e49c578e698efef",
+      "preview": "dist/bamboo.webp"
+    },
+    {
+      "id": "city-night",
+      "name": "霓虹夜城",
+      "note": "雨夜霓虹、深蓝品红",
+      "author": "灵匣",
+      "version": "1.0.0",
+      "base": "dark",
+      "size": 274874,
+      "sha256": "8b9af73cc8de2b6d8ef2b794582789176d64f7b883a5542a7d40c7d86380b9e3",
+      "preview": "dist/city-night.webp"
+    },
+    {
+      "id": "crimson-flute",
+      "name": "墨红少年",
+      "note": "红黑长袍、国风立绘",
+      "author": "灵匣",
+      "version": "1.0.0",
+      "base": "dark",
+      "size": 218252,
+      "sha256": "775f9c219959b624d89269f14e77660a163389d1b9ce621b44553f3670b63b0c",
+      "preview": "dist/crimson-flute.webp"
+    },
+    {
+      "id": "cyber",
+      "name": "赛博街区",
+      "note": "赛博朋克、紫与青",
+      "author": "灵匣",
+      "version": "1.0.0",
+      "base": "dark",
+      "size": 174325,
+      "sha256": "b634ce6d643c94cf14c15b0d8a27505381069d462d47a1b2b510263cef108164",
+      "preview": "dist/cyber.webp"
+    },
+    {
+      "id": "desert",
+      "name": "沙丘",
+      "note": "暖沙落日、极简",
+      "author": "灵匣",
+      "version": "1.0.0",
+      "base": "light",
+      "size": 40950,
+      "sha256": "3dd92b604dbb22193ba5312d8456c780ef2614359a6554b1967b154cd9e3a700",
+      "preview": "dist/desert.webp"
+    },
+    {
       "id": "forest",
       "name": "森林夜",
       "note": "松林萤火、墨绿",
@@ -11,6 +99,50 @@
       "size": 72412,
       "sha256": "729d82b510c42d857a0bd0855c23df24a6ff901a7407c556441a34a06eff0378",
       "preview": "dist/forest.webp"
+    },
+    {
+      "id": "fox-spirit",
+      "name": "九尾狐",
+      "note": "红金华服、仙狐立绘",
+      "author": "灵匣",
+      "version": "1.0.0",
+      "base": "dark",
+      "size": 255556,
+      "sha256": "ac4c569a062ba5e29675fbdf50bcd6b9e0853103be246378a06c5decf236eea4",
+      "preview": "dist/fox-spirit.webp"
+    },
+    {
+      "id": "ink-moon",
+      "name": "墨山月",
+      "note": "水墨月夜山水",
+      "author": "灵匣",
+      "version": "1.0.0",
+      "base": "dark",
+      "size": 215811,
+      "sha256": "55ab1bec5497d6186f81bf9f51bfd2850de57659525ceb1783393b175623ed32",
+      "preview": "dist/ink-moon.webp"
+    },
+    {
+      "id": "jiangnan",
+      "name": "江南晨雾",
+      "note": "石桥水乡、晨光薄雾",
+      "author": "灵匣",
+      "version": "1.0.0",
+      "base": "light",
+      "size": 164412,
+      "sha256": "502ea2f70f9f6fe44cf5c3837523af649ec057a9865e05953050cf82d8202e76",
+      "preview": "dist/jiangnan.webp"
+    },
+    {
+      "id": "lavender",
+      "name": "薰衣草",
+      "note": "紫色花田、柔和",
+      "author": "灵匣",
+      "version": "1.0.0",
+      "base": "light",
+      "size": 198480,
+      "sha256": "02384263bb55ee3a2625b5a01a76413dd8b1ba460daf4c6e5e0424e00d86dac6",
+      "preview": "dist/lavender.webp"
     },
     {
       "id": "mono",
@@ -24,6 +156,17 @@
       "preview": "dist/mono.webp"
     },
     {
+      "id": "neon-girl",
+      "name": "霓虹少女",
+      "note": "赛博少女立绘",
+      "author": "灵匣",
+      "version": "1.0.0",
+      "base": "dark",
+      "size": 166886,
+      "sha256": "f22d66f598530b71db7d5aba8d628352c0ecdc3cdb74ac4813e378407bf92df1",
+      "preview": "dist/neon-girl.webp"
+    },
+    {
       "id": "ocean",
       "name": "海盐",
       "note": "晴空海岸、清透蓝绿",
@@ -33,6 +176,83 @@
       "size": 68016,
       "sha256": "27ea28cd7f7e93e42a90a0414a28c117b80b06b7e8bd9c6e30b31a1681ad2b3d",
       "preview": "dist/ocean.webp"
+    },
+    {
+      "id": "ocean-sunset",
+      "name": "海边日落",
+      "note": "灯塔落日、暖橙",
+      "author": "灵匣",
+      "version": "1.0.0",
+      "base": "dark",
+      "size": 204130,
+      "sha256": "de64ba210bd369f5947df6e93db55d50c3b87e3af7d633a05ad22363da1df970",
+      "preview": "dist/ocean-sunset.webp"
+    },
+    {
+      "id": "sakura-dawn",
+      "name": "樱花晨光",
+      "note": "樱花鸟居、粉蓝",
+      "author": "灵匣",
+      "version": "1.0.0",
+      "base": "light",
+      "size": 204870,
+      "sha256": "da2001fb5da2703e2732e56b6720082d165f56d9b4eeea1be4ea0527d671c21d",
+      "preview": "dist/sakura-dawn.webp"
+    },
+    {
+      "id": "sakura-girl",
+      "name": "樱舞少女",
+      "note": "和服少女立绘、浅粉",
+      "author": "灵匣",
+      "version": "1.0.0",
+      "base": "light",
+      "size": 163749,
+      "sha256": "c830924d00e0f4bdb4ec9de54d1ff3cedd4c1d6fe5ac2d33906f0b69fec5e3ab",
+      "preview": "dist/sakura-girl.webp"
+    },
+    {
+      "id": "silk",
+      "name": "极简流光",
+      "note": "抽象丝带、浅色",
+      "author": "灵匣",
+      "version": "1.0.0",
+      "base": "light",
+      "size": 39635,
+      "sha256": "cff18c2a7180173c65da044b5356141afb82584562bcec0b98d099c234239d85",
+      "preview": "dist/silk.webp"
+    },
+    {
+      "id": "snow-peak",
+      "name": "雪山",
+      "note": "雪峰蓝天、清爽",
+      "author": "灵匣",
+      "version": "1.0.0",
+      "base": "light",
+      "size": 280273,
+      "sha256": "0649383852abdbc6a0d1fc5559956434041221a28a45502d79f2f485beba256b",
+      "preview": "dist/snow-peak.webp"
+    },
+    {
+      "id": "starry",
+      "name": "星河",
+      "note": "银河山脊、深紫",
+      "author": "灵匣",
+      "version": "1.0.0",
+      "base": "dark",
+      "size": 212572,
+      "sha256": "ca3298508364ed1e8f5064db211456ea8e9ce84e65807f74d334c1f6c0a13f80",
+      "preview": "dist/starry.webp"
+    },
+    {
+      "id": "sword-fairy",
+      "name": "白衣剑仙",
+      "note": "水墨仙侠立绘、浅蓝",
+      "author": "灵匣",
+      "version": "1.0.0",
+      "base": "light",
+      "size": 184223,
+      "sha256": "a3b6121a3a07b8b345be00f2c839929f4c68af56c67466e92a9c1c5349560b5e",
+      "preview": "dist/sword-fairy.webp"
     }
   ]
 }

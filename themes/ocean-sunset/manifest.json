@@ -1,0 +1,38 @@
+{
+  "id": "ocean-sunset",
+  "name": "海边日落",
+  "note": "灯塔落日、暖橙",
+  "author": "灵匣",
+  "version": "1.0.0",
+  "base": "dark",
+  "tokens": {
+    "--sidebar": "rgba(30, 23, 21, 0.68)",
+    "--surface": "rgba(30, 23, 21, 0.68)",
+    "--surface-quiet": "rgba(30, 23, 21, 0.12)",
+    "--surface-raised": "rgba(30, 23, 21, 0.83)",
+    "--surface-muted": "rgba(41, 35, 33, 0.68)",
+    "--overlay-surface": "#1e1715",
+    "--hover": "rgba(255, 255, 255, 0.05)",
+    "--border": "rgba(255, 255, 255, 0.1)",
+    "--border-strong": "rgba(255, 255, 255, 0.18)",
+    "--text": "#ececf0",
+    "--muted": "#a6a8b0",
+    "--faint": "#767880",
+    "--accent": "#bd510f",
+    "--accent-hover": "#c76b33",
+    "--accent-weak": "rgba(189, 81, 15, 0.22)",
+    "--on-accent": "#ffffff"
+  },
+  "wallpaper": {
+    "file": "wallpaper.webp",
+    "overlay": "rgba(30, 23, 21, 0.12)",
+    "layout": "cover",
+    "focus": [
+      37,
+      61
+    ],
+    "aspect": 1.7768,
+    "base": "#1e1715"
+  },
+  "preview": "preview.webp"
+}

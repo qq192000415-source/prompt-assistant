@@ -38,6 +38,10 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     exportSkin: (id) => ipcRenderer.invoke('skins:export', id),
     market: () => ipcRenderer.invoke('skins:market'),
     marketInstall: (id) => ipcRenderer.invoke('skins:market-install', id),
+    installGenerated: (manifest, files) => ipcRenderer.invoke('skins:install-generated', manifest, files),
+    generateWallpaper: (prompt, composition) => ipcRenderer.invoke('skins:generate-wallpaper', prompt, composition),
+    wallhavenSearch: (input) => ipcRenderer.invoke('skins:wallhaven-search', input),
+    wallhavenImage: (id) => ipcRenderer.invoke('skins:wallhaven-image', id),
     pathForFile: (file) => webUtils.getPathForFile(file),
   },
   materials: {
@@ -70,6 +74,7 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     aiListModels: (slot, input) => ipcRenderer.invoke('materials:ai-list-models', slot, input),
     aiSetImageModel: (model) => ipcRenderer.invoke('materials:ai-set-image-model', model),
     aiSetBaseUrl: (slots, url) => ipcRenderer.invoke('materials:ai-set-base-url', slots, url),
+    aiSetRuleOverrides: (overrides) => ipcRenderer.invoke('materials:ai-set-rule-overrides', overrides),
     aiTest: (slot, input) => ipcRenderer.invoke('materials:ai-test', slot, input),
     aiReverse: (id) => ipcRenderer.invoke('materials:ai-reverse', id),
     aiOptimize: (prompt, kind) => ipcRenderer.invoke('materials:ai-optimize', prompt, kind),

@@ -1,0 +1,38 @@
+{
+  "id": "astronaut",
+  "name": "星际旅人",
+  "note": "宇航员立绘、深蓝星云",
+  "author": "灵匣",
+  "version": "1.0.0",
+  "base": "dark",
+  "tokens": {
+    "--sidebar": "rgba(21, 25, 30, 0.6)",
+    "--surface": "rgba(21, 25, 30, 0.6)",
+    "--surface-quiet": "rgba(21, 25, 30, 0.12)",
+    "--surface-raised": "rgba(21, 25, 30, 0.75)",
+    "--surface-muted": "rgba(33, 37, 41, 0.6)",
+    "--overlay-surface": "#15191e",
+    "--hover": "rgba(255, 255, 255, 0.05)",
+    "--border": "rgba(255, 255, 255, 0.1)",
+    "--border-strong": "rgba(255, 255, 255, 0.18)",
+    "--text": "#ececf0",
+    "--muted": "#a6a8b0",
+    "--faint": "#767880",
+    "--accent": "#3a72cf",
+    "--accent-hover": "#5887d6",
+    "--accent-weak": "rgba(58, 114, 207, 0.22)",
+    "--on-accent": "#ffffff"
+  },
+  "wallpaper": {
+    "file": "wallpaper.webp",
+    "overlay": "transparent",
+    "layout": "right",
+    "focus": [
+      60,
+      51
+    ],
+    "aspect": 0.5622,
+    "base": "#021430"
+  },
+  "preview": "preview.webp"
+}

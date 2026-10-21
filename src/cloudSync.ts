@@ -511,3 +511,24 @@ export const loadOwnApiRecommendation = async (email: string, settings: CloudSet
   if (error) throw recommendationError(error.message);
   return (data as { api_base_url: string } | null)?.api_base_url ?? '';
 };
+
+// AI 功能规则的管理员改动（1.17.0，表 ai_rule_overrides，一个功能一行）：登录的账号都能读，只有管理员能改。格式见 electron/materials/aiRules.ts。
+const ruleOverrideError = (message: string) =>
+  /ai_rule_overrides|schema cache|does not exist|Could not find/i.test(message)
+    ? new Error('Supabase 里还没有 AI 规则表，请先执行 supabase-schema.sql 里「AI 功能规则」那段')
+    : new Error(message);
+
+export const loadAiRuleOverrides = async (settings: CloudSettings = loadCloudSettings()) => {
+  const { data, error } = await getSupabaseClient(settings).from('ai_rule_overrides').select('action, rules');
+  if (error) throw ruleOverrideError(error.message);
+  return Object.fromEntries(((data ?? []) as Array<{ action: string; rules: MaterialAiRuleEntry[] }>).map((row) => [row.action, row.rules])) as MaterialAiRuleOverrides;
+};
+
+// 这个功能没有改动了（全部恢复默认）就删掉这一行。
+export const saveAiRuleOverrides = async (action: string, rules: MaterialAiRuleEntry[], settings: CloudSettings = loadCloudSettings()) => {
+  const client = getSupabaseClient(settings);
+  const { error } = rules.length
+    ? await client.from('ai_rule_overrides').upsert({ action, rules, updated_at: new Date().toISOString() })
+    : await client.from('ai_rule_overrides').delete().eq('action', action);
+  if (error) throw ruleOverrideError(error.message);
+};

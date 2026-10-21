@@ -1,0 +1,38 @@
+{
+  "id": "sakura-girl",
+  "name": "樱舞少女",
+  "note": "和服少女立绘、浅粉",
+  "author": "灵匣",
+  "version": "1.0.0",
+  "base": "light",
+  "tokens": {
+    "--sidebar": "rgba(252, 250, 251, 0.5)",
+    "--surface": "rgba(252, 250, 251, 0.5)",
+    "--surface-quiet": "rgba(252, 250, 251, 0.12)",
+    "--surface-raised": "rgba(252, 250, 251, 0.65)",
+    "--surface-muted": "rgba(239, 238, 238, 0.5)",
+    "--overlay-surface": "#fcfafb",
+    "--hover": "rgba(0, 0, 0, 0.05)",
+    "--border": "rgba(0, 0, 0, 0.08)",
+    "--border-strong": "rgba(0, 0, 0, 0.15)",
+    "--text": "#1a1b1f",
+    "--muted": "#5c606a",
+    "--faint": "#8c919c",
+    "--accent": "#cf3045",
+    "--accent-hover": "#b0293b",
+    "--accent-weak": "rgba(207, 48, 69, 0.12)",
+    "--on-accent": "#ffffff"
+  },
+  "wallpaper": {
+    "file": "wallpaper.webp",
+    "overlay": "transparent",
+    "layout": "right",
+    "focus": [
+      49,
+      46
+    ],
+    "aspect": 0.5628,
+    "base": "#fbe2e8"
+  },
+  "preview": "preview.webp"
+}

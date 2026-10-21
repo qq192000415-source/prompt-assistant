@@ -6,7 +6,8 @@ import { safeStorage } from 'electron';
 import { isGeminiImageModel } from '../../src/materials/library.ts';
 import type { AiProvider, AiRuntime, AiSlot } from './ai.ts';
 import { normalizeAiBaseUrlForProvider } from './suyan/aiBaseUrl.ts';
-import { aiFeatureActionMeta, buildAiActionInstructions, normalizeAiRuleSelectionIds, type AiFeatureAction } from './suyan/aiTypes.ts';
+import { aiFeatureActionMeta, type AiFeatureAction } from './suyan/aiTypes.ts';
+import { buildRuleInstructions, normalizeRuleOverrides, resolveRules, selectedRuleIds, type RuleOverrides } from './aiRules.ts';
 import { listOllamaModels, testOllamaConnection } from './suyan/ollamaAiClient.ts';
 import { listRemoteModels, testRemoteConnection } from './suyan/remoteAiClient.ts';
 
@@ -23,11 +24,13 @@ type Stored = {
 // 画布任务队列：同时跑几张图、临时失败自动重试几次（和 iLab 的默认值一样）。
 export type CanvasOptions = { concurrency: number; retries: number };
 const DEFAULT_CANVAS: CanvasOptions = { concurrency: 2, retries: 2 };
+// 自定义同时生成的上限，再多容易被网关限流。
+const MAX_CONCURRENCY = 16;
 const clampInt = (value: unknown, min: number, max: number, fallback: number) =>
   typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, Math.round(value))) : fallback;
 function normalizeCanvasOptions(raw: unknown): CanvasOptions {
   const options = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-  return { concurrency: clampInt(options.concurrency, 1, 4, DEFAULT_CANVAS.concurrency), retries: clampInt(options.retries, 0, 5, DEFAULT_CANVAS.retries) };
+  return { concurrency: clampInt(options.concurrency, 1, MAX_CONCURRENCY, DEFAULT_CANVAS.concurrency), retries: clampInt(options.retries, 0, 5, DEFAULT_CANVAS.retries) };
 }
 
 // 素材库用到的功能，顺序就是设置里的显示顺序。
@@ -35,6 +38,26 @@ const ACTIONS: AiFeatureAction[] = ['image-reverse', 'prompt-optimization', 'pro
 const SLOT_LABELS: Record<SlotName, string> = { text: '文本模型', vision: '视觉模型', image: '生图模型' };
 
 const settingsPath = (userDataDir: string) => path.join(userDataDir, 'materials-ai.json');
+// 管理员下发的规则改动（aiRules.ts）：登录后界面从 Supabase 读来交给主进程，存一份在本机，断网时也照用；退出登录时清空，回到内置规则。
+const rulesPath = (userDataDir: string) => path.join(userDataDir, 'materials-ai-rules.json');
+
+function readRuleOverrides(userDataDir: string): RuleOverrides {
+  try {
+    return normalizeRuleOverrides(JSON.parse(fs.readFileSync(rulesPath(userDataDir), 'utf8')));
+  } catch {
+    return {};
+  }
+}
+
+export function setRuleOverrides(userDataDir: string, raw: unknown) {
+  fs.mkdirSync(userDataDir, { recursive: true });
+  fs.writeFileSync(rulesPath(userDataDir), JSON.stringify(normalizeRuleOverrides(raw), null, 2));
+  return getPublicAiSettings(userDataDir);
+}
+
+// 选中的规则 id 只做格式整理，是否存在、是否隐藏在用的时候按当前规则判断（管理员新增的规则 id 不在 SuYan 的列表里）。
+const ruleIds = (value: unknown) =>
+  Array.isArray(value) ? [...new Set(value.filter((id): id is string => typeof id === 'string').map((id) => id.trim()).filter(Boolean))].slice(0, 16) : [];
 
 const asProvider = (value: unknown): AiProvider => (value === 'ollama' ? 'ollama' : 'openai-compatible');
 const asText = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
@@ -55,7 +78,7 @@ function readStored(userDataDir: string): Stored {
       const preference = rawActions[action];
       if (!preference) continue;
       actions[action] = {
-        rulePresetIds: normalizeAiRuleSelectionIds(action, preference.rulePresetIds),
+        rulePresetIds: ruleIds(preference.rulePresetIds),
         customInstructions: asText(preference.customInstructions),
       };
     }
@@ -73,6 +96,7 @@ const isUsable = (slot: AiSlot | null) => Boolean(slot && slot.model && (slot.pr
 
 export function getPublicAiSettings(userDataDir: string) {
   const stored = readStored(userDataDir);
+  const overrides = readRuleOverrides(userDataDir);
   const publicSlot = (slot: AiSlot | null) =>
     slot ? { provider: slot.provider, baseUrl: slot.baseUrl, model: slot.model, hasApiKey: Boolean(slot.apiKey), usable: isUsable(slot) } : null;
   return {
@@ -83,6 +107,7 @@ export function getPublicAiSettings(userDataDir: string) {
     actions: ACTIONS.map((action) => {
       const meta = aiFeatureActionMeta[action];
       const preference = stored.actions[action];
+      const rules = resolveRules(action, overrides);
       return {
         action,
         // SuYan 这一项叫「画布默认模型」（它在这里选模型），我们的模型在上面单独设，这里只有规则。
@@ -90,8 +115,8 @@ export function getPublicAiSettings(userDataDir: string) {
         description: meta.description,
         placeholder: meta.rulePlaceholder,
         capability: meta.capability,
-        presets: meta.rulePresets.map((preset) => ({ id: preset.id, label: preset.label })),
-        rulePresetIds: preference?.rulePresetIds ?? [meta.defaultRulePreset.id],
+        presets: rules,
+        rulePresetIds: selectedRuleIds(action, rules, preference?.rulePresetIds),
         customInstructions: preference?.customInstructions ?? '',
       };
     }),
@@ -100,12 +125,17 @@ export function getPublicAiSettings(userDataDir: string) {
 
 export function loadAiRuntime(userDataDir: string): AiRuntime {
   const stored = readStored(userDataDir);
+  const overrides = readRuleOverrides(userDataDir);
   const usable = (slot: AiSlot | null) => (isUsable(slot) ? decryptSlot(slot) : null);
   return {
     text: usable(stored.text),
     vision: usable(stored.vision),
     image: usable(stored.image),
-    instructions: (action) => buildAiActionInstructions(action, stored.actions[action]),
+    instructions: (action) => {
+      const rules = resolveRules(action, overrides);
+      const preference = stored.actions[action];
+      return buildRuleInstructions(rules, selectedRuleIds(action, rules, preference?.rulePresetIds), preference?.customInstructions);
+    },
   };
 }
 
@@ -165,7 +195,7 @@ export function saveAiSettings(userDataDir: string, input: { text?: SlotInput | 
     const preference = input.actions?.[action];
     if (!preference) continue;
     actions[action] = {
-      rulePresetIds: normalizeAiRuleSelectionIds(action, preference.rulePresetIds),
+      rulePresetIds: ruleIds(preference.rulePresetIds),
       customInstructions: asText(preference.customInstructions).slice(0, 12000),
     };
   }

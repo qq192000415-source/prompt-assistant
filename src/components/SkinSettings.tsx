@@ -3,6 +3,7 @@ import { Check, Download, PackagePlus, RefreshCw, Trash2 } from 'lucide-react';
 import { Button } from './ui/button';
 import type { ThemeMode } from '../lib/theme';
 import type { SkinsController } from '../skins/useSkins';
+import { SkinStudio } from './SkinStudio';
 
 const SKIN_FORMAT_URL = 'https://github.com/qq192000415-source/prompt-assistant/tree/main/themes';
 
@@ -15,7 +16,7 @@ type SkinSettingsProps = {
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(error));
 
-// 设置页「皮肤」：安装（选文件或拖进来）、导出、删除皮肤包。内置的六套在「通用 › 外观」里选。
+// 设置页「皮肤」：拿一张图做皮肤（SkinStudio），安装（选文件或拖进来）、导出、删除皮肤包，主题市场。内置的六套在「通用 › 外观」里选。
 export function SkinSettings({ skinPacks, theme, onThemeChange, notify }: SkinSettingsProps) {
   const api = window.promptAssistantDesktop?.skins;
   const [busy, setBusy] = useState(false);
@@ -71,6 +72,7 @@ export function SkinSettings({ skinPacks, theme, onThemeChange, notify }: SkinSe
 
   return (
     <>
+      <SkinStudio skinPacks={skinPacks} onThemeChange={onThemeChange} notify={notify} />
       <section className="settings-section" aria-labelledby="skin-settings-title">
         <div className="settings-section-title">
           <div>

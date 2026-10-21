@@ -96,6 +96,13 @@ type DesktopSkinsApi = {
   // 主题市场：先读更新服务器的镜像，读不到再读 GitHub；base 是读到的那个 themes/ 地址，预览图在 base + preview。
   market: () => Promise<{ source: 'mirror' | 'github'; base: string; themes: DesktopMarketTheme[]; errors: string[] }>;
   marketInstall: (id: string) => Promise<{ id: string; name: string; replaced: boolean }>;
+  // 做一套皮肤（1.17.0）：装界面生成的皮肤（manifest + wallpaper.webp、preview.webp），走和皮肤包一样的校验。
+  installGenerated: (manifest: import('./skins/skinPack').SkinManifest, files: Record<string, Uint8Array>) => Promise<{ id: string; name: string; replaced: boolean }>;
+  // 用 API 配置里的生图模型出两张壁纸，失败的那张在 errors 里说明原因。
+  generateWallpaper: (prompt: string, composition: 'scene' | 'character') => Promise<{ images: string[]; errors: string[] }>;
+  // Wallhaven 免费壁纸库：缩略图是 data URL；原图按 id 下载。
+  wallhavenSearch: (input: { query: string; orientation: 'landscape' | 'portrait'; page: number }) => Promise<{ items: Array<{ id: string; width: number; height: number; page: string; thumb: string }>; failed: number; lastPage: number }>;
+  wallhavenImage: (id: string) => Promise<string>;
 };
 type DesktopMarketTheme = { id: string; name: string; note: string; author: string; version: string; base: 'light' | 'dark'; size: number; sha256: string; preview: string };
 
@@ -143,6 +150,8 @@ type DesktopMaterialsApi = {
   aiSetImageModel: (model: string) => Promise<MaterialAiSettings>;
   // 管理员推荐的 API 地址：只换这几个位置的接口地址（OpenAI 兼容的），Key、模型不变。
   aiSetBaseUrl: (slots: MaterialAiSlotName[], url: string) => Promise<MaterialAiSettings>;
+  // 管理员下发的 AI 规则改动（Supabase 表 ai_rule_overrides，按功能分），空对象表示全用内置规则。
+  aiSetRuleOverrides: (overrides: MaterialAiRuleOverrides) => Promise<MaterialAiSettings>;
   aiTest: (slot: MaterialAiSlotName, input: MaterialAiSlotInput) => Promise<void>;
   aiReverse: (id: string) => Promise<string>;
   aiOptimize: (prompt: string, kind: 'positive' | 'negative') => Promise<string>;
@@ -186,10 +195,14 @@ type MaterialAiAction = {
   description: string;
   placeholder: string;
   capability: string;
-  presets: Array<{ id: string; label: string }>;
+  // 全部规则，含管理员隐藏的（hidden），普通用户界面只显示没隐藏的。builtin 是素言自带的，modified 是管理员改过内容。
+  presets: MaterialAiRule[];
   rulePresetIds: string[];
   customInstructions: string;
 };
+type MaterialAiRule = { id: string; label: string; instructions: string; builtin: boolean; modified: boolean; hidden: boolean };
+type MaterialAiRuleEntry = { id: string; label: string; instructions: string; hidden?: boolean };
+type MaterialAiRuleOverrides = Record<string, MaterialAiRuleEntry[]>;
 type MaterialCanvasOptions = { concurrency: number; retries: number };
 type MaterialAiSettings = { text: MaterialAiSlot | null; vision: MaterialAiSlot | null; image: MaterialAiSlot | null; canvas: MaterialCanvasOptions; actions: MaterialAiAction[] };
 type MaterialAiSettingsInput = {

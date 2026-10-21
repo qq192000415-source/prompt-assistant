@@ -1,0 +1,38 @@
+{
+  "id": "lavender",
+  "name": "薰衣草",
+  "note": "紫色花田、柔和",
+  "author": "灵匣",
+  "version": "1.0.0",
+  "base": "light",
+  "tokens": {
+    "--sidebar": "rgba(252, 250, 251, 0.54)",
+    "--surface": "rgba(252, 250, 251, 0.54)",
+    "--surface-quiet": "rgba(252, 250, 251, 0.12)",
+    "--surface-raised": "rgba(252, 250, 251, 0.69)",
+    "--surface-muted": "rgba(239, 238, 238, 0.54)",
+    "--overlay-surface": "#fcfafb",
+    "--hover": "rgba(0, 0, 0, 0.05)",
+    "--border": "rgba(0, 0, 0, 0.08)",
+    "--border-strong": "rgba(0, 0, 0, 0.15)",
+    "--text": "#1a1b1f",
+    "--muted": "#5c606a",
+    "--faint": "#8c919c",
+    "--accent": "#b946a8",
+    "--accent-hover": "#9d3c8f",
+    "--accent-weak": "rgba(185, 70, 168, 0.12)",
+    "--on-accent": "#ffffff"
+  },
+  "wallpaper": {
+    "file": "wallpaper.webp",
+    "overlay": "rgba(252, 250, 251, 0.12)",
+    "layout": "cover",
+    "focus": [
+      42,
+      52
+    ],
+    "aspect": 1.7768,
+    "base": "#fcfafb"
+  },
+  "preview": "preview.webp"
+}

@@ -232,3 +232,32 @@ $$;
 
 revoke all on function public.list_app_users() from public;
 grant execute on function public.list_app_users() to authenticated;
+
+-- AI 功能规则（1.17.0）：管理员对素材库 AI 功能（反推、优化、翻译、分类等）规则的改动，一个功能一行，rules 是条目数组
+-- （id 同内置规则的是修改或隐藏，其余是新增，格式见 electron/materials/aiRules.ts）。登录的账号都能读，只有管理员能增删改。
+create table if not exists public.ai_rule_overrides (
+  action text primary key,
+  rules jsonb not null default '[]'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.ai_rule_overrides enable row level security;
+alter table public.ai_rule_overrides force row level security;
+revoke all on table public.ai_rule_overrides from anon;
+grant select, insert, update, delete on table public.ai_rule_overrides to authenticated;
+
+drop policy if exists ai_rule_overrides_select on public.ai_rule_overrides;
+drop policy if exists ai_rule_overrides_admin_write on public.ai_rule_overrides;
+
+create policy ai_rule_overrides_select
+on public.ai_rule_overrides
+for select
+to authenticated
+using (true);
+
+create policy ai_rule_overrides_admin_write
+on public.ai_rule_overrides
+for all
+to authenticated
+using (public.is_app_admin())
+with check (public.is_app_admin());

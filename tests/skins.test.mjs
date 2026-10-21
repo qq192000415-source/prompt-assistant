@@ -23,7 +23,8 @@ test('皮肤 manifest：合法的照收，note 可省', () => {
   const skin = validateSkinManifest(manifest());
   assert.equal(skin.id, 'sakura');
   assert.equal(skin.note, '');
-  assert.deepEqual(skin.wallpaper, { file: 'wallpaper.webp', overlay: 'rgba(255, 255, 255, 0.4)' });
+  // 没写摆法的老皮肤包：铺满、主体居中
+  assert.deepEqual(skin.wallpaper, { file: 'wallpaper.webp', overlay: 'rgba(255, 255, 255, 0.4)', layout: 'cover', focus: [50, 50], aspect: 0, base: 'var(--surface-quiet)' });
 });
 
 test('皮肤 manifest：白名单外的令牌、能注入的值、跳目录的文件名都拒掉', () => {
@@ -40,6 +41,11 @@ test('皮肤 manifest：白名单外的令牌、能注入的值、跳目录的�
     { wallpaper: { file: '../../secret.png' } },
     { wallpaper: { file: 'wall.svg' } },
     { wallpaper: { file: 'wall.webp', overlay: 'url(x)' } },
+    { wallpaper: { file: 'wall.webp', layout: 'tile' } },
+    { wallpaper: { file: 'wall.webp', layout: 'right' } },
+    { wallpaper: { file: 'wall.webp', layout: 'right', aspect: 9 } },
+    { wallpaper: { file: 'wall.webp', focus: [50, 140] } },
+    { wallpaper: { file: 'wall.webp', layout: 'left', aspect: 0.56, base: 'url(x)' } },
     { preview: 'sub/preview.webp' },
     { name: '' },
   ];
@@ -62,13 +68,27 @@ test('皮肤 CSS：令牌、壁纸、图标都限定在这个皮肤下', () => {
   const css = buildSkinCss(validateSkinManifest(manifest()), ['icons/star.svg', 'icons/folder.png'], (path) => `skin://sakura/${path}`);
   const scope = 'html[data-skin="sakura"][data-theme]';
   assert.match(css, /--accent: #e75480;/);
-  assert.ok(css.includes(`${scope} body {\n  background: linear-gradient(rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.4)), url("skin://sakura/wallpaper.webp")`));
+  // 壁纸画在 body::before（图）和 ::after（压暗/提亮），body 本身透明
+  assert.ok(css.includes(`${scope} body {\n  background: transparent;`));
+  assert.ok(css.includes('background: url("skin://sakura/wallpaper.webp") 50% 50% / cover no-repeat;'));
+  assert.ok(css.includes(`${scope} body::after {`) && css.includes('background: rgba(255, 255, 255, 0.4);'));
   assert.ok(css.includes(`${scope} svg.lucide-star > * {\n  display: none;`));
   assert.ok(css.includes('mask: url("skin://sakura/icons/star.svg") center / contain no-repeat;\n  background: currentColor;'));
   assert.ok(css.includes('background: url("skin://sakura/icons/folder.png") center / contain no-repeat;'));
   // 每条规则都带皮肤作用域，不会漏到别的主题
   for (const selector of css.match(/^[^\s}][^{]*\{/gm)) assert.ok(selector.startsWith(scope), selector);
   assert.throws(() => buildSkinCss(validateSkinManifest(manifest()), [], () => 'x") ; }'), /资源地址不合法/);
+});
+
+test('皮肤 CSS：侧边立绘按窗口高度贴边、朝内容渐隐，并给内容区留出位置', () => {
+  const skin = validateSkinManifest(manifest({ wallpaper: { file: 'wallpaper.webp', layout: 'right', aspect: 0.5625, base: '#1a1012', focus: [40, 30] } }));
+  const css = buildSkinCss(skin, [], (path) => `skin://sakura/${path}`);
+  const scope = 'html[data-skin="sakura"][data-theme]';
+  assert.ok(css.includes('right: 0;\n  width: calc(100vh * 0.5625);'));
+  assert.ok(css.includes('mask-image: linear-gradient(to left, #000 62%, transparent)'));
+  assert.ok(css.includes('--wallpaper-room-right: calc(100vh * 0.5625 * 0.62);'));
+  assert.ok(css.includes(`${scope} {\n  background: #1a1012;`));
+  for (const selector of css.match(/^[^\s}][^{]*\{/gm)) assert.ok(selector.startsWith(scope), selector);
 });
 
 test('主题选择：skin:<id> 只有皮肤存在时才认，深浅跟着皮肤的 base', () => {

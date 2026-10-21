@@ -1,6 +1,6 @@
 // 画布参考图：全图预览，以及在中间「生成记录」区域里编辑（裁剪、透视裁剪、局部重绘遮罩）。不开新窗口，编辑完换掉原图回到生成记录。
 // 局部重绘照 ComfyUI 的 Draw Mask On Image：涂过的地方用实色绿 (0,255,0) 画进提交的图里，另存一张遮罩 PNG（涂过的地方透明）给 /images/edits 的 mask 字段。
-import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Brush, ChevronLeft, ChevronRight, Eraser, PaintBucket, Pencil, Trash2, Undo2, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import type { CanvasReference } from '../../materials/canvasStore';
@@ -266,9 +266,31 @@ export function ReferenceEditor({ reference, position, initialMode, onSave, onCa
     context.globalCompositeOperation = 'source-over';
   };
 
-  // 裁剪时右侧实时画出裁剪后的样子，按比例缩进预览框。
+  // 裁剪、透视裁剪时右侧实时画出结果，按比例缩进预览框。
   const cropPixels = image ? pixelCrop(crop, width, height) : null;
-  const previewScale = cropPixels ? Math.min(PREVIEW_SIZE / cropPixels.w, PREVIEW_SIZE / cropPixels.h) : 1;
+  const perspectiveSize = image ? perspectiveOutputSize(quad) : null;
+  const quadOk = isConvexQuad(quad);
+  const previewDims = mode === 'crop' ? cropPixels : mode === 'perspective' && perspectiveSize ? { w: perspectiveSize.width, h: perspectiveSize.height } : null;
+  const previewScale = previewDims ? Math.min(PREVIEW_SIZE / previewDims.w, PREVIEW_SIZE / previewDims.h) : 1;
+  // 透视预览从缩小的原图重采样，拖角时逐帧算也不卡。
+  const smallSource = useMemo(() => {
+    if (!image) return null;
+    const scale = Math.min(1, 1024 / Math.max(image.naturalWidth, image.naturalHeight));
+    const { context } = makeCanvas(Math.max(1, Math.round(image.naturalWidth * scale)), Math.max(1, Math.round(image.naturalHeight * scale)));
+    context.drawImage(image, 0, 0, context.canvas.width, context.canvas.height);
+    return { pixels: context.getImageData(0, 0, context.canvas.width, context.canvas.height), scale };
+  }, [image]);
+  useEffect(() => {
+    const element = previewRef.current;
+    if (!element || !smallSource || !perspectiveSize || mode !== 'perspective' || !quadOk) return;
+    const ratio = window.devicePixelRatio || 1;
+    const w = Math.max(1, Math.round(perspectiveSize.width * previewScale * ratio));
+    const h = Math.max(1, Math.round(perspectiveSize.height * previewScale * ratio));
+    element.width = w;
+    element.height = h;
+    const scaled = quad.map((point) => ({ x: point.x * smallSource.scale, y: point.y * smallSource.scale })) as Quad;
+    element.getContext('2d')!.putImageData(new ImageData(warpPerspective(smallSource.pixels, scaled, w, h), w, h), 0, 0);
+  }, [smallSource, mode, quad, quadOk]);
   useEffect(() => {
     const element = previewRef.current;
     if (!element || !image || !cropPixels || mode !== 'crop') return;
@@ -462,7 +484,7 @@ export function ReferenceEditor({ reference, position, initialMode, onSave, onCa
         )}
       </div>
 
-      <div className={`ref-editor-body ${mode === 'crop' ? 'has-preview' : ''}`}>
+      <div className={`ref-editor-body ${previewDims ? 'has-preview' : ''}`}>
       <div className="ref-editor-canvas" ref={boxRef}>
         {loadError ? (
           <p className="canvas-media-missing">{loadError}</p>
@@ -523,12 +545,12 @@ export function ReferenceEditor({ reference, position, initialMode, onSave, onCa
           )
         )}
       </div>
-      {mode === 'crop' && image && cropPixels && (
-        <aside className="ref-editor-preview" aria-label="裁剪后预览">
-          <strong>裁剪后预览</strong>
-          <canvas ref={previewRef} />
+      {image && previewDims && (
+        <aside className="ref-editor-preview" aria-label={mode === 'crop' ? '裁剪后预览' : '拉正后预览'}>
+          <strong>{mode === 'crop' ? '裁剪后预览' : '拉正后预览'}</strong>
+          {mode === 'perspective' && !quadOk ? <p className="nas-form-note">四个角拖交叉了，摆好后才能预览</p> : <canvas key={mode} ref={previewRef} />}
           <span>
-            {cropPixels.w}×{cropPixels.h}
+            {previewDims.w}×{previewDims.h}
           </span>
         </aside>
       )}

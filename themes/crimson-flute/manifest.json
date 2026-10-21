@@ -1,0 +1,38 @@
+{
+  "id": "crimson-flute",
+  "name": "墨红少年",
+  "note": "红黑长袍、国风立绘",
+  "author": "灵匣",
+  "version": "1.0.0",
+  "base": "dark",
+  "tokens": {
+    "--sidebar": "rgba(30, 21, 30, 0.52)",
+    "--surface": "rgba(30, 21, 30, 0.52)",
+    "--surface-quiet": "rgba(30, 21, 30, 0.12)",
+    "--surface-raised": "rgba(30, 21, 30, 0.67)",
+    "--surface-muted": "rgba(41, 33, 41, 0.52)",
+    "--overlay-surface": "#1e151e",
+    "--hover": "rgba(255, 255, 255, 0.05)",
+    "--border": "rgba(255, 255, 255, 0.1)",
+    "--border-strong": "rgba(255, 255, 255, 0.18)",
+    "--text": "#ececf0",
+    "--muted": "#a6a8b0",
+    "--faint": "#767880",
+    "--accent": "#bc544e",
+    "--accent-hover": "#c66e69",
+    "--accent-weak": "rgba(188, 84, 78, 0.22)",
+    "--on-accent": "#ffffff"
+  },
+  "wallpaper": {
+    "file": "wallpaper.webp",
+    "overlay": "transparent",
+    "layout": "right",
+    "focus": [
+      54,
+      61
+    ],
+    "aspect": 0.5628,
+    "base": "#191719"
+  },
+  "preview": "preview.webp"
+}

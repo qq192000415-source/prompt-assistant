@@ -1,0 +1,38 @@
+{
+  "id": "aurora",
+  "name": "极光",
+  "note": "极光湖面、墨绿与紫",
+  "author": "灵匣",
+  "version": "1.0.0",
+  "base": "dark",
+  "tokens": {
+    "--sidebar": "rgba(21, 27, 30, 0.62)",
+    "--surface": "rgba(21, 27, 30, 0.62)",
+    "--surface-quiet": "rgba(21, 27, 30, 0.12)",
+    "--surface-raised": "rgba(21, 27, 30, 0.77)",
+    "--surface-muted": "rgba(33, 38, 41, 0.62)",
+    "--overlay-surface": "#151b1e",
+    "--hover": "rgba(255, 255, 255, 0.05)",
+    "--border": "rgba(255, 255, 255, 0.1)",
+    "--border-strong": "rgba(255, 255, 255, 0.18)",
+    "--text": "#ececf0",
+    "--muted": "#a6a8b0",
+    "--faint": "#767880",
+    "--accent": "#1077b2",
+    "--accent-hover": "#348bbe",
+    "--accent-weak": "rgba(16, 119, 178, 0.22)",
+    "--on-accent": "#ffffff"
+  },
+  "wallpaper": {
+    "file": "wallpaper.webp",
+    "overlay": "rgba(21, 27, 30, 0.12)",
+    "layout": "cover",
+    "focus": [
+      41,
+      52
+    ],
+    "aspect": 1.7768,
+    "base": "#151b1e"
+  },
+  "preview": "preview.webp"
+}

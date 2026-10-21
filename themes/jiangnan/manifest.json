@@ -1,0 +1,38 @@
+{
+  "id": "jiangnan",
+  "name": "江南晨雾",
+  "note": "石桥水乡、晨光薄雾",
+  "author": "灵匣",
+  "version": "1.0.0",
+  "base": "light",
+  "tokens": {
+    "--sidebar": "rgba(250, 252, 252, 0.5)",
+    "--surface": "rgba(250, 252, 252, 0.5)",
+    "--surface-quiet": "rgba(250, 252, 252, 0.12)",
+    "--surface-raised": "rgba(250, 252, 252, 0.65)",
+    "--surface-muted": "rgba(238, 239, 239, 0.5)",
+    "--overlay-surface": "#fafcfc",
+    "--hover": "rgba(0, 0, 0, 0.05)",
+    "--border": "rgba(0, 0, 0, 0.08)",
+    "--border-strong": "rgba(0, 0, 0, 0.15)",
+    "--text": "#1a1b1f",
+    "--muted": "#5c606a",
+    "--faint": "#8c919c",
+    "--accent": "#2e76b3",
+    "--accent-hover": "#276498",
+    "--accent-weak": "rgba(46, 118, 179, 0.12)",
+    "--on-accent": "#ffffff"
+  },
+  "wallpaper": {
+    "file": "wallpaper.webp",
+    "overlay": "rgba(250, 252, 252, 0.12)",
+    "layout": "cover",
+    "focus": [
+      19,
+      44
+    ],
+    "aspect": 1.7768,
+    "base": "#fafcfc"
+  },
+  "preview": "preview.webp"
+}

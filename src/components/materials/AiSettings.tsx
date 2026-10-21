@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Button } from '../ui/button';
+import { AiRulesPanel } from './AiRulesPanel';
 
 type SlotDraft = MaterialAiSlotInput & { hasApiKey: boolean };
 type ModelOption = { id: string; vision: boolean; generation: boolean };
@@ -62,9 +63,11 @@ type AiSettingsFormProps = {
   saveSettings: (settings: MaterialAiSettingsInput) => Promise<MaterialAiSettings | null>;
   listModels: (slot: MaterialAiSlotName, input: MaterialAiSlotInput) => Promise<ModelOption[] | null>;
   testModel: (slot: MaterialAiSlotName, input: MaterialAiSlotInput) => Promise<void>;
+  // 登录的管理员能改功能规则（写到云端给所有账号用）。
+  isAdmin: boolean;
 };
 
-export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, testModel }: AiSettingsFormProps) {
+export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, testModel, isAdmin }: AiSettingsFormProps) {
   const [slots, setSlots] = useState<Record<MaterialAiSlotName, SlotDraft> | null>(null);
   const [actions, setActions] = useState<MaterialAiAction[]>([]);
   const [saved, setSaved] = useState<MaterialAiSettings | null>(null);
@@ -73,6 +76,7 @@ export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, te
   const [modelQuery, setModelQuery] = useState<Record<MaterialAiSlotName, string>>({ text: '', vision: '', image: '' });
   const [actionIndex, setActionIndex] = useState(0);
   const [canvasOptions, setCanvasOptions] = useState<MaterialCanvasOptions>({ concurrency: 2, retries: 2 });
+  const [customConcurrency, setCustomConcurrency] = useState(false);
 
   const load = (settings: MaterialAiSettings, drafts?: Drafts) => {
     setSaved(settings);
@@ -123,6 +127,13 @@ export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, te
       setDroppedDraft(false);
       load(saved);
     }
+  };
+
+  // 管理员改了规则：只换各功能的规则列表，没保存的模型设置和勾选不动。
+  const applyRules = (fresh: MaterialAiSettings) => {
+    const withRules = (list: MaterialAiAction[]) => list.map((entry) => ({ ...entry, presets: fresh.actions.find((item) => item.action === entry.action)?.presets ?? entry.presets }));
+    setSaved({ ...saved, actions: withRules(saved.actions) });
+    setActions(withRules(actions));
   };
 
   const queryModels = async (name: MaterialAiSlotName) => {
@@ -240,13 +251,33 @@ export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, te
               <div className="canvas-row">
                 <label className="field">
                   同时生成
-                  <select value={canvasOptions.concurrency} onChange={(event) => setCanvasOptions({ ...canvasOptions, concurrency: Number(event.target.value) })}>
-                    {[1, 2, 3, 4].map((count) => (
-                      <option key={count} value={count}>
-                        {count} 张
-                      </option>
-                    ))}
-                  </select>
+                  <span className="concurrency-field">
+                    <select
+                      value={customConcurrency || canvasOptions.concurrency > 6 ? 'custom' : canvasOptions.concurrency}
+                      onChange={(event) => {
+                        const custom = event.target.value === 'custom';
+                        setCustomConcurrency(custom);
+                        if (!custom) setCanvasOptions({ ...canvasOptions, concurrency: Number(event.target.value) });
+                      }}
+                    >
+                      {[1, 2, 3, 4, 5, 6].map((count) => (
+                        <option key={count} value={count}>
+                          {count} 张
+                        </option>
+                      ))}
+                      <option value="custom">自定义…</option>
+                    </select>
+                    {(customConcurrency || canvasOptions.concurrency > 6) && (
+                      <input
+                        type="number"
+                        min={1}
+                        max={16}
+                        aria-label="自定义同时生成张数"
+                        value={canvasOptions.concurrency}
+                        onChange={(event) => setCanvasOptions({ ...canvasOptions, concurrency: Math.min(16, Math.max(1, Math.round(Number(event.target.value)) || 1)) })}
+                      />
+                  )}
+                  </span>
                 </label>
                 <label className="field">
                   失败自动重试
@@ -293,24 +324,7 @@ export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, te
             </select>
           </label>
           <p className="nas-form-note">{action.description}</p>
-          <div className="ai-presets" role="group" aria-label="预设规则">
-            {action.presets.map((preset) => (
-              <label key={preset.id} className="ai-preset">
-                <input
-                  type="checkbox"
-                  checked={action.rulePresetIds.includes(preset.id)}
-                  onChange={(event) =>
-                    setAction({
-                      rulePresetIds: event.target.checked
-                        ? [...action.rulePresetIds, preset.id]
-                        : action.rulePresetIds.filter((id) => id !== preset.id),
-                    })
-                  }
-                />
-                {preset.label}
-              </label>
-            ))}
-          </div>
+          <AiRulesPanel key={action.action} action={action} isAdmin={isAdmin} onSelect={(ids) => setAction({ rulePresetIds: ids })} onRulesChanged={applyRules} />
           <label className="field">
             补充规则
             <textarea
@@ -323,7 +337,7 @@ export function AiSettingsForm({ busy, getSettings, saveSettings, listModels, te
         </fieldset>
       )}
 
-      <p className="nas-form-note">设置和 API Key 只保存在这台电脑上，Key 用系统加密，不会传到 NAS。规则和预设来自素言（SuYan）。</p>
+      <p className="nas-form-note">设置和 API Key 只保存在这台电脑上，Key 用系统加密，不会传到 NAS。内置规则来自素言（SuYan），管理员改过的规则对所有登录的账号生效。</p>
       <div className="nas-form-actions">
         <Button className="button primary" type="submit" disabled={busy}>
           保存 API 配置

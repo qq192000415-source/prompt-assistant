@@ -3,6 +3,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { dialog, net, type BrowserWindow, type IpcMain } from 'electron';
+import JSZip from 'jszip';
+import { loadAiRuntime } from './aiSettings.ts';
+import { generateMedia } from './canvas.ts';
+import { net as linkNet } from './linkSession.ts';
+import { createWallhaven } from './wallhaven.ts';
 import { checkSkinId, downloadMarketTheme, exportSkin, fetchMarketIndex, installSkin, listSkins, removeSkin, type MarketTheme } from './skinStore.ts';
 
 // 内置皮肤的 id，装皮肤包时不许占用。
@@ -20,6 +25,7 @@ export function registerSkins({ ipcMain, userDataDir, updateBaseUrl, getWindow }
   const sources = [updateBaseUrl && `${updateBaseUrl.replace(/\/+$/, '')}/themes/`, GITHUB_THEMES_BASE].filter(Boolean) as string[];
   // 最近一次读到的市场：安装时按 id 在这里找，不信渲染进程传来的地址和校验值。
   let market: { base: string; themes: MarketTheme[] } | null = null;
+  const wallhaven = createWallhaven((url) => linkNet.fetch(url));
 
   const installFiles = async (filePaths: string[]) => {
     const installed: Array<{ id: string; name: string; replaced: boolean }> = [];
@@ -62,6 +68,29 @@ export function registerSkins({ ipcMain, userDataDir, updateBaseUrl, getWindow }
     }
     return { id: manifest.id, name: manifest.name, replaced };
   });
+  // 设置 › 皮肤 › 做一套皮肤（1.17.0）：界面算好 manifest、画好壁纸和预览图，这里打成 zip 走和皮肤包一样的校验再装。
+  ipcMain.handle('skins:install-generated', async (_event, manifest, files) => {
+    const zip = new JSZip();
+    zip.file('manifest.json', JSON.stringify(manifest));
+    for (const [name, content] of Object.entries((files ?? {}) as Record<string, unknown>)) {
+      if (!(content instanceof Uint8Array)) throw new Error(`皮肤文件 ${name} 不是图片数据`);
+      zip.file(name, content);
+    }
+    const { manifest: installed, replaced } = await installSkin(userDataDir, await zip.generateAsync({ type: 'uint8array' }), BUILTIN_SKIN_IDS);
+    return { id: installed.id, name: installed.name, replaced };
+  });
+  // AI 生成壁纸：用「API 配置」里的生图模型一次出两张（各发一个请求），失败的那张带上原因。
+  ipcMain.handle('skins:generate-wallpaper', async (_event, prompt, composition) => {
+    const portrait = composition === 'character';
+    const payload = { prompt: String(prompt ?? ''), size: portrait ? '1472x2624' : '2624x1472', ratio: portrait ? '9:16' : '16:9', n: 1 } as Parameters<typeof generateMedia>[1];
+    const results = await Promise.allSettled([0, 1].map(() => generateMedia(loadAiRuntime(userDataDir), payload)));
+    return {
+      images: results.flatMap((result) => (result.status === 'fulfilled' ? result.value.images.map((image) => image.dataUrl) : [])),
+      errors: results.flatMap((result) => (result.status === 'rejected' ? [result.reason instanceof Error ? result.reason.message : String(result.reason)] : [])),
+    };
+  });
+  ipcMain.handle('skins:wallhaven-search', (_event, input) => wallhaven.search(input ?? {}));
+  ipcMain.handle('skins:wallhaven-image', (_event, id) => wallhaven.image(id));
   ipcMain.handle('skins:export', async (_event, id) => {
     const bytes = await exportSkin(userDataDir, id);
     const window = getWindow();

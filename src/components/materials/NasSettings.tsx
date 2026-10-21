@@ -210,6 +210,7 @@ export function MaterialSettingsSection({ section, notify, adminEmail }: Materia
         saveSettings={settings.aiSaveSettings}
         listModels={settings.aiListModels}
         testModel={settings.aiTest}
+        isAdmin={Boolean(adminEmail)}
       />
     );
   }

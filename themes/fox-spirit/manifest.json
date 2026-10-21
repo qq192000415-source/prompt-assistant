@@ -1,0 +1,38 @@
+{
+  "id": "fox-spirit",
+  "name": "九尾狐",
+  "note": "红金华服、仙狐立绘",
+  "author": "灵匣",
+  "version": "1.0.0",
+  "base": "dark",
+  "tokens": {
+    "--sidebar": "rgba(30, 21, 22, 0.64)",
+    "--surface": "rgba(30, 21, 22, 0.64)",
+    "--surface-quiet": "rgba(30, 21, 22, 0.12)",
+    "--surface-raised": "rgba(30, 21, 22, 0.79)",
+    "--surface-muted": "rgba(41, 33, 34, 0.64)",
+    "--overlay-surface": "#1e1516",
+    "--hover": "rgba(255, 255, 255, 0.05)",
+    "--border": "rgba(255, 255, 255, 0.1)",
+    "--border-strong": "rgba(255, 255, 255, 0.18)",
+    "--text": "#ececf0",
+    "--muted": "#a6a8b0",
+    "--faint": "#767880",
+    "--accent": "#cf4130",
+    "--accent-hover": "#d65e4f",
+    "--accent-weak": "rgba(207, 65, 48, 0.22)",
+    "--on-accent": "#ffffff"
+  },
+  "wallpaper": {
+    "file": "wallpaper.webp",
+    "overlay": "transparent",
+    "layout": "right",
+    "focus": [
+      58,
+      41
+    ],
+    "aspect": 0.5628,
+    "base": "#440306"
+  },
+  "preview": "preview.webp"
+}

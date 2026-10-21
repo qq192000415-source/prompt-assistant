@@ -4,6 +4,11 @@
 
 export type SkinBase = 'light' | 'dark';
 
+// 壁纸摆法（1.17.0）：cover 铺满窗口（focus 是窗口变窄时保住的主体位置，百分比）；left / right 是侧边立绘，
+// 按窗口高度完整贴在一侧，朝内容那边渐隐到 base 色，aspect 是图的宽高比（算立绘多宽）。
+export type WallpaperLayout = 'cover' | 'left' | 'right';
+export type SkinWallpaper = { file: string; overlay: string; layout: WallpaperLayout; focus: [number, number]; aspect: number; base: string };
+
 export type SkinManifest = {
   id: string;
   name: string;
@@ -12,7 +17,7 @@ export type SkinManifest = {
   version: string;
   base: SkinBase;
   tokens: Record<string, string>;
-  wallpaper: { file: string; overlay: string } | null;
+  wallpaper: SkinWallpaper | null;
   preview: string;
 };
 
@@ -89,9 +94,23 @@ export const validateSkinManifest = (raw: unknown): SkinManifest => {
   if (input.wallpaper !== undefined) {
     const raw = input.wallpaper as Record<string, unknown> | null;
     if (!raw || typeof raw !== 'object') throw new Error('皮肤包的 wallpaper 格式不对');
+    const layout = raw.layout ?? 'cover';
+    if (layout !== 'cover' && layout !== 'left' && layout !== 'right') throw new Error('皮肤包的 wallpaper.layout 只能是 cover、left 或 right');
+    const focus = raw.focus ?? [50, 50];
+    if (!Array.isArray(focus) || focus.length !== 2 || !focus.every((value) => typeof value === 'number' && value >= 0 && value <= 100)) {
+      throw new Error('皮肤包的 wallpaper.focus 要写成 [横向百分比, 纵向百分比]，都在 0–100');
+    }
+    const aspect = raw.aspect ?? 0;
+    if (layout !== 'cover' && !(typeof aspect === 'number' && aspect >= 0.2 && aspect <= 5)) {
+      throw new Error('侧边立绘（wallpaper.layout 是 left/right）要写 wallpaper.aspect：图片宽 ÷ 高，0.2–5');
+    }
     wallpaper = {
       file: file(raw.file, 'wallpaper.file'),
       overlay: raw.overlay === undefined ? 'transparent' : checkCssValue(raw.overlay, 'wallpaper.overlay'),
+      layout,
+      focus: [focus[0], focus[1]],
+      aspect: typeof aspect === 'number' ? aspect : 0,
+      base: raw.base === undefined ? 'var(--surface-quiet)' : checkCssValue(raw.base, 'wallpaper.base'),
     };
   }
   return {
@@ -124,11 +143,27 @@ const cssUrl = (url: string) => {
 export const buildSkinCss = (manifest: SkinManifest, iconPaths: string[], assetUrl: (path: string) => string) => {
   const scope = `html[data-skin="${manifest.id}"][data-theme]`;
   const tokens = Object.entries(manifest.tokens).map(([name, value]) => `  ${name}: ${value};`);
+  const wallpaper = manifest.wallpaper;
+  // 侧边立绘那一侧给内容区让出位置：宽窗口里人物露出来，窄了就退到磨砂玻璃后面（styles.css 用这个变量）。
+  if (wallpaper && wallpaper.layout !== 'cover') tokens.push(`  --wallpaper-room-${wallpaper.layout}: calc(100vh * ${wallpaper.aspect} * 0.62);`);
   const rules = [`${scope} {\n${tokens.join('\n')}\n  color: var(--text);\n  background: var(--surface-quiet);\n}`];
-  if (manifest.wallpaper) {
-    const overlay = manifest.wallpaper.overlay;
+  if (wallpaper) {
+    // 壁纸画在 body 的两个固定层上（::before 是图，::after 是压暗/提亮的一层），不画进 body 背景：
+    // 这样看图的页面能单独把图调淡（styles.css 里 html[data-view] 的规则），立绘也能用遮罩渐隐。
+    // html 垫底色、body 要透明，否则 body 背景会盖住 z-index 为负的这两层。
+    const { overlay, layout, focus, aspect, base } = wallpaper;
+    const url = cssUrl(assetUrl(wallpaper.file));
+    const layer = 'content: "";\n  position: fixed;\n  z-index: -1;\n  top: 0;\n  bottom: 0;\n  pointer-events: none;';
+    let image = `left: 0;\n  right: 0;\n  background: ${url} ${focus[0]}% ${focus[1]}% / cover no-repeat;`;
+    if (layout !== 'cover') {
+      const mask = `linear-gradient(${layout === 'right' ? 'to left' : 'to right'}, #000 62%, transparent), linear-gradient(to bottom, #000 85%, transparent)`;
+      image = `${layout}: 0;\n  width: calc(100vh * ${aspect});\n  background: ${url} center / cover no-repeat;\n  -webkit-mask-image: ${mask};\n  -webkit-mask-composite: source-in;\n  mask-image: ${mask};\n  mask-composite: intersect;`;
+    }
     rules.push(
-      `${scope} body {\n  background: linear-gradient(${overlay}, ${overlay}), ${cssUrl(assetUrl(manifest.wallpaper.file))} center / cover fixed no-repeat, var(--surface-quiet);\n}`,
+      `${scope} {\n  background: ${layout === 'cover' ? 'var(--overlay-surface)' : base};\n}`,
+      `${scope} body {\n  background: transparent;\n}`,
+      `${scope} body::before {\n  ${layer}\n  ${image}\n  transition: opacity 0.4s, filter 0.4s;\n}`,
+      `${scope} body::after {\n  ${layer}\n  left: 0;\n  right: 0;\n  background: ${overlay};\n}`,
     );
   }
   for (const icon of skinIconNames(iconPaths)) {

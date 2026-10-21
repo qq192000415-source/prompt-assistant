@@ -1,0 +1,38 @@
+{
+  "id": "autumn",
+  "name": "秋枫",
+  "note": "红枫古寺、暖金",
+  "author": "灵匣",
+  "version": "1.0.0",
+  "base": "light",
+  "tokens": {
+    "--sidebar": "rgba(252, 251, 250, 0.58)",
+    "--surface": "rgba(252, 251, 250, 0.58)",
+    "--surface-quiet": "rgba(252, 251, 250, 0.12)",
+    "--surface-raised": "rgba(252, 251, 250, 0.73)",
+    "--surface-muted": "rgba(239, 238, 238, 0.58)",
+    "--overlay-surface": "#fcfbfa",
+    "--hover": "rgba(0, 0, 0, 0.05)",
+    "--border": "rgba(0, 0, 0, 0.08)",
+    "--border-strong": "rgba(0, 0, 0, 0.15)",
+    "--text": "#1a1b1f",
+    "--muted": "#5c606a",
+    "--faint": "#8c919c",
+    "--accent": "#a0660d",
+    "--accent-hover": "#88570b",
+    "--accent-weak": "rgba(160, 102, 13, 0.12)",
+    "--on-accent": "#ffffff"
+  },
+  "wallpaper": {
+    "file": "wallpaper.webp",
+    "overlay": "rgba(252, 251, 250, 0.12)",
+    "layout": "cover",
+    "focus": [
+      41,
+      45
+    ],
+    "aspect": 1.7768,
+    "base": "#fcfbfa"
+  },
+  "preview": "preview.webp"
+}

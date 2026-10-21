@@ -7,7 +7,7 @@ import { applyTheme, isDarkTheme, readTheme, skinOf, type ThemeMode } from './li
 import { useSkins } from './skins/useSkins';
 import { toast as pushToast } from 'sonner';
 import type { CloudSnapshot } from './cloudSync';
-import { loadOwnApiRecommendation, loadOwnNasGrant } from './cloudSync';
+import { loadAiRuleOverrides, loadOwnApiRecommendation, loadOwnNasGrant } from './cloudSync';
 import {
   DOCUMENT_CATEGORY_STORAGE_KEY,
   DOCUMENT_SUBCATEGORY_STORAGE_KEY,
@@ -244,6 +244,11 @@ function App() {
   useEffect(() => {
     saveLibraryMode(libraryMode);
   }, [libraryMode]);
+
+  // 当前页写进 html[data-view]：皮肤壁纸在素材、画布页变淡，立绘在提示词、文档页让位（styles.css）。
+  useEffect(() => {
+    document.documentElement.dataset.view = settingsSection ? 'settings' : libraryMode;
+  }, [libraryMode, settingsSection]);
 
   useEffect(() => {
     saveDeletedRecords(deletedRecords);
@@ -679,6 +684,25 @@ function App() {
     return () => {
       alive = false;
     };
+  }, [cloud.cloudEmail]);
+
+  // 管理员下发的 AI 功能规则（1.17.0）：登录后读一次交给主进程，主进程存一份，读不到（没建表、断网）时沿用上次的。
+  // 只在真的退出登录时清空回到内置规则：启动时登录状态还没恢复的那一下 cloudEmail 也是空的。
+  const ruleEmailRef = useRef<string | null>(null);
+  useEffect(() => {
+    const materialsApi = window.promptAssistantDesktop?.materials;
+    const email = cloud.cloudEmail;
+    const previous = ruleEmailRef.current;
+    ruleEmailRef.current = email;
+    if (!materialsApi) return;
+    if (!email) {
+      if (previous) void materialsApi.aiSetRuleOverrides({});
+      return;
+    }
+    void loadAiRuleOverrides().then(
+      (overrides) => materialsApi.aiSetRuleOverrides(overrides),
+      (error) => console.warn('读取 AI 规则失败', error),
+    );
   }, [cloud.cloudEmail]);
 
   const duplicatePrompt = (prompt: PromptItem) => {

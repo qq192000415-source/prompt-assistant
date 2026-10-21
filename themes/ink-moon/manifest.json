@@ -1,0 +1,38 @@
+{
+  "id": "ink-moon",
+  "name": "墨山月",
+  "note": "水墨月夜山水",
+  "author": "灵匣",
+  "version": "1.0.0",
+  "base": "dark",
+  "tokens": {
+    "--sidebar": "rgba(21, 26, 30, 0.7)",
+    "--surface": "rgba(21, 26, 30, 0.7)",
+    "--surface-quiet": "rgba(21, 26, 30, 0.12)",
+    "--surface-raised": "rgba(21, 26, 30, 0.85)",
+    "--surface-muted": "rgba(33, 37, 41, 0.7)",
+    "--overlay-surface": "#151a1e",
+    "--hover": "rgba(255, 255, 255, 0.05)",
+    "--border": "rgba(255, 255, 255, 0.1)",
+    "--border-strong": "rgba(255, 255, 255, 0.18)",
+    "--text": "#ececf0",
+    "--muted": "#a6a8b0",
+    "--faint": "#767880",
+    "--accent": "#4178aa",
+    "--accent-hover": "#5e8cb7",
+    "--accent-weak": "rgba(65, 120, 170, 0.22)",
+    "--on-accent": "#ffffff"
+  },
+  "wallpaper": {
+    "file": "wallpaper.webp",
+    "overlay": "rgba(21, 26, 30, 0.12)",
+    "layout": "cover",
+    "focus": [
+      29,
+      53
+    ],
+    "aspect": 1.7768,
+    "base": "#151a1e"
+  },
+  "preview": "preview.webp"
+}

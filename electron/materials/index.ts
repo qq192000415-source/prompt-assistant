@@ -13,7 +13,7 @@ import {
 } from '../../src/materials/library.ts';
 import { mimeTypeOf } from '../../src/materials/mediaFileTypes.ts';
 import { batchClassify, batchReverse, classifyItem, knownCategoriesOf, optimizePrompt, reversePrompt, translatePrompt } from './ai.ts';
-import { getPublicAiSettings, listModels, loadAiRuntime, saveAiSettings, setBaseUrl, setImageModel, testModel } from './aiSettings.ts';
+import { getPublicAiSettings, listModels, loadAiRuntime, saveAiSettings, setBaseUrl, setImageModel, setRuleOverrides, testModel } from './aiSettings.ts';
 import { compressImages, compressVideos, type ImageCompressOptions } from './batch.ts';
 import { exportItems } from './export.ts';
 import { cancelBatch, reason, type BatchProgress, type Failure } from './tasks.ts';
@@ -286,6 +286,7 @@ export function register({ ipcMain, userDataDir, updateBaseUrl, getWindow }: Reg
   ipcMain.handle('materials:ai-list-models', (_event, name, input) => listModels(userDataDir, slotName(name), input ?? {}));
   ipcMain.handle('materials:ai-set-image-model', (_event, model) => setImageModel(userDataDir, model));
   ipcMain.handle('materials:ai-set-base-url', (_event, slots, url) => setBaseUrl(userDataDir, slots, url));
+  ipcMain.handle('materials:ai-set-rule-overrides', (_event, overrides) => setRuleOverrides(userDataDir, overrides));
   ipcMain.handle('materials:ai-test', (_event, name, input) => testModel(userDataDir, slotName(name), input ?? {}));
   ipcMain.handle('materials:ai-reverse', async (_event, itemId) => {
     const { config, item } = await findItem(itemId);
