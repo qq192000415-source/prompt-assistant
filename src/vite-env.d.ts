@@ -140,6 +140,8 @@ type DesktopMaterialsApi = {
   aiSaveSettings: (settings: MaterialAiSettingsInput) => Promise<MaterialAiSettings>;
   aiListModels: (slot: MaterialAiSlotName, input: MaterialAiSlotInput) => Promise<Array<{ id: string; vision: boolean; generation: boolean }>>;
   aiSetImageModel: (model: string) => Promise<MaterialAiSettings>;
+  // 管理员推荐的 API 地址：只换这几个位置的接口地址（OpenAI 兼容的），Key、模型不变。
+  aiSetBaseUrl: (slots: MaterialAiSlotName[], url: string) => Promise<MaterialAiSettings>;
   aiTest: (slot: MaterialAiSlotName, input: MaterialAiSlotInput) => Promise<void>;
   aiReverse: (id: string) => Promise<string>;
   aiOptimize: (prompt: string, kind: 'positive' | 'negative') => Promise<string>;
@@ -210,6 +212,8 @@ type MaterialCanvasSlot = {
   savedToLibrary?: boolean;
   // 队列里正在生成的槽位才有：开始生成的时间。
   startedAt?: string | null;
+  // 生成用了多少毫秒（含自动重试），结束后才有；1.14.0 以前的历史没有。
+  durationMs?: number | null;
 };
 type MaterialCanvasTask = {
   id: string;

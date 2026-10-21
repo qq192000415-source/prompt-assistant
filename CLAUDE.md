@@ -22,6 +22,8 @@ npm.cmd run release:publish                   # 打三类包 + 上传更新源 +
 
 开发版测桌面功能时，用 `PROMPT_ASSISTANT_USER_DATA=<临时目录>` 启动 Electron，避免写进用户真实数据。加 `--remote-debugging-port=9333` 后，可以用 CDP 驱动渲染进程做实测。
 
+实测可以直接用主人的真实生图接口和额度（主人 2026-10-21 授权），不用先问；测完把测试生成的记录删掉。
+
 ## 发版流程
 
 改了会被打包的代码（`src/`、`electron/`、`index.html`、`package.json`）就要发新版：

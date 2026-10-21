@@ -136,6 +136,21 @@ export function setImageModel(userDataDir: string, model: unknown) {
   return getPublicAiSettings(userDataDir);
 }
 
+// 管理员推荐的 API 地址（1.14.0）：只换选中位置的接口地址，Key、模型、规则、并发原样保留。Ollama 是本机服务，不换。
+export function setBaseUrl(userDataDir: string, names: unknown, url: unknown) {
+  const baseUrl = normalizeAiBaseUrlForProvider(asText(url), 'openai-compatible');
+  if (!/^https?:\/\//i.test(baseUrl)) throw new Error('接口地址要以 http:// 或 https:// 开头');
+  const stored = readStored(userDataDir);
+  const next = { ...stored };
+  for (const name of Array.isArray(names) ? names : []) {
+    if (name !== 'text' && name !== 'vision' && name !== 'image') continue;
+    const slot = stored[name as SlotName];
+    if (slot?.provider === 'openai-compatible') next[name as SlotName] = { ...slot, baseUrl };
+  }
+  fs.writeFileSync(settingsPath(userDataDir), JSON.stringify(next, null, 2));
+  return getPublicAiSettings(userDataDir);
+}
+
 export function saveAiSettings(userDataDir: string, input: { text?: SlotInput | null; vision?: SlotInput | null; image?: SlotInput | null; canvas?: unknown; actions?: Record<string, { rulePresetIds?: unknown; customInstructions?: unknown }> }) {
   const text = slotFromInput(userDataDir, 'text', input.text);
   const vision = slotFromInput(userDataDir, 'vision', input.vision);

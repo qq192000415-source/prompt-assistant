@@ -242,6 +242,11 @@ export const loadDocumentPaneWidth = () => {
 };
 export const saveDocumentPaneWidth = (width: number) => writeKey(DOCUMENT_PANE_WIDTH_KEY, String(clampCanvasDetailWidth(width)));
 
+// 管理员推荐的 API 地址：这台电脑已经处理过（换了或点了「暂不」）的那个地址，同一个地址不再问。
+const HANDLED_API_RECOMMENDATION_KEY = 'prompt-library.handledApiRecommendation.v1';
+export const loadHandledApiRecommendation = () => readKey(HANDLED_API_RECOMMENDATION_KEY) ?? '';
+export const saveHandledApiRecommendation = (url: string) => writeKey(HANDLED_API_RECOMMENDATION_KEY, url);
+
 export const loadCanvasPanelCollapsed = () => readKey(CANVAS_PANEL_COLLAPSED_KEY) === '1';
 export const saveCanvasPanelCollapsed = (collapsed: boolean) => writeKey(CANVAS_PANEL_COLLAPSED_KEY, collapsed ? '1' : '0');
 

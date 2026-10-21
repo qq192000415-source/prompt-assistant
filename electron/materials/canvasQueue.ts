@@ -18,6 +18,8 @@ export type QueueSlot = {
   dataUrl: string | null;
   // 开始生成的时间（ISO），界面据此显示「生成中 0:23」；排队中、没开始的是 null。
   startedAt: string | null;
+  // 从开始生成到出图（或最终失败）用了多少毫秒，含自动重试；还没结束的是 null。
+  durationMs: number | null;
 };
 export type TaskMeta = { model: string; prompt: string; negativePrompt: string; params: HistoryParams; origin: CanvasOrigin | null; referenceCount: number };
 export type QueueTask = TaskMeta & { id: string; createdAt: string; total: number; slots: QueueSlot[] };
@@ -68,6 +70,9 @@ export function createCanvasQueue(deps: Deps) {
     const payload = payloads.get(task.id)!;
     const alive = () => tokens.get(slot) === token;
     const { retries } = deps.limits();
+    const stopClock = () => {
+      slot.durationMs = slot.startedAt ? Math.max(0, Date.now() - Date.parse(slot.startedAt)) : null;
+    };
     try {
       for (let attempt = 1; ; attempt += 1) {
         slot.attempts = attempt;
@@ -79,6 +84,7 @@ export function createCanvasQueue(deps: Deps) {
           if (attempt > retries || !isRetryable(error)) {
             slot.status = 'failed';
             slot.error = reason(error);
+            stopClock();
             deps.onChange();
             await deps.recordFailure(task, slot).catch((recordError) => console.warn('失败记录没写进生成历史', recordError));
             return;
@@ -90,6 +96,7 @@ export function createCanvasQueue(deps: Deps) {
           continue;
         }
         if (!alive()) return;
+        stopClock();
         if (generated.model) task.model = generated.model;
         saving.add(slot);
         try {
@@ -154,7 +161,7 @@ export function createCanvasQueue(deps: Deps) {
         id: crypto.randomUUID(),
         createdAt: new Date().toISOString(),
         total,
-        slots: Array.from({ length: total }, (_, index) => ({ index, status: 'queued', attempts: 0, error: '', media: null, revisedPrompt: null, dataUrl: null, startedAt: null })),
+        slots: Array.from({ length: total }, (_, index) => ({ index, status: 'queued', attempts: 0, error: '', media: null, revisedPrompt: null, dataUrl: null, startedAt: null, durationMs: null })),
       };
       payloads.set(task.id, { ...payload, n: 1 });
       tasks.unshift(task);
@@ -177,7 +184,7 @@ export function createCanvasQueue(deps: Deps) {
     retry(taskId: string, index: number) {
       const slot = find(taskId).slots.find((entry) => entry.index === index);
       if (!slot || (slot.status !== 'failed' && slot.status !== 'canceled')) throw new Error('这张图不需要重试');
-      Object.assign(slot, { status: 'queued', attempts: 0, error: '', media: null, revisedPrompt: null, dataUrl: null, startedAt: null });
+      Object.assign(slot, { status: 'queued', attempts: 0, error: '', media: null, revisedPrompt: null, dataUrl: null, startedAt: null, durationMs: null });
       deps.onChange();
       pump();
     },

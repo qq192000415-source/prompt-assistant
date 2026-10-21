@@ -426,15 +426,27 @@ export const downloadCloudFile = async (userId: string, sha256: string, settings
 };
 
 // 素材库 NAS 授权（表 nas_grants，见 supabase-schema.sql）：管理员给账号开通 NAS 连接，对方登录后自动连上。
-export type NasGrant = { email: string; baseUrl: string; username: string; password: string; updatedAt: string };
+// recommendedApiUrl：管理员推荐的 API 地址（1.14.0），空表示不推荐；没加这一列的部署读出来也是空。
+export type NasGrant = { email: string; baseUrl: string; username: string; password: string; recommendedApiUrl: string; updatedAt: string };
 
-type NasGrantRow = { email: string; base_url: string; username: string; password: string; updated_at: string };
+type NasGrantRow = { email: string; base_url: string; username: string; password: string; api_base_url?: string; updated_at: string };
 
-const rowToGrant = (row: NasGrantRow): NasGrant => ({ email: row.email, baseUrl: row.base_url, username: row.username, password: row.password, updatedAt: row.updated_at });
+const rowToGrant = (row: NasGrantRow): NasGrant => ({
+  email: row.email,
+  baseUrl: row.base_url,
+  username: row.username,
+  password: row.password,
+  recommendedApiUrl: row.api_base_url ?? '',
+  updatedAt: row.updated_at,
+});
 
-// 没执行过建表 SQL 时 Supabase 报找不到表，换成能看懂的话。
+// 没执行过建表 SQL 时 Supabase 报找不到表（或找不到推荐 API 地址那一列），换成能看懂的话。
 const grantError = (message: string) =>
-  /nas_grants|schema cache|does not exist/i.test(message) ? new Error('Supabase 里还没有 NAS 授权表，请先执行 supabase-schema.sql 末尾的「素材库 NAS 授权」那段') : new Error(message);
+  /api_base_url/i.test(message)
+    ? new Error('Supabase 的 NAS 授权表还没有「推荐 API 地址」这一列，请先执行 supabase-schema.sql 里「推荐 API 地址」那一句')
+    : /nas_grants|schema cache|does not exist/i.test(message)
+      ? new Error('Supabase 里还没有 NAS 授权表，请先执行 supabase-schema.sql 末尾的「素材库 NAS 授权」那段')
+      : new Error(message);
 
 export const loadOwnNasGrant = async (email: string, settings: CloudSettings = loadCloudSettings()) => {
   const { data, error } = await getSupabaseClient(settings).from('nas_grants').select('*').eq('email', normalizeCloudEmail(email)).maybeSingle();
@@ -448,9 +460,23 @@ export const listNasGrants = async (settings: CloudSettings = loadCloudSettings(
   return (data as NasGrantRow[]).map(rowToGrant);
 };
 
-export const saveNasGrant = async (grant: Omit<NasGrant, 'updatedAt'>, settings: CloudSettings = loadCloudSettings()) => {
-  const row = { email: normalizeCloudEmail(grant.email), base_url: grant.baseUrl, username: grant.username, password: grant.password, updated_at: new Date().toISOString() };
+// 不传 recommendedApiUrl 时不动这一列：已有的行保留原来的推荐地址（upsert 只改传了的列）。
+export const saveNasGrant = async (grant: Omit<NasGrant, 'updatedAt' | 'recommendedApiUrl'> & { recommendedApiUrl?: string }, settings: CloudSettings = loadCloudSettings()) => {
+  const row = {
+    email: normalizeCloudEmail(grant.email),
+    base_url: grant.baseUrl,
+    username: grant.username,
+    password: grant.password,
+    ...(grant.recommendedApiUrl === undefined ? {} : { api_base_url: grant.recommendedApiUrl }),
+    updated_at: new Date().toISOString(),
+  };
   const { error } = await getSupabaseClient(settings).from('nas_grants').upsert(row);
+  if (error) throw grantError(error.message);
+};
+
+// 推荐 API 地址对所有授权一样：一次写进全部行（含管理员自己那一行）。
+export const saveRecommendedApiUrl = async (recommendedApiUrl: string, settings: CloudSettings = loadCloudSettings()) => {
+  const { error } = await getSupabaseClient(settings).from('nas_grants').update({ api_base_url: recommendedApiUrl }).neq('email', '');
   if (error) throw grantError(error.message);
 };
 

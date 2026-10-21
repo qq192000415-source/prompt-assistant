@@ -69,6 +69,7 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     aiSaveSettings: (settings) => ipcRenderer.invoke('materials:ai-save-settings', settings),
     aiListModels: (slot, input) => ipcRenderer.invoke('materials:ai-list-models', slot, input),
     aiSetImageModel: (model) => ipcRenderer.invoke('materials:ai-set-image-model', model),
+    aiSetBaseUrl: (slots, url) => ipcRenderer.invoke('materials:ai-set-base-url', slots, url),
     aiTest: (slot, input) => ipcRenderer.invoke('materials:ai-test', slot, input),
     aiReverse: (id) => ipcRenderer.invoke('materials:ai-reverse', id),
     aiOptimize: (prompt, kind) => ipcRenderer.invoke('materials:ai-optimize', prompt, kind),

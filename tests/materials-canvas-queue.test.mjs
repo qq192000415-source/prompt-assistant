@@ -247,6 +247,52 @@ test('槽位开始生成时记下开始时间，排队中和重试前清空', as
   assert.equal(queue.snapshot()[0].slots[0].startedAt, null);
 });
 
+test('耗时：出图或最终失败时记下用了多久（含自动重试），写进历史；重试前清空；历史里读得回来', async () => {
+  const records = [];
+  const calls = [];
+  const queue = createCanvasQueue({
+    generate: () => new Promise((resolve, reject) => calls.push({ resolve, reject })),
+    persist: async (task, slot) => {
+      records.push(['done', slot.index, slot.durationMs]);
+      return { sha256: sha(1), ext: '.png', kind: 'image', size: 1, width: 1, height: 1, hasThumb: true };
+    },
+    recordFailure: async (task, slot) => {
+      records.push(['failed', slot.index, slot.durationMs]);
+    },
+    limits: () => ({ concurrency: 2, retries: 1 }),
+    onChange: () => {},
+    wait: async () => {},
+  });
+  const id = queue.submit(meta(), { prompt: '猫' }, 2);
+  assert.deepEqual(queue.snapshot()[0].slots.map((slot) => slot.durationMs), [null, null]);
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  done(calls[0]);
+  // 第 2 张：第一次临时失败、自动重试，第二次又失败，耗时从第一次开始算。
+  calls[1].reject(new Error('请求超时'));
+  await flush();
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  calls[2].reject(new Error('请求超时'));
+  await flush();
+
+  const [first, second] = queue.snapshot()[0].slots;
+  assert.ok(first.durationMs >= 35, `第 1 张耗时 ${first.durationMs}`);
+  assert.ok(second.durationMs >= 75, `第 2 张耗时 ${second.durationMs}`);
+  assert.equal(second.attempts, 2);
+  assert.deepEqual(records, [
+    ['done', 0, first.durationMs],
+    ['failed', 1, second.durationMs],
+  ]);
+
+  queue.retry(id, 1);
+  assert.equal(queue.snapshot()[0].slots[1].durationMs, null);
+
+  const now = '2026-10-21T00:00:00.000Z';
+  const slot = (index, durationMs) => ({ index, status: 'failed', error: 'x', durationMs });
+  const { history } = normalizeHistory({ tasks: [{ id: 't', createdAt: now, slots: [slot(0, 61234), slot(1, undefined), slot(2, -5), slot(3, '60')] }] });
+  // 1.14.0 以前的记录没有耗时，读出来是 null；坏值也当没有。
+  assert.deepEqual(history.tasks[0].slots.map((entry) => entry.durationMs), [61234, null, null, null]);
+});
+
 test('生成历史存参考图：建记录时写入，删任务或单张时参考图和生成的图一起算「还在用」', () => {
   const now = '2026-10-19T00:00:00.000Z';
   const media = (n) => ({ sha256: sha(n), ext: '.png', kind: 'image', size: 1, width: 1, height: 1, hasThumb: true });

@@ -3599,6 +3599,59 @@ h2 {
   box-shadow: 0 0 0 3px var(--accent-weak);
 }
 
+.nas-grants-api {
+  display: grid;
+  gap: 6px;
+}
+
+.nas-grants-api label {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.api-recommend code {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.api-recommend-note {
+  color: var(--muted) !important;
+  font-size: 13px !important;
+}
+
+.api-recommend-list {
+  display: grid;
+  gap: 6px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.api-recommend-list label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.api-recommend-list input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+
+.api-recommend-list span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.api-recommend-list small {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .nas-grants-head {
   display: flex;
   align-items: flex-start;

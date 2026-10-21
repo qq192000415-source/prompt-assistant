@@ -104,6 +104,10 @@ create table if not exists public.nas_grants (
   updated_at timestamptz not null default now()
 );
 
+-- 推荐 API 地址（1.14.0）：管理员在授权管理里填一次，写进每个已授权账号那一行；对方登录后软件提示把 API 配置里的接口地址换成它（Key 不变）。
+-- 没执行这一句时 NAS 授权照常能用，只是保存推荐地址会报错。
+alter table public.nas_grants add column if not exists api_base_url text not null default '';
+
 alter table public.nas_grants enable row level security;
 alter table public.nas_grants force row level security;
 revoke all on table public.nas_grants from anon;

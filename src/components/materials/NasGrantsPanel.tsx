@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pencil, RefreshCw, Search } from 'lucide-react';
 import { Button } from '../ui/button';
-import { deleteNasGrant, listAppUsers, normalizeCloudEmail, saveAppUserNote, saveNasGrant, type AppUser } from '../../cloudSync';
+import { deleteNasGrant, listAppUsers, listNasGrants, normalizeCloudEmail, saveAppUserNote, saveNasGrant, saveRecommendedApiUrl, type AppUser } from '../../cloudSync';
 
 // 授权管理（管理员）：列出所有注册过的账号和是否已授权 NAS，能授权、收回、写备注（姓名等）和标签。
 // 授权的是管理员这台电脑上现在的连接；管理员改了连接保存后，已授权的账号会一起更新。
+// 推荐 API 地址（1.14.0）：填一次写进所有授权，对方登录后提示把 API 配置的接口地址换成它。
 
 type Filter = 'all' | 'granted' | 'ungranted';
 const FILTERS: Array<{ value: Filter; label: string }> = [
@@ -27,6 +28,9 @@ export function NasGrantsPanel({ adminEmail, notify }: { adminEmail: string; not
   const [confirming, setConfirming] = useState('');
   const [editing, setEditing] = useState<{ email: string; note: string; tags: string } | null>(null);
   const [newEmail, setNewEmail] = useState('');
+  // 推荐 API 地址：apiUrl 是已保存的，apiDraft 是输入框里的。
+  const [apiUrl, setApiUrl] = useState('');
+  const [apiDraft, setApiDraft] = useState('');
   const self = normalizeCloudEmail(adminEmail);
 
   const reload = () =>
@@ -39,6 +43,15 @@ export function NasGrantsPanel({ adminEmail, notify }: { adminEmail: string; not
     );
   useEffect(() => {
     void reload();
+    // 每一行存的都一样，取管理员自己那一行，没有就取第一个非空的。
+    void listNasGrants().then(
+      (grants) => {
+        const saved = (grants.find((entry) => entry.email === self) ?? grants.find((entry) => entry.recommendedApiUrl))?.recommendedApiUrl ?? '';
+        setApiUrl(saved);
+        setApiDraft(saved);
+      },
+      (error) => console.warn('读取推荐 API 地址失败', error),
+    );
   }, []);
 
   const act = async (email: string, action: () => Promise<void>, done: string) => {
@@ -60,10 +73,26 @@ export function NasGrantsPanel({ adminEmail, notify }: { adminEmail: string; not
       email,
       async () => {
         const own = await window.promptAssistantDesktop!.materials!.revealConfig();
-        await saveNasGrant({ email, baseUrl: own.baseUrl, username: own.username, password: own.password });
+        await saveNasGrant({ email, baseUrl: own.baseUrl, username: own.username, password: own.password, recommendedApiUrl: apiUrl || undefined });
       },
       `已给 ${email} 开通 NAS 连接，对方下次启动或登录时自动连上`,
     );
+  const saveApiUrl = () => {
+    const url = apiDraft.trim();
+    if (url && !/^https?:\/\/\S+$/i.test(url)) {
+      notify('推荐 API 地址要以 http:// 或 https:// 开头');
+      return;
+    }
+    void act(
+      'api-url',
+      async () => {
+        await saveRecommendedApiUrl(url);
+        setApiUrl(url);
+        setApiDraft(url);
+      },
+      url ? '已保存推荐 API 地址，已授权的账号下次登录或启动时会收到替换提示' : '已清空推荐 API 地址',
+    );
+  };
   const revoke = (email: string) => act(email, () => deleteNasGrant(email), `已收回 ${email} 的 NAS 连接`);
   const saveNote = (email: string, note: string, tags: string) =>
     act(email, () => saveAppUserNote(email, note, parseTags(tags)), '备注已保存').then(() => setEditing(null));
@@ -96,6 +125,23 @@ export function NasGrantsPanel({ adminEmail, notify }: { adminEmail: string; not
         </Button>
       </div>
       <p className="nas-form-note">授权的账号登录后自动连上这台电脑现在的 NAS 连接，看不到密码，素材放在自己邮箱命名的子文件夹里；收回后对方下次启动或登录时断开。大家共用同一个 NAS 用户，要彻底收回请在 NAS 上改密码。</p>
+
+      <form
+        className="nas-grants-api"
+        onSubmit={(event) => {
+          event.preventDefault();
+          saveApiUrl();
+        }}
+      >
+        <label htmlFor="nas-grants-api-url">推荐 API 地址</label>
+        <div className="nas-grants-add">
+          <input id="nas-grants-api-url" value={apiDraft} onChange={(event) => setApiDraft(event.target.value)} placeholder="比如 https://example.com/v1，留空表示不推荐" />
+          <Button className="button ghost" type="submit" disabled={working === 'api-url' || apiDraft.trim() === apiUrl}>
+            保存
+          </Button>
+        </div>
+        <p className="nas-form-note">已授权的账号登录后，如果 API 配置里的接口地址和这个不一样，会提示一键替换（只换地址，Key 和模型不变）。新授权的账号也会带上。</p>
+      </form>
 
       {loadError ? (
         <p className="canvas-detail-error" role="alert">

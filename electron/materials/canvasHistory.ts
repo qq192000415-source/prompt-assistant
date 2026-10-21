@@ -11,7 +11,8 @@ export const HISTORY_FILE = 'canvas-history/history.json';
 
 export type HistoryMedia = { sha256: string; ext: string; kind: 'image' | 'video'; size: number; width: number | null; height: number | null; hasThumb: boolean };
 // 历史里只记结束了的槽位：生成好了的带 media，失败的带原因。排队、生成中的只在内存队列里。
-export type HistorySlot = { index: number; status: 'done' | 'failed'; media: HistoryMedia | null; revisedPrompt: string | null; error: string; attempts: number; savedToLibrary: boolean };
+// durationMs：生成用了多久（含自动重试），1.14.0 起记；更早的记录是 null。
+export type HistorySlot = { index: number; status: 'done' | 'failed'; media: HistoryMedia | null; revisedPrompt: string | null; error: string; attempts: number; savedToLibrary: boolean; durationMs: number | null };
 export type HistoryParams = { size: string; ratio: string; quality: string; outputFormat: string; background: string; mediaType: 'image' | 'video' };
 export type HistoryTask = {
   id: string;
@@ -62,6 +63,7 @@ function normalizeSlot(raw: unknown): HistorySlot | null {
     error: text(raw.error),
     attempts: typeof raw.attempts === 'number' ? raw.attempts : 1,
     savedToLibrary: raw.savedToLibrary === true,
+    durationMs: typeof raw.durationMs === 'number' && raw.durationMs >= 0 ? raw.durationMs : null,
   };
 }
 

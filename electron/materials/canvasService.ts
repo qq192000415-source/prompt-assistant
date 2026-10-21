@@ -152,7 +152,7 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem, onPe
       const account = accountByTask.get(task.id) ?? getAccount();
       const references = await referencesOf(task);
       const { buffer, ext } = decodeGeneratedMedia(generated.dataUrl);
-      const record = { index: slot.index, status: 'done' as const, revisedPrompt: generated.revisedPrompt, error: generated.warning ?? '', attempts: slot.attempts, savedToLibrary: false };
+      const record = { index: slot.index, status: 'done' as const, revisedPrompt: generated.revisedPrompt, error: generated.warning ?? '', attempts: slot.attempts, savedToLibrary: false, durationMs: slot.durationMs };
       try {
         const config = loadConfig(userDataDir, account);
         const media = await putHistoryMedia(config, buffer, ext);
@@ -170,7 +170,7 @@ export function registerCanvas({ ipcMain, userDataDir, getWindow, findItem, onPe
     recordFailure: async (task, slot) => {
       const account = accountByTask.get(task.id) ?? getAccount();
       const references = await referencesOf(task);
-      const record = { index: slot.index, status: 'failed' as const, media: null, revisedPrompt: null, error: slot.error, attempts: slot.attempts, savedToLibrary: false };
+      const record = { index: slot.index, status: 'failed' as const, media: null, revisedPrompt: null, error: slot.error, attempts: slot.attempts, savedToLibrary: false, durationMs: slot.durationMs };
       try {
         await mutateHistory(loadConfig(userDataDir, account), (history) => ({ history: recordSlot(history, taskRecord(task, references), record, new Date().toISOString()), result: null }));
       } catch (error) {

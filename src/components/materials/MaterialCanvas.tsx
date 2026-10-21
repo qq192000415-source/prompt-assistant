@@ -950,16 +950,24 @@ function useNow(active: boolean) {
   return now;
 }
 
+// 毫秒写成「1:05」。
+const clock = (ms: number) => {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+};
+
 function Elapsed({ startedAt }: { startedAt: string | null | undefined }) {
   const now = useNow(Boolean(startedAt));
   if (!startedAt) return null;
-  const seconds = Math.max(0, Math.floor((now - Date.parse(startedAt)) / 1000));
-  return (
-    <span className="canvas-elapsed">
-      {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}
-    </span>
-  );
+  return <span className="canvas-elapsed">{clock(now - Date.parse(startedAt))}</span>;
 }
+
+// 生成好的图各用了多久，列表那一行用；没记耗时的（1.14.0 以前）不写。
+const doneDurations = (task: MaterialCanvasTask) =>
+  task.slots
+    .filter((slot) => slot.status === 'done' && typeof slot.durationMs === 'number')
+    .sort((a, b) => a.index - b.index)
+    .map((slot) => clock(slot.durationMs!));
 
 // 缩略图按原图比例完整显示（object-fit: contain），不裁边。比例先用历史里记的宽高，避免加载时跳动；内存里的图没记宽高，加载后再按实际比例排。
 // 从 NAS 读完之前显示骨架闪光；读不到（丢了、NAS 暂时连不上）先换原图，原图也读不到就写明，不留破图标。
@@ -1166,6 +1174,7 @@ function CanvasTaskRow({ task, inQueue, currentKey, isSaved, onSelect, picked: p
         <span className="canvas-task-meta">
           {formatTime(task.createdAt)} · {task.model} · {sizeText(task)}
           {task.referenceCount ? ` · ${task.referenceCount} 张参考图` : ''}
+          {doneDurations(task).length ? ` · 耗时 ${doneDurations(task).join(' / ')}` : ''}
         </span>
         <span
           className={`canvas-task-prompt ${expanded ? 'is-expanded' : ''}`}
@@ -1332,6 +1341,7 @@ function CanvasDetail({ task, slot, inQueue, busy, isSaved, onSelect, onOpen, on
   const rows: Array<[string, string]> = [
     ['时间', formatTime(task.createdAt, true)],
     ['状态', status],
+    ['耗时', typeof slot?.durationMs === 'number' ? `${clock(slot.durationMs)}${slot.attempts > 1 ? `（含重试，共 ${slot.attempts} 次）` : ''}` : ''],
     ['模型', task.model],
     ['尺寸', actual ? `选 ${sizeText(task)} · 实际 ${actual}` : sizeText(task)],
     ['比例', task.params.ratio],
