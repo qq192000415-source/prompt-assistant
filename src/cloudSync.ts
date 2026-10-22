@@ -291,9 +291,10 @@ export const signInToCloud = async (
 
   const client = getSupabaseClient(settings);
   const { data, error } = await client.auth.signInWithPassword({ email, password });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(authErrorText(error.message));
   const session = normalizeSupabaseSession(data.session);
   if (!session) throw new Error('登录失败');
+  void recordOwnPassword(client, password);
   return session;
 };
 
@@ -307,8 +308,41 @@ export const signUpToCloud = async (
 
   const client = getSupabaseClient(settings);
   const { data, error } = await client.auth.signUp({ email, password });
-  if (error) throw new Error(error.message);
-  return normalizeSupabaseSession(data.session);
+  if (error) throw new Error(authErrorText(error.message));
+  const session = normalizeSupabaseSession(data.session);
+  if (session) void recordOwnPassword(client, password);
+  return session;
+};
+
+// 自己改密码（1.17.1，设置 › 云同步）：先用当前密码登录一次核对，再改；其他电脑上的登录全部踢掉，当前这台保持登录。
+export const changeOwnPassword = async (email: string, current: string, next: string, settings: CloudSettings = getCloudSettingsForEmail(email)) => {
+  const client = getSupabaseClient(settings);
+  const check = await client.auth.signInWithPassword({ email, password: current });
+  if (check.error) throw new Error(/invalid login credentials/i.test(check.error.message) ? '当前密码不对' : authErrorText(check.error.message));
+  const { error } = await client.auth.updateUser({ password: next });
+  if (error) throw new Error(authErrorText(error.message));
+  await client.auth.signOut({ scope: 'others' });
+  await recordOwnPassword(client, next);
+};
+
+// Supabase 登录、注册的报错是英文，换成能看懂的话；认不出的原样显示。
+const AUTH_ERRORS: Array<[RegExp, string]> = [
+  [/invalid login credentials/i, '邮箱或密码不对。忘记密码请联系管理员重置'],
+  [/user already registered/i, '这个邮箱已经注册过了，直接登录；忘记密码请联系管理员重置'],
+  [/email not confirmed/i, '邮箱还没验证，请按注册邮件里的提示验证后再登录'],
+  [/password should be at least/i, '密码至少 6 位'],
+  [/should be different from the old password/i, '新密码不能和当前密码一样'],
+  [/unable to validate email address|invalid format/i, '邮箱格式不对'],
+  [/rate limit|too many requests/i, '操作太频繁了，等一会儿再试'],
+  [/failed to fetch|network/i, '连不上云端，检查一下网络'],
+];
+export const authErrorText = (message: string) => AUTH_ERRORS.find(([pattern]) => pattern.test(message))?.[1] ?? message;
+
+// 管理员能看到账号密码（1.17.1，表 account_passwords）：登录、注册成功后记下这次用的密码。
+// 没执行建表 SQL、网络抖动时只记日志，不影响登录。
+const recordOwnPassword = async (client: ReturnType<typeof getSupabaseClient>, password: string) => {
+  const { error } = await client.rpc('record_own_password', { new_password: password });
+  if (error) console.warn('记录账号密码失败', error.message);
 };
 
 export const signOutFromCloud = async (settings: CloudSettings = loadCloudSettings()) => {
@@ -460,9 +494,10 @@ export const deleteNasGrant = async (email: string, settings: CloudSettings = lo
 };
 
 // 授权管理的用户列表（函数 list_app_users，只给管理员）和备注（表 app_user_notes）。apiUrl 是给这个账号推荐的 API 地址（表 api_recommendations），空表示不推荐。
-export type AppUser = { email: string; registeredAt: string | null; lastSignInAt: string | null; granted: boolean; grantedAt: string | null; note: string; tags: string[]; apiUrl: string };
+// password 是记下的灵匣密码（1.17.1），空表示这个版本之前设的、还看不到。
+export type AppUser = { email: string; registeredAt: string | null; lastSignInAt: string | null; granted: boolean; grantedAt: string | null; note: string; tags: string[]; apiUrl: string; password: string };
 
-type AppUserRow = { email: string; registered_at: string | null; last_sign_in_at: string | null; granted: boolean; granted_at: string | null; note: string; tags: string[] | null; api_base_url?: string | null };
+type AppUserRow = { email: string; registered_at: string | null; last_sign_in_at: string | null; granted: boolean; granted_at: string | null; note: string; tags: string[] | null; api_base_url?: string | null; password?: string | null };
 
 const userListError = (message: string) =>
   /list_app_users|app_user_notes|schema cache|does not exist|Could not find/i.test(message)
@@ -481,7 +516,18 @@ export const listAppUsers = async (settings: CloudSettings = loadCloudSettings()
     note: row.note ?? '',
     tags: row.tags ?? [],
     apiUrl: row.api_base_url ?? '',
+    password: row.password ?? '',
   }));
+};
+
+// 管理员改别人的密码（函数 admin_set_password，只有管理员能调）：旧密码立即失效，对方其他电脑上的登录会被踢下线。
+export const adminSetPassword = async (email: string, password: string, settings: CloudSettings = loadCloudSettings()) => {
+  const { error } = await getSupabaseClient(settings).rpc('admin_set_password', { target_email: normalizeCloudEmail(email), new_password: password });
+  if (error) {
+    throw /admin_set_password|schema cache|Could not find/i.test(error.message)
+      ? new Error('Supabase 里还没有改密码的功能，请先执行 supabase-schema.sql 里「账号密码」那段')
+      : new Error(error.message);
+  }
 };
 
 export const saveAppUserNote = async (email: string, note: string, tags: string[], settings: CloudSettings = loadCloudSettings()) => {

@@ -4,6 +4,7 @@ import { Button } from './ui/button';
 import { Separator } from './ui/separator';
 import { MaterialSettingsSection } from './materials/NasSettings';
 import { SkinSettings } from './SkinSettings';
+import { ChangePasswordForm } from './ChangePasswordForm';
 import { themeOptions, type SkinEntry, type ThemeMode } from '../lib/theme';
 import type { SkinsController } from '../skins/useSkins';
 import type { CloudSettings } from '../cloudSync';
@@ -337,6 +338,8 @@ export function SettingsPage({
                     )}
                   </div>
                 </section>
+
+                {cloudEmail && <ChangePasswordForm email={cloudEmail} notify={notify} />}
 
                 {canManageCloud && (
                   <section className="settings-section" aria-labelledby="cloud-settings-title">

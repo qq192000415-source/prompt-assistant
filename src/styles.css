@@ -6356,6 +6356,46 @@ html[data-skin] .settings-form-footer {
   background: var(--surface-muted);
 }
 
+/* 授权管理编辑里的密码一行：输入框、看明文、复制、随机生成 */
+.nas-user-password {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: 6px;
+}
+
+.nas-user-password input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 登录框底部的说明（忘记密码找管理员、管理员能看到密码） */
+.auth-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* 设置 › 云同步 › 修改密码 */
+.change-password-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.change-password-form .form-error,
+.change-password-form .settings-header-actions {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 760px) {
+  .change-password-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .settings-note.is-error {
   color: var(--danger);
 }

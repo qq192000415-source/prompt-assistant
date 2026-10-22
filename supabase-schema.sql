@@ -193,12 +193,93 @@ to authenticated
 using (public.is_app_admin())
 with check (public.is_app_admin());
 
+-- 账号密码（1.17.1，主人定的）：管理员能看到、修改、重置客户在灵匣的密码。Supabase 只存密码的加密指纹（还原不出来），
+-- 所以密码被设置的时候（登录、注册、自己改密码、管理员重置）另存一份明文到这张表，只有管理员能读；这个版本之前设的密码看不到，
+-- 客户用新版登录一次后就有了。注册、登录框和改密码处都提示「管理员能看到你的灵匣密码，别用其他网站的密码」。
+create table if not exists public.account_passwords (
+  email text primary key check (email = lower(email)),
+  password text not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.account_passwords enable row level security;
+alter table public.account_passwords force row level security;
+revoke all on table public.account_passwords from anon;
+revoke all on table public.account_passwords from authenticated;
+grant select on table public.account_passwords to authenticated;
+
+drop policy if exists account_passwords_admin_select on public.account_passwords;
+
+create policy account_passwords_admin_select
+on public.account_passwords
+for select
+to authenticated
+using (public.is_app_admin());
+
+-- 本人记下自己刚设好的密码：只能写自己邮箱那一行，读不到这张表。登录、注册成功和自己改密码后由软件调用。
+create or replace function public.record_own_password(new_password text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  own text := lower(coalesce(auth.jwt() ->> 'email', ''));
+begin
+  if own = '' then
+    raise exception '没有登录';
+  end if;
+  if length(new_password) < 6 or octet_length(new_password) > 72 then
+    raise exception '密码要 6 位以上';
+  end if;
+  insert into public.account_passwords (email, password, updated_at)
+  values (own, new_password, now())
+  on conflict (email) do update set password = excluded.password, updated_at = now();
+end;
+$$;
+
+revoke all on function public.record_own_password(text) from public;
+grant execute on function public.record_own_password(text) to authenticated;
+
+-- 管理员重置别人的密码：直接改 auth.users 里的加密指纹（bcrypt，和 Supabase 自己存的格式一样），
+-- 删掉这个账号的全部登录会话（其他电脑上的登录在令牌过期后要重新登录），并记下新密码。
+create or replace function public.admin_set_password(target_email text, new_password text)
+returns void
+language plpgsql
+security definer
+set search_path = public, auth, extensions
+as $$
+declare
+  target text := lower(trim(coalesce(target_email, '')));
+  uid uuid;
+begin
+  if not public.is_app_admin() then
+    raise exception '只有管理员能修改别人的密码';
+  end if;
+  if length(new_password) < 6 or octet_length(new_password) > 72 then
+    raise exception '密码要 6 位以上';
+  end if;
+  select id into uid from auth.users where lower(email) = target order by created_at limit 1;
+  if uid is null then
+    raise exception '这个邮箱还没注册，没有密码可改';
+  end if;
+  update auth.users set encrypted_password = extensions.crypt(new_password, extensions.gen_salt('bf')), updated_at = now() where id = uid;
+  delete from auth.sessions where user_id = uid;
+  insert into public.account_passwords (email, password, updated_at)
+  values (target, new_password, now())
+  on conflict (email) do update set password = excluded.password, updated_at = now();
+end;
+$$;
+
+revoke all on function public.admin_set_password(text, text) from public;
+grant execute on function public.admin_set_password(text, text) to authenticated;
+
 -- 注册账号在 auth.users 里，普通请求读不到；这个函数只给管理员用，列出所有账号（加上已授权但还没注册的邮箱）。
--- 1.14.1 起多返回 api_base_url（推荐 API 地址），返回列变了要先删掉旧函数。
+-- 1.14.1 起多返回 api_base_url（推荐 API 地址），1.17.1 起多返回 password（记下的灵匣密码，没有是空），返回列变了要先删掉旧函数。
 drop function if exists public.list_app_users();
 
 create function public.list_app_users()
-returns table (email text, registered_at timestamptz, last_sign_in_at timestamptz, granted boolean, granted_at timestamptz, note text, tags text[], api_base_url text)
+returns table (email text, registered_at timestamptz, last_sign_in_at timestamptz, granted boolean, granted_at timestamptz, note text, tags text[], api_base_url text, password text)
 language plpgsql
 stable
 security definer
@@ -220,12 +301,13 @@ begin
     union
     select nas_grants.email from public.nas_grants
   )
-  select e.email, u.registered_at, u.last_sign_in_at, g.email is not null, g.updated_at, coalesce(n.note, ''), coalesce(n.tags, '{}'::text[]), coalesce(r.api_base_url, '')
+  select e.email, u.registered_at, u.last_sign_in_at, g.email is not null, g.updated_at, coalesce(n.note, ''), coalesce(n.tags, '{}'::text[]), coalesce(r.api_base_url, ''), coalesce(pw.password, '')
   from emails e
   left join users u on u.email = e.email
   left join public.nas_grants g on g.email = e.email
   left join public.app_user_notes n on n.email = e.email
   left join public.api_recommendations r on r.email = e.email
+  left join public.account_passwords pw on pw.email = e.email
   order by u.registered_at desc nulls last, e.email;
 end;
 $$;

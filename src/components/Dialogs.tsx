@@ -177,6 +177,7 @@ export function CloudAuthPanel({ cloudEnabled, onClose, onSubmit }: CloudAuthPan
         </label>
 
         {error && <p className="form-error">{error}</p>}
+        <p className="auth-note">{mode === 'signin' ? '忘记密码请联系管理员重置。' : ''}管理员能看到你在灵匣的密码，请不要用和其他网站相同的密码。</p>
 
         <div className="editor-footer">
           <Button className="button ghost" type="button" onClick={onClose}>
