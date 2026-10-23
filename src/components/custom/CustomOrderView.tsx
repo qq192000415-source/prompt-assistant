@@ -10,7 +10,8 @@ import { encodeJpeg, encodePng, encodeProductionJpeg, mockupFocus, renderConfirm
 import { defaultMesh, warpedBounds } from '../../custom/warp';
 
 // 来图定制：选产品和尺寸 → 放买家的图排版 → 右边实时出样机效果 → 复制效果图 / 存一版到定制 NAS / 导出生产图。
-// 样机在左栏「产品设置」里做：导入 PSD，或者用一张空白产品照拖网格（1.18.1），团队共用。两面不同时发给买家的是两面并排的对照图。
+// 样机在左栏「产品设置」里做：导入 PSD，或者用一张空白产品照拖网格（1.18.1），团队共用。
+// 发给买家的一律是正反面并排的对照图（1.18.2 起两面相同也是，标「两面同图」，免得买家以为背面空白）。
 
 type Source = { sha256: string; ext: string; bytes: Uint8Array<ArrayBuffer>; bitmap: ImageBitmap };
 type Face = 'front' | 'back';
@@ -189,13 +190,12 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
   }, [face, bitmaps]);
 
   // 右边效果图：排版停下 150ms 后重画；正在用照片做样机时按正在拖的网格出预览。
-  const shownFace: Face = layout?.facesMode === 'different' ? previewing : 'front';
   useEffect(() => {
     if (!layout) return;
     const timer = window.setTimeout(() => {
       try {
         const faces = facesFor(layout);
-        const faceLayout = shownFace === 'back' ? faces.back : faces.front;
+        const faceLayout = previewing === 'back' ? faces.back : faces.front;
         let mockup: HTMLCanvasElement;
         if (photoEdit) {
           const face = faceLayout.layers.length ? renderFace(faceLayout, bitmaps, PREVIEW_FACE) : gridFace(PREVIEW_FACE);
@@ -215,7 +215,7 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
       }
     }, photoEdit ? 60 : 150);
     return () => window.clearTimeout(timer);
-  }, [layout, assets, bitmaps, product, shownFace, photoEdit]);
+  }, [layout, assets, bitmaps, product, previewing, photoEdit]);
 
   const run = async (label: string, action: () => Promise<void>) => {
     setBusy(label);
@@ -235,7 +235,7 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
     return renderMockup(product.template, assets, renderFace(target === 'back' ? faces.back : faces.front, bitmaps, PREVIEW_FACE), product.watermark);
   };
   const confirmationOf = () => {
-    const meta = [orderName.trim() && `单号 ${orderName.trim()}`, layout && `${layout.sizeCm}×${layout.sizeCm}cm`].filter(Boolean).join('  ·  ');
+    const meta = [layout?.facesMode === 'same' && '两面同图', orderName.trim() && `单号 ${orderName.trim()}`, layout && `${layout.sizeCm}×${layout.sizeCm}cm`].filter(Boolean).join('  ·  ');
     return renderConfirmation(mockupOf('front'), mockupOf('back'), mockupFocus(product!.template!), meta);
   };
   const productionFile = async () => {
@@ -249,9 +249,8 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
 
   const copyEffect = () =>
     run('copy', async () => {
-      const different = layout?.facesMode === 'different';
-      await customApi!.copyImage(new Uint8Array(await (await encodePng(different ? confirmationOf() : mockupOf('front'))).arrayBuffer()));
-      notify(different ? '正反面对照图已复制，可以粘贴到千牛' : '效果图已复制，可以粘贴到千牛');
+      await customApi!.copyImage(new Uint8Array(await (await encodePng(confirmationOf())).arrayBuffer()));
+      notify('正反面对照图已复制，可以粘贴到千牛');
     });
   const saveVersion = () =>
     run('save', async () => {
@@ -259,10 +258,8 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
       if (!orderName.trim()) throw new Error('先填单号（或名称），生产图和这一版都按它命名');
       const faces = facesFor(layout);
       const outputs = [{ name: '效果图-正面.jpg', bytes: await encodeJpeg(mockupOf('front')) }];
-      if (layout.facesMode === 'different') {
-        outputs.push({ name: '效果图-背面.jpg', bytes: await encodeJpeg(mockupOf('back')) });
-        outputs.push({ name: '效果确认.jpg', bytes: await encodeJpeg(confirmationOf()) });
-      }
+      if (layout.facesMode === 'different') outputs.push({ name: '效果图-背面.jpg', bytes: await encodeJpeg(mockupOf('back')) });
+      outputs.push({ name: '效果确认.jpg', bytes: await encodeJpeg(confirmationOf()) });
       outputs.push(await productionFile());
       const used = new Set([...faces.front.layers, ...faces.back.layers].map((layer) => layer.sha256));
       const { version } = await customApi!.saveOrderVersion({
@@ -616,7 +613,7 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
         <aside className="canvas-panel custom-preview" aria-label="效果图">
           <div className="canvas-panel-head">
             <strong>{photoEdit ? '样机预览' : '效果图'}</strong>
-            {layout?.facesMode === 'different' && (
+            {layout && (
               <div className="canvas-segmented custom-preview-faces" role="radiogroup" aria-label="看哪一面">
                 {(['front', 'back'] as const).map((target) => (
                   <button key={target} type="button" role="radio" aria-checked={previewing === target} className={previewing === target ? 'is-active' : ''} onClick={() => setPreviewing(target)}>
@@ -627,11 +624,11 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
             )}
           </div>
           {product?.template || photoEdit ? <canvas ref={mockupCanvas} className="custom-mockup" /> : <p className="nas-form-note">这个产品还没有样机，在左边「产品设置」里导入样机 PSD，或者用图片做样机。</p>}
-          {layout?.facesMode === 'different' && !photoEdit && <p className="nas-form-note">两面不同时，复制和保存的是正反面并排的对照图。</p>}
+          {layout && !photoEdit && <p className="nas-form-note">复制和保存的是正反面并排的对照图{layout.facesMode === 'same' ? '（标明两面同图）' : ''}。</p>}
           <div className="custom-actions">
             <Button className="button primary" type="button" disabled={!product?.template || !face?.layers.length || Boolean(busy) || Boolean(photoEdit)} onClick={() => void copyEffect()}>
               <Copy size={14} />
-              {layout?.facesMode === 'different' ? '复制正反面对照图' : '复制效果图'}
+              复制正反面对照图
             </Button>
             <Button className="button ghost" type="button" disabled={!product?.template || !face?.layers.length || Boolean(busy) || Boolean(photoEdit)} onClick={() => void saveVersion()}>
               <Save size={14} />
