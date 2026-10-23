@@ -15,7 +15,7 @@ const CANVAS_RECORD_VIEW_KEY = 'prompt-library.canvasRecordView.v1';
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 420;
 
-export type LibraryMode = 'prompts' | 'documents' | 'materials' | 'canvas';
+export type LibraryMode = 'prompts' | 'documents' | 'materials' | 'canvas' | 'custom';
 // 画布生成记录的看法：列表（按任务分组，存的值沿用 1.8.3 的 tasks）或网格（wall）。
 export type CanvasRecordView = 'tasks' | 'wall';
 export type CanvasSortOrder = 'newest' | 'oldest';
@@ -144,7 +144,7 @@ export const saveSyncRecords = (records: SyncRecord[]) => {
 export const loadLibraryMode = (): LibraryMode => {
   try {
     const saved = window.localStorage.getItem(LIBRARY_MODE_KEY);
-    return saved === 'documents' || saved === 'materials' || saved === 'canvas' ? saved : 'prompts';
+    return saved === 'documents' || saved === 'materials' || saved === 'canvas' || saved === 'custom' ? saved : 'prompts';
   } catch {
     return 'prompts';
   }

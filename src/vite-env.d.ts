@@ -270,6 +270,23 @@ type MaterialCompressResult = MaterialLoadResult & {
   skippedUnsupported: number;
   failures: MaterialBatchFailure[];
 };
+// 来图定制（electron/materials/customIpc.ts）：连接来自管理员授权，产品配置和每单的版本都在定制 NAS 上。
+type DesktopCustomFile = { name: string; bytes: Uint8Array<ArrayBuffer> };
+type DesktopCustomApi = {
+  applyGrant: (grant: { baseUrl: string; username: string; password: string } | null) => Promise<{ connected: boolean }>;
+  listProducts: () => Promise<{ products: import('./custom/product').CustomProduct[]; dropped: number }>;
+  saveProduct: (input: { id?: string; name: string; sizes: number[]; bleedCm: number; watermark: string }) => Promise<import('./custom/product').CustomProduct>;
+  importPsd: (productId: string) => Promise<{ product: import('./custom/product').CustomProduct; sampleExt: string | null } | null>;
+  readTemplateFile: (productId: string, file: string) => Promise<Uint8Array<ArrayBuffer>>;
+  saveOrderVersion: (input: {
+    name: string;
+    layout: import('./custom/layout').OrderLayout;
+    sources: Array<{ sha256: string; ext: string; bytes: Uint8Array<ArrayBuffer> }>;
+    outputs: DesktopCustomFile[];
+  }) => Promise<{ version: number; folder: string }>;
+  exportFiles: (files: DesktopCustomFile[]) => Promise<{ folder: string; count: number } | null>;
+  copyImage: (png: Uint8Array) => Promise<void>;
+};
 type MaterialExportResult = { exported: number; failures: MaterialBatchFailure[]; canceled: boolean; dir: string };
 
 interface Window {
@@ -290,6 +307,7 @@ interface Window {
     onUpdateStatus?: (callback: (status: DesktopUpdateStatus) => void) => () => void;
     documents?: DesktopDocumentsApi;
     skins?: DesktopSkinsApi;
+    custom?: DesktopCustomApi;
   };
   promptAssistantFloating?: {
     showMain: () => Promise<void>;

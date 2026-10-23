@@ -7663,3 +7663,142 @@ line.ref-editor-guide {
 .ref-editor-handle[data-handle='sw'] {
   cursor: nesw-resize;
 }
+
+/* 来图定制 1.18.0：产品和排版 | 排版画布 | 效果图，三栏，结构照画布页；颜色只用主题令牌 */
+.custom-layout {
+  display: grid;
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(300px, 400px);
+  gap: 16px;
+  align-items: start;
+}
+
+.custom-select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  padding: 7px 10px;
+}
+
+.custom-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.custom-product-settings {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.custom-product-settings > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.custom-product-settings[open] > summary {
+  margin-bottom: 10px;
+}
+
+.custom-product-form {
+  display: grid;
+  gap: 10px;
+}
+
+.custom-layer-tools input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.custom-stage {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.custom-stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.custom-stage-head .canvas-segmented {
+  min-width: 168px;
+}
+
+.custom-stage-frame {
+  position: relative;
+  width: min(100%, calc(100vh - var(--topbar-height) - 150px));
+  aspect-ratio: 1;
+  justify-self: center;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-muted);
+  cursor: move;
+  touch-action: none;
+}
+
+.custom-stage-frame canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* 出血线：虚线以外裁切时可能被切掉 */
+.custom-bleed {
+  position: absolute;
+  border: 1px dashed var(--danger);
+  pointer-events: none;
+}
+
+.custom-stage-hint {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.custom-mockup,
+.custom-back {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+}
+
+.custom-back {
+  width: 60%;
+}
+
+.custom-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.custom-empty {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  color: var(--muted);
+}
+
+@media (max-width: 1080px) {
+  .custom-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

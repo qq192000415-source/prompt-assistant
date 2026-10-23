@@ -31,6 +31,7 @@ import { mutateLibrary, readLibrary } from './libraryStore.ts';
 import { setRouteLogger } from './proxyBypass.ts';
 import { handleSkinRequest, SKIN_SCHEME } from './skinStore.ts';
 import { registerSkins } from './skins.ts';
+import { registerCustom } from './customIpc.ts';
 import * as webdav from './webdav.ts';
 
 const SCHEME = 'nas-media';
@@ -117,6 +118,8 @@ export function register({ ipcMain, userDataDir, updateBaseUrl, getWindow }: Reg
   // 皮肤包（src/skins/）和素材库无关，只是借这里的主进程打包和协议登记。
   protocol.handle(SKIN_SCHEME, handleSkinRequest(userDataDir));
   registerSkins({ ipcMain, userDataDir, updateBaseUrl, getWindow });
+  // 来图定制（1.18.0）也只是借这里的主进程打包，连接和数据都和素材库分开。
+  registerCustom({ ipcMain, getWindow });
 
   // NAS 连接状态推给界面，带上当前账号本机待上传的数量；从断开变成连上时补传。
   const nasStatus = () => ({ ...monitor.status(), pending: canvasService.pendingStats() });

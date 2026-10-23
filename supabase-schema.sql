@@ -343,3 +343,35 @@ for all
 to authenticated
 using (public.is_app_admin())
 with check (public.is_app_admin());
+
+-- 来图定制授权（1.18.0）：一个邮箱一行，有这一行才显示「定制」标签。team 是公司（同一团队共用产品模板和订单），
+-- base_url / username / password 是定制专用 NAS 文件夹的连接（和素材库的 NAS 授权分开）。本人只能读自己那行，只有管理员能增删改。
+create table if not exists public.custom_teams (
+  email text primary key check (email = lower(email)),
+  team text not null check (length(trim(team)) > 0),
+  base_url text not null,
+  username text not null,
+  password text not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.custom_teams enable row level security;
+alter table public.custom_teams force row level security;
+revoke all on table public.custom_teams from anon;
+grant select, insert, update, delete on table public.custom_teams to authenticated;
+
+drop policy if exists custom_teams_select on public.custom_teams;
+drop policy if exists custom_teams_admin_write on public.custom_teams;
+
+create policy custom_teams_select
+on public.custom_teams
+for select
+to authenticated
+using (email = lower(coalesce(auth.jwt() ->> 'email', '')) or public.is_app_admin());
+
+create policy custom_teams_admin_write
+on public.custom_teams
+for all
+to authenticated
+using (public.is_app_admin())
+with check (public.is_app_admin());

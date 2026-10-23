@@ -44,6 +44,16 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     wallhavenImage: (id) => ipcRenderer.invoke('skins:wallhaven-image', id),
     pathForFile: (file) => webUtils.getPathForFile(file),
   },
+  custom: {
+    applyGrant: (grant) => ipcRenderer.invoke('custom:apply-grant', grant),
+    listProducts: () => ipcRenderer.invoke('custom:list-products'),
+    saveProduct: (input) => ipcRenderer.invoke('custom:save-product', input),
+    importPsd: (productId) => ipcRenderer.invoke('custom:import-psd', productId),
+    readTemplateFile: (productId, file) => ipcRenderer.invoke('custom:read-template-file', productId, file),
+    saveOrderVersion: (input) => ipcRenderer.invoke('custom:save-order-version', input),
+    exportFiles: (files) => ipcRenderer.invoke('custom:export-files', files),
+    copyImage: (png) => ipcRenderer.invoke('custom:copy-image', png),
+  },
   materials: {
     getConfig: () => ipcRenderer.invoke('materials:get-config'),
     saveConfig: (config) => ipcRenderer.invoke('materials:save-config', config),

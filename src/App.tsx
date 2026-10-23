@@ -7,7 +7,7 @@ import { applyTheme, isDarkTheme, readTheme, skinOf, type ThemeMode } from './li
 import { useSkins } from './skins/useSkins';
 import { toast as pushToast } from 'sonner';
 import type { CloudSnapshot } from './cloudSync';
-import { loadAiRuleOverrides, loadOwnApiRecommendation, loadOwnNasGrant } from './cloudSync';
+import { loadAiRuleOverrides, loadOwnApiRecommendation, loadOwnCustomGrant, loadOwnNasGrant, type CustomGrant } from './cloudSync';
 import {
   DOCUMENT_CATEGORY_STORAGE_KEY,
   DOCUMENT_SUBCATEGORY_STORAGE_KEY,
@@ -86,6 +86,7 @@ import { SettingsPage, type SettingsSection } from './components/SettingsPage';
 import { type MoveDirection, Sidebar } from './components/Sidebar';
 import { TopMenuBar } from './components/TopMenuBar';
 import { MaterialLibraryView } from './components/materials/MaterialLibraryView';
+import { CustomOrderView } from './components/custom/CustomOrderView';
 import { ApiRecommendDialog } from './components/materials/ApiRecommendDialog';
 import { useNasStatus } from './materials/useNasStatus';
 import { getDocumentsApi, isWebDocuments } from './webDocuments';
@@ -670,6 +671,39 @@ function App() {
     };
   }, [cloud.cloudEmail, isNasAdmin]);
 
+  // 来图定制授权（1.18.0）：有授权才显示「定制」标签，连接交给主进程。undefined 是还没读到或没登录（启动时登录状态要等一下才恢复），
+  // 这时不动用户上次停在的标签；登录了、确认没有授权才切回提示词。
+  const [customGrant, setCustomGrant] = useState<CustomGrant | null | undefined>(undefined);
+  useEffect(() => {
+    const customApi = window.promptAssistantDesktop?.custom;
+    const email = cloud.cloudEmail;
+    if (!customApi) {
+      setCustomGrant(null);
+      return;
+    }
+    if (!email) {
+      void customApi.applyGrant(null);
+      setCustomGrant(undefined);
+      return;
+    }
+    let alive = true;
+    void loadOwnCustomGrant(email)
+      .then(async (grant) => {
+        await customApi.applyGrant(grant && { baseUrl: grant.baseUrl, username: grant.username, password: grant.password });
+        if (alive) setCustomGrant(grant);
+      })
+      .catch((error) => {
+        console.warn('读取来图定制授权失败', error);
+        if (alive) setCustomGrant(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [cloud.cloudEmail]);
+  useEffect(() => {
+    if (libraryMode === 'custom' && customGrant === null) setLibraryMode('prompts');
+  }, [libraryMode, customGrant]);
+
   // 管理员给这个账号推荐的 API 地址（1.14.1，和 NAS 授权无关），由 ApiRecommendDialog 决定要不要提示。没建表、网络不通时只记日志。
   const [recommendedApiUrl, setRecommendedApiUrl] = useState('');
   useEffect(() => {
@@ -1239,7 +1273,7 @@ function App() {
   return (
     <TooltipProvider delayDuration={400}>
     <div className="app-shell">
-      {!settingsSection && !isMaterialsMode && (
+      {!settingsSection && !isMaterialsMode && libraryMode !== 'custom' && (
         <Button className="mobile-menu" type="button" aria-label="打开导航" onClick={() => setSidebarOpen(true)}>
           <Menu size={18} />
         </Button>
@@ -1255,6 +1289,7 @@ function App() {
           setSettingsSection(null);
           if (nextMode !== libraryMode || !settingsSection) changeLibraryMode(nextMode);
         }}
+        showCustom={Boolean(customGrant)}
         onOpenCloudSettings={() => openSettings('sync')}
         onOpenSettings={() => openSettings()}
         nas={nas}
@@ -1317,6 +1352,12 @@ function App() {
               });
           }}
         />
+      ) : libraryMode === 'custom' ? (
+        customGrant ? (
+          <CustomOrderView key={`${cloud.cloudEmail ?? ''}:${customGrant.team}`} team={customGrant.team} notify={showToast} />
+        ) : (
+          <main className="custom-empty">{cloud.cloudEmail ? '正在读取来图定制授权…' : '请先登录开通了来图定制的账号'}</main>
+        )
       ) : isMaterialsMode ? (
         <MaterialLibraryView
           // 换账号时整个重新挂载，不留上一个账号的素材和画布状态。

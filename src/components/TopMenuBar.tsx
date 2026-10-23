@@ -14,6 +14,8 @@ type TopMenuBarProps = {
   cloudEmail: string | null;
   cloudStatus: string;
   onChangeLibraryMode: (mode: LibraryMode) => void;
+  // 开通了来图定制才显示「定制」标签。
+  showCustom: boolean;
   onOpenCloudSettings: () => void;
   onOpenSettings: () => void;
   // NAS 连接状态：只在素材、画布标签时显示。
@@ -31,6 +33,7 @@ export function TopMenuBar({
   cloudEmail,
   cloudStatus,
   onChangeLibraryMode,
+  showCustom,
   onOpenCloudSettings,
   onOpenSettings,
   nas,
@@ -42,7 +45,7 @@ export function TopMenuBar({
   return (
     <header className="top-menu-bar">
       <nav className="top-menu-left" aria-label="主导航">
-        <LibrarySwitch className="top-tabs" libraryMode={libraryMode} onChange={onChangeLibraryMode} />
+        <LibrarySwitch className="top-tabs" libraryMode={libraryMode} onChange={onChangeLibraryMode} showCustom={showCustom} />
       </nav>
 
       <div className="top-menu-drag-region" aria-hidden="true" />

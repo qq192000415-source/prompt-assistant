@@ -1,12 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Copy, Dices, Eye, EyeOff, Pencil, RefreshCw, Search } from 'lucide-react';
 import { Button } from '../ui/button';
-import { adminSetPassword, deleteNasGrant, listAppUsers, normalizeCloudEmail, saveApiRecommendation, saveAppUserNote, saveNasGrant, type AppUser } from '../../cloudSync';
+import {
+  adminSetPassword,
+  deleteCustomGrant,
+  deleteNasGrant,
+  listAppUsers,
+  listCustomGrants,
+  normalizeCloudEmail,
+  saveApiRecommendation,
+  saveAppUserNote,
+  saveCustomGrant,
+  saveNasGrant,
+  type AppUser,
+  type CustomGrant,
+} from '../../cloudSync';
 
 // 授权管理（管理员）：列出所有注册过的账号和是否已授权 NAS，能授权、收回、写备注（姓名等）和标签。
 // 授权的是管理员这台电脑上现在的连接；管理员改了连接保存后，已授权的账号会一起更新。
 // 推荐 API 地址（1.14.1）：在每个账号的编辑里单独填（不授权 NAS 也能填），对方登录后提示把 API 配置的接口地址换成它。
 // 密码（1.17.1）：编辑里能看记下的灵匣密码、改成新的（admin_set_password），客户忘了密码时管理员在这里重置。
+// 来图定制（1.18.0）：编辑里填「定制团队」就开通（表 custom_teams），留空就收回。定制 NAS 连接全部账号共用一套，第一次开通时填，之后沿用。
 
 type Filter = 'all' | 'granted' | 'ungranted';
 const FILTERS: Array<{ value: Filter; label: string }> = [
@@ -30,19 +44,28 @@ export function NasGrantsPanel({ adminEmail, notify }: { adminEmail: string; not
   const [query, setQuery] = useState('');
   const [working, setWorking] = useState('');
   const [confirming, setConfirming] = useState('');
-  const [editing, setEditing] = useState<{ email: string; note: string; tags: string; apiUrl: string; password: string } | null>(null);
+  const [editing, setEditing] = useState<{ email: string; note: string; tags: string; apiUrl: string; password: string; team: string } | null>(null);
+  const [customGrants, setCustomGrants] = useState<CustomGrant[]>([]);
+  const [customNas, setCustomNas] = useState({ baseUrl: '', username: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const self = normalizeCloudEmail(adminEmail);
 
   const reload = () =>
-    listAppUsers().then(
-      (list) => {
-        setUsers(list);
-        setLoadError('');
-      },
-      (error) => setLoadError(messageOf(error)),
-    );
+    Promise.all([
+      listAppUsers().then(
+        (list) => {
+          setUsers(list);
+          setLoadError('');
+        },
+        (error) => setLoadError(messageOf(error)),
+      ),
+      // 还没建 custom_teams 表时只是看不到定制授权，用户列表照常显示。
+      listCustomGrants().then(setCustomGrants, (error) => console.warn('读取来图定制授权失败', error)),
+    ]);
+  const teamOf = (email: string) => customGrants.find((entry) => entry.email === email)?.team ?? '';
+  // 定制 NAS 连接：已经有人开通就沿用那一套。
+  const sharedCustomNas = customGrants[0] ?? null;
   useEffect(() => {
     void reload();
   }, []);
@@ -72,8 +95,15 @@ export function NasGrantsPanel({ adminEmail, notify }: { adminEmail: string; not
     );
   const revoke = (email: string) => act(email, () => deleteNasGrant(email), `已收回 ${email} 的 NAS 连接`);
   // 备注、标签、推荐 API 地址和密码一起保存；地址、密码没改就不碰。
-  const saveNote = (user: AppUser, note: string, tags: string, apiUrl: string, password: string) => {
+  const saveNote = (user: AppUser, note: string, tags: string, apiUrl: string, password: string, team: string) => {
     const url = apiUrl.trim();
+    const teamName = team.trim();
+    const teamChanged = teamName !== teamOf(user.email);
+    const nas = sharedCustomNas ?? customNas;
+    if (teamChanged && teamName && (!/^https?:\/\/\S+$/i.test(nas.baseUrl.trim()) || !nas.username || !nas.password)) {
+      notify('第一次开通来图定制要填定制 NAS 的地址（http:// 或 https:// 开头）、用户名和密码');
+      return;
+    }
     if (url && !/^https?:\/\/\S+$/i.test(url)) {
       notify('推荐 API 地址要以 http:// 或 https:// 开头');
       return;
@@ -86,6 +116,7 @@ export function NasGrantsPanel({ adminEmail, notify }: { adminEmail: string; not
     const done = [
       passwordChanged ? `密码已改成 ${password}，旧密码作废，对方其他电脑上的登录会退出` : '',
       url !== user.apiUrl ? (url ? '对方下次登录或启动时会收到替换 API 地址的提示' : '不再给对方推荐 API 地址') : '',
+      teamChanged ? (teamName ? `已开通来图定制（团队「${teamName}」），对方下次启动或登录时出现「定制」标签` : '已收回来图定制') : '',
     ].filter(Boolean);
     void act(
       user.email,
@@ -93,6 +124,10 @@ export function NasGrantsPanel({ adminEmail, notify }: { adminEmail: string; not
         await saveAppUserNote(user.email, note, parseTags(tags));
         if (url !== user.apiUrl) await saveApiRecommendation(user.email, url);
         if (passwordChanged) await adminSetPassword(user.email, password);
+        if (teamChanged) {
+          if (teamName) await saveCustomGrant({ email: user.email, team: teamName, baseUrl: nas.baseUrl, username: nas.username, password: nas.password });
+          else await deleteCustomGrant(user.email);
+        }
       },
       done.length ? `已保存：${done.join('；')}` : '备注已保存',
     ).then(() => setEditing(null));
@@ -157,7 +192,7 @@ export function NasGrantsPanel({ adminEmail, notify }: { adminEmail: string; not
                     className="nas-user-edit"
                     onSubmit={(event) => {
                       event.preventDefault();
-                      saveNote(user, editing.note, editing.tags, editing.apiUrl, editing.password);
+                      saveNote(user, editing.note, editing.tags, editing.apiUrl, editing.password, editing.team);
                     }}
                   >
                     <strong>{user.email}</strong>
@@ -171,6 +206,20 @@ export function NasGrantsPanel({ adminEmail, notify }: { adminEmail: string; not
                       aria-label="推荐 API 地址"
                       title="对方登录后，如果 API 配置里的接口地址和这个不一样，会提示一键替换（只换地址，Key 和模型不变）"
                     />
+                    <input
+                      value={editing.team}
+                      onChange={(event) => setEditing({ ...editing, team: event.target.value })}
+                      placeholder="定制团队（公司名），留空表示不开通来图定制"
+                      aria-label="定制团队"
+                      title="同一个团队的账号共用产品模板和订单"
+                    />
+                    {editing.team.trim() && !sharedCustomNas && (
+                      <span className="nas-user-password is-wide">
+                        <input value={customNas.baseUrl} onChange={(event) => setCustomNas({ ...customNas, baseUrl: event.target.value })} placeholder="定制 NAS 地址（WebDAV）" aria-label="定制 NAS 地址" />
+                        <input value={customNas.username} onChange={(event) => setCustomNas({ ...customNas, username: event.target.value })} placeholder="用户名" aria-label="定制 NAS 用户名" autoComplete="off" />
+                        <input type="password" value={customNas.password} onChange={(event) => setCustomNas({ ...customNas, password: event.target.value })} placeholder="密码" aria-label="定制 NAS 密码" autoComplete="off" />
+                      </span>
+                    )}
                     {user.registeredAt && (
                       <span className="nas-user-password is-wide">
                         <input
@@ -236,6 +285,7 @@ export function NasGrantsPanel({ adminEmail, notify }: { adminEmail: string; not
                         {user.lastSignInAt ? ` · 最近登录 ${day(user.lastSignInAt)}` : ''}
                         {user.granted && user.grantedAt ? ` · 授权于 ${day(user.grantedAt)}` : ''}
                         {user.apiUrl ? ` · 推荐 API：${user.apiUrl}` : ''}
+                        {teamOf(user.email) ? ` · 来图定制：${teamOf(user.email)}` : ''}
                         {user.registeredAt ? (user.password ? ' · 密码已记录' : ' · 密码还看不到') : ''}
                       </span>
                     </div>
@@ -245,10 +295,10 @@ export function NasGrantsPanel({ adminEmail, notify }: { adminEmail: string; not
                         className="icon-button compact-icon"
                         type="button"
                         aria-label={`编辑 ${user.email} 的备注`}
-                        title="编辑备注、标签、推荐 API 地址，查看和修改密码"
+                        title="编辑备注、标签、推荐 API 地址、来图定制，查看和修改密码"
                         onClick={() => {
                           setShowPassword(false);
-                          setEditing({ email: user.email, note: user.note, tags: user.tags.join('，'), apiUrl: user.apiUrl, password: user.password });
+                          setEditing({ email: user.email, note: user.note, tags: user.tags.join('，'), apiUrl: user.apiUrl, password: user.password, team: teamOf(user.email) });
                         }}
                       >
                         <Pencil size={14} />

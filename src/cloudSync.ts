@@ -493,6 +493,53 @@ export const deleteNasGrant = async (email: string, settings: CloudSettings = lo
   if (error) throw grantError(error.message);
 };
 
+// 来图定制授权（1.18.0，表 custom_teams）：有这一行才显示「定制」标签；team 是公司，连接是定制专用 NAS 文件夹。
+export type CustomGrant = { email: string; team: string; baseUrl: string; username: string; password: string; updatedAt: string };
+
+type CustomGrantRow = { email: string; team: string; base_url: string; username: string; password: string; updated_at: string };
+
+const rowToCustomGrant = (row: CustomGrantRow): CustomGrant => ({
+  email: row.email,
+  team: row.team,
+  baseUrl: row.base_url,
+  username: row.username,
+  password: row.password,
+  updatedAt: row.updated_at,
+});
+
+const customGrantError = (message: string) =>
+  /custom_teams|schema cache|does not exist/i.test(message) ? new Error('Supabase 里还没有来图定制授权表，请先执行 supabase-schema.sql 末尾的「来图定制授权」那段') : new Error(message);
+
+export const loadOwnCustomGrant = async (email: string, settings: CloudSettings = loadCloudSettings()) => {
+  const { data, error } = await getSupabaseClient(settings).from('custom_teams').select('*').eq('email', normalizeCloudEmail(email)).maybeSingle();
+  if (error) throw customGrantError(error.message);
+  return data ? rowToCustomGrant(data as CustomGrantRow) : null;
+};
+
+export const listCustomGrants = async (settings: CloudSettings = loadCloudSettings()) => {
+  const { data, error } = await getSupabaseClient(settings).from('custom_teams').select('*').order('email');
+  if (error) throw customGrantError(error.message);
+  return (data as CustomGrantRow[]).map(rowToCustomGrant);
+};
+
+export const saveCustomGrant = async (grant: Omit<CustomGrant, 'updatedAt'>, settings: CloudSettings = loadCloudSettings()) => {
+  const row = {
+    email: normalizeCloudEmail(grant.email),
+    team: grant.team.trim(),
+    base_url: grant.baseUrl.trim(),
+    username: grant.username,
+    password: grant.password,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await getSupabaseClient(settings).from('custom_teams').upsert(row);
+  if (error) throw customGrantError(error.message);
+};
+
+export const deleteCustomGrant = async (email: string, settings: CloudSettings = loadCloudSettings()) => {
+  const { error } = await getSupabaseClient(settings).from('custom_teams').delete().eq('email', normalizeCloudEmail(email));
+  if (error) throw customGrantError(error.message);
+};
+
 // 授权管理的用户列表（函数 list_app_users，只给管理员）和备注（表 app_user_notes）。apiUrl 是给这个账号推荐的 API 地址（表 api_recommendations），空表示不推荐。
 // password 是记下的灵匣密码（1.17.1），空表示这个版本之前设的、还看不到。
 export type AppUser = { email: string; registeredAt: string | null; lastSignInAt: string | null; granted: boolean; grantedAt: string | null; note: string; tags: string[]; apiUrl: string; password: string };

@@ -1,0 +1,118 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+
+const { bezierPatch, makeWarp, warpGrid } = await import('../src/custom/warp.ts');
+const { cmToPx, stripLayout, productionFileName, setJpegDpi } = await import('../src/custom/production.ts');
+const { fitLayer, facesFor, normalizeLayout } = await import('../src/custom/layout.ts');
+const { normalizeProducts } = await import('../src/custom/product.ts');
+const { parseMockupPsd } = await import('../electron/materials/customPsd.ts');
+const { writePsdBuffer } = await import('ag-psd');
+
+const near = (actual, expected, eps = 1e-6) => assert.ok(Math.abs(actual - expected) < eps, `${actual} ≈ ${expected}`);
+
+// 均匀网格（控制点等分）的贝塞尔曲面就是恒等映射。
+const evenMesh = (w, h) => Array.from({ length: 16 }, (_, i) => ({ x: ((i % 4) / 3) * w, y: (Math.floor(i / 4) / 3) * h }));
+
+test('均匀网格的变形是恒等映射，角点落在四角', () => {
+  const mesh = evenMesh(4724, 4724);
+  for (const [u, v] of [[0, 0], [0.3, 0.7], [1, 1], [0.5, 0.5]]) {
+    const p = bezierPatch(mesh, u, v);
+    near(p.x, u * 4724, 1e-6);
+    near(p.y, v * 4724, 1e-6);
+  }
+  const quad = [{ x: 400, y: 450 }, { x: 930, y: 450 }, { x: 930, y: 960 }, { x: 400, y: 960 }];
+  const warp = makeWarp({ width: 4724, height: 4724, quad, mesh });
+  near(warp(0, 0).x, 400, 1e-6);
+  near(warp(1, 1).y, 960, 1e-6);
+  near(warp(0.5, 0.5).x, 665, 1e-6);
+});
+
+test('自定义网格：变形后图形的外框对齐到智能对象四角（PS 的 Trnf 框的是外框）', () => {
+  const mesh = evenMesh(100, 100);
+  mesh[0] = { x: -10, y: -20 };
+  mesh[15] = { x: 110, y: 120 };
+  mesh[5] = { x: 40, y: 40 };
+  const quad = [{ x: 200, y: 300 }, { x: 400, y: 300 }, { x: 400, y: 500 }, { x: 200, y: 500 }];
+  const grid = warpGrid({ width: 100, height: 100, quad, mesh }, 32);
+  assert.equal(grid.length, 33 * 33);
+  near(Math.min(...grid.map((p) => p.x)), 200, 1e-6);
+  near(Math.max(...grid.map((p) => p.x)), 400, 1e-6);
+  near(Math.min(...grid.map((p) => p.y)), 300, 1e-6);
+  near(Math.max(...grid.map((p) => p.y)), 500, 1e-6);
+  // 左上角控制点是外框的极值，落在四角左上。
+  near(grid[0].x, 200, 1e-6);
+  near(grid[0].y, 300, 1e-6);
+});
+
+test('生产图规格和客户图库一致', () => {
+  assert.deepEqual([40, 45, 50].map((cm) => cmToPx(cm)), [4724, 5315, 5906]);
+  const strip = stripLayout(40);
+  assert.equal(strip.width, 4724);
+  assert.equal(strip.height, 9449);
+  assert.deepEqual(strip.faces.map((face) => [face.face, face.y, face.rotation]), [['front', 0, 90], ['back', 4725, 90]]);
+  assert.equal(productionFileName(45, 'FXBZ37号'), '(45cmx45cm)FXBZ37号.jpg');
+  assert.equal(productionFileName(40, ' a/b:c '), '(40cmx40cm)a_b_c.jpg');
+  assert.equal(productionFileName(40, ''), '(40cmx40cm)未命名.jpg');
+});
+
+test('产品配置归一：坏数据跳过并计数，尺寸去重排序，模板缺字段就当没有模板', () => {
+  const { products, dropped } = normalizeProducts({
+    products: [
+      { id: 'p1', name: ' 方形抱枕 ', sizes: [50, 40, 45, 40, -1, 'x'], template: { width: 10, height: 10, smartObject: { width: 5, height: 5, quad: [] } } },
+      { id: '', name: '坏的' },
+      'oops',
+    ],
+  });
+  assert.equal(dropped, 2);
+  assert.equal(products.products.length, 1);
+  const [product] = products.products;
+  assert.equal(product.name, '方形抱枕');
+  assert.deepEqual(product.sizes, [40, 45, 50]);
+  assert.equal(product.bleedCm, 0.5);
+  assert.equal(product.template, null);
+});
+
+test('没有智能对象的 PSD 直接报出原因', () => {
+  const pixel = { width: 2, height: 2, data: new Uint8ClampedArray(16).fill(255) };
+  const buffer = writePsdBuffer({ width: 2, height: 2, children: [{ name: '背景', imageData: pixel }] });
+  assert.throws(() => parseMockupPsd(buffer), /没有找到智能对象/);
+});
+
+// 客户的样机 PSD 不进仓库：设 CUSTOM_SAMPLE_PSD=<路径> 时才测。
+test('客户样机 PSD：智能对象剪贴到抱枕、正片叠底、4×4 网格', { skip: !process.env.CUSTOM_SAMPLE_PSD }, () => {
+  const parsed = parseMockupPsd(fs.readFileSync(process.env.CUSTOM_SAMPLE_PSD));
+  const { template } = parsed;
+  assert.equal(template.width, 1254);
+  assert.equal(template.smartObject.width, 4724);
+  assert.equal(template.blend, 'multiply');
+  assert.equal(template.clipped, true);
+  assert.equal(template.smartObject.mesh.length, 16);
+  near(template.smartObject.quad[0].x, 398.793, 1e-3);
+  assert.equal(parsed.under.data.length, 1254 * 1254 * 4);
+  assert.ok(parsed.sample && parsed.sample.data.length > 0);
+});
+
+test('JPEG 写成 300dpi：只改 JFIF 头的密度字段', () => {
+  const jfif = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xff, 0xd9]);
+  const out = setJpegDpi(jfif);
+  assert.deepEqual([...out.slice(13, 18)], [1, 0x01, 0x2c, 0x01, 0x2c]);
+  assert.deepEqual([...out.slice(18)], [...jfif.slice(18)]);
+  assert.equal(jfif[13], 0, '不改原数组');
+  const notJfif = Uint8Array.from([1, 2, 3]);
+  assert.equal(setJpegDpi(notJfif), notJfif);
+});
+
+test('排版：铺满 / 完整显示的比例，两面相同时背面照抄正面，坏图层丢掉', () => {
+  assert.deepEqual(fitLayer(2000, 1000, 'cover'), { cx: 0.5, cy: 0.5, scale: 2, rotation: 0 });
+  assert.equal(fitLayer(1000, 2000, 'cover').scale, 1);
+  assert.equal(fitLayer(1000, 2000, 'contain').scale, 0.5);
+  const layer = { id: 'a', sha256: 'a'.repeat(64), ext: '.JPG', width: 10, height: 20, cx: 0.4, cy: 0.6, scale: 1, rotation: 15 };
+  const layout = normalizeLayout({ productId: 'p1', sizeCm: 45, front: { layers: [layer, { sha256: 'bad' }] }, back: { background: '#000000', layers: [] } });
+  assert.equal(layout.front.layers.length, 1);
+  assert.equal(layout.front.layers[0].ext, '.jpg');
+  assert.equal(layout.facesMode, 'same');
+  assert.equal(facesFor(layout).back, layout.front);
+  assert.equal(facesFor({ ...layout, facesMode: 'different' }).back.background, '#000000');
+  assert.equal(normalizeLayout({}), null);
+});

@@ -26,6 +26,7 @@
 - 新建/导入提示词必须按主文件夹、子标题、内容去重。
 - 云同步只使用 Supabase；数据变更必须同时考虑 localStorage 和 Supabase 云同步行为。
 - 例外：素材库（图片、视频）不走 Supabase，也不存本机，只存在用户自己的 NAS（WebDAV）上，见 `electron/materials/`。提示词库和文档库的同步规则不受影响。
+- 例外：来图定制的产品模板和订单只存在定制专用 NAS 文件夹（WebDAV，连接来自 Supabase 表 `custom_teams`），见 `electron/materials/custom*.ts`。
 
 ## 结构约定
 
