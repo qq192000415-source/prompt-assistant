@@ -7670,7 +7670,8 @@ line.ref-editor-guide {
   width: 100%;
   min-height: 0;
   flex: 1;
-  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(300px, 400px);
+  /* 右栏放的是正反面并排的对照图（1.18.3），放宽一些才看得清 */
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr) minmax(340px, 30%);
   gap: 16px;
   align-items: start;
 }
@@ -7851,10 +7852,6 @@ line.ref-editor-guide {
 
 .custom-preview .canvas-panel-head {
   margin-block: 0;
-}
-
-.custom-preview-faces {
-  min-width: 140px;
 }
 
 .custom-warning {

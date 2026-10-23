@@ -115,8 +115,6 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
   const stageCanvas = useRef<HTMLCanvasElement>(null);
   const mockupCanvas = useRef<HTMLCanvasElement>(null);
   const photoInput = useRef<HTMLInputElement>(null);
-  // 右栏看哪一面（两面不同时）。
-  const [previewing, setPreviewing] = useState<Face>('front');
   const [photoEdit, setPhotoEdit] = useState<PhotoEdit | null>(null);
   const drag = useRef<{ id: string; startX: number; startY: number; cx: number; cy: number; size: number } | null>(null);
 
@@ -189,20 +187,20 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
     }
   }, [face, bitmaps]);
 
-  // 右边效果图：排版停下 150ms 后重画；正在用照片做样机时按正在拖的网格出预览。
+  // 右边效果图：排版停下 150ms 后重画，显示的就是要发给买家的正反面对照图（所见即所得，1.18.3）；
+  // 正在用照片做样机时只出一面，按正在拖的网格看贴得对不对。
   useEffect(() => {
     if (!layout) return;
     const timer = window.setTimeout(() => {
       try {
-        const faces = facesFor(layout);
-        const faceLayout = previewing === 'back' ? faces.back : faces.front;
         let mockup: HTMLCanvasElement;
         if (photoEdit) {
-          const face = faceLayout.layers.length ? renderFace(faceLayout, bitmaps, PREVIEW_FACE) : gridFace(PREVIEW_FACE);
+          const front = facesFor(layout).front;
+          const face = front.layers.length ? renderFace(front, bitmaps, PREVIEW_FACE) : gridFace(PREVIEW_FACE);
           mockup = renderMockup(photoTemplate(photoEdit), { under: photoEdit.bitmap, base: null, over: [] }, face);
         } else {
           if (!product?.template || !assets) return;
-          mockup = renderMockup(product.template, assets, renderFace(faceLayout, bitmaps, PREVIEW_FACE), product.watermark);
+          mockup = confirmationOf();
         }
         const target = mockupCanvas.current;
         if (target) {
@@ -215,7 +213,7 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
       }
     }, photoEdit ? 60 : 150);
     return () => window.clearTimeout(timer);
-  }, [layout, assets, bitmaps, product, previewing, photoEdit]);
+  }, [layout, assets, bitmaps, product, photoEdit, orderName]);
 
   const run = async (label: string, action: () => Promise<void>) => {
     setBusy(label);
@@ -228,7 +226,7 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
     }
   };
 
-  // 两面都贴在同一个样机上；两面不同时另出一张并排的对照图发给买家。
+  // 两面都贴在同一个样机上，并排成对照图发给买家（两面相同时标「两面同图」）。
   const mockupOf = (target: Face) => {
     if (!layout || !product?.template || !assets) throw new Error('这个产品还没有样机，请先在「产品设置」里导入样机');
     const faces = facesFor(layout);
@@ -613,18 +611,9 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
         <aside className="canvas-panel custom-preview" aria-label="效果图">
           <div className="canvas-panel-head">
             <strong>{photoEdit ? '样机预览' : '效果图'}</strong>
-            {layout && (
-              <div className="canvas-segmented custom-preview-faces" role="radiogroup" aria-label="看哪一面">
-                {(['front', 'back'] as const).map((target) => (
-                  <button key={target} type="button" role="radio" aria-checked={previewing === target} className={previewing === target ? 'is-active' : ''} onClick={() => setPreviewing(target)}>
-                    {target === 'front' ? '正面' : '背面'}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
           {product?.template || photoEdit ? <canvas ref={mockupCanvas} className="custom-mockup" /> : <p className="nas-form-note">这个产品还没有样机，在左边「产品设置」里导入样机 PSD，或者用图片做样机。</p>}
-          {layout && !photoEdit && <p className="nas-form-note">复制和保存的是正反面并排的对照图{layout.facesMode === 'same' ? '（标明两面同图）' : ''}。</p>}
+          {layout && !photoEdit && product?.template && <p className="nas-form-note">复制和保存的就是这张正反面对照图。</p>}
           <div className="custom-actions">
             <Button className="button primary" type="button" disabled={!product?.template || !face?.layers.length || Boolean(busy) || Boolean(photoEdit)} onClick={() => void copyEffect()}>
               <Copy size={14} />
