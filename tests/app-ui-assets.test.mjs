@@ -186,8 +186,9 @@ test('public source keeps deployer endpoints out of the repository', () => {
     assert.doesNotMatch(text, /@qq\.com/, file);
     assert.doesNotMatch(text, /sslip\.io/, file);
     assert.doesNotMatch(text, /\.pem/, file);
-    // 浏览器 User-Agent 里的版本号（如 Chrome/130.0.0.0）长得像 IP，不算。
-    const unexpectedIps = (text.replace(/Chrome\/[\d.]+/g, '').match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g) ?? []).filter((ip) => ip !== '127.0.0.1');
+    // 浏览器 User-Agent 里的版本号（如 Chrome/130.0.0.0）长得像 IP，不算；公共 DNS 和代理软件的假地址网段也不是部署地址。
+    const publicIps = ['127.0.0.1', '223.5.5.5', '119.29.29.29', '198.18.0.0'];
+    const unexpectedIps = (text.replace(/Chrome\/[\d.]+/g, '').match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g) ?? []).filter((ip) => !publicIps.includes(ip));
     assert.deepEqual(unexpectedIps, [], file);
   }
 

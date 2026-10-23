@@ -2,6 +2,8 @@
 import fs from 'node:fs';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { findRoute, isFakeIp, logRoute, proxyHint, routedFetch, systemAddress } from './proxyBypass.ts';
+import type { Route } from './proxyBypass.ts';
 
 export type DavConfig = {
   baseUrl: string;
@@ -97,7 +99,42 @@ export async function dav(config: DavConfig, method: string, relativePath: strin
   }
 }
 
+// 绕开代理虚拟网卡的线路，按 NAS 主机名记（proxyBypass.ts）；同一主机同时只找一次。
+const routes = new Map<string, Route>();
+const finding = new Map<string, Promise<Route | null>>();
+const isStream = (body: DavBody | undefined) => !!body && typeof body !== 'string' && !(body instanceof Uint8Array);
+
 async function request(config: DavConfig, method: string, relativePath: string, options: RequestOptions) {
+  const hostname = new URL(config.baseUrl).hostname;
+  const route = routes.get(hostname);
+  try {
+    return await send(config, method, relativePath, options, route);
+  } catch (error) {
+    if (!(error instanceof DavError) || error.status !== 0) throw error;
+    // 绕开的线路也不通了（换了网络、关了代理）：下次照常连，还不通再重新找。
+    if (route) {
+      routes.delete(hostname);
+      logRoute(`绕开的线路 ${route.localAddress} → ${route.address} 不通了（${error.message}），下次照常连`);
+      throw error;
+    }
+    const resolved = await systemAddress(hostname);
+    if (!resolved || !isFakeIp(resolved)) throw error;
+    let pending = finding.get(hostname);
+    if (!pending) {
+      logRoute(`照常连不上：${error.message}`);
+      pending = findRoute(normalizeBaseUrl(config.baseUrl), resolved).finally(() => finding.delete(hostname));
+      finding.set(hostname, pending);
+    }
+    const found = await pending;
+    if (!found) throw new DavError(`${error.message}。${proxyHint(hostname)}`, 0);
+    routes.set(hostname, found);
+    // 流式上传的内容已经读掉了，不能重发：报原来的错，下一个请求就走新线路。
+    if (isStream(options.body)) throw error;
+    return send(config, method, relativePath, options, found);
+  }
+}
+
+async function send(config: DavConfig, method: string, relativePath: string, options: RequestOptions, route: Route | undefined) {
   const timeoutMs = options.timeoutMs ?? requestTimeoutMs(options.body, options.headers);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -105,14 +142,18 @@ async function request(config: DavConfig, method: string, relativePath: string, 
   timer.unref?.();
   let response: Response;
   try {
-    response = await fetch(davUrl(config, relativePath), {
-      method,
-      headers: { Authorization: authHeader(config), ...options.headers },
-      body: options.body,
-      signal: controller.signal,
-      // 上传文件用流，fetch 要求声明半双工。
-      ...(options.body && typeof options.body !== 'string' && !(options.body instanceof Uint8Array) ? { duplex: 'half' } : {}),
-    } as RequestInit);
+    const url = davUrl(config, relativePath);
+    const headers = { Authorization: authHeader(config), ...options.headers };
+    response = route
+      ? await routedFetch(url, { method, headers, body: options.body, signal: controller.signal }, route)
+      : await fetch(url, {
+          method,
+          headers,
+          body: options.body,
+          signal: controller.signal,
+          // 上传文件用流，fetch 要求声明半双工。
+          ...(isStream(options.body) ? { duplex: 'half' } : {}),
+        } as RequestInit);
   } catch (error) {
     clearTimeout(timer);
     if (controller.signal.aborted) throw timeoutError(Math.round(timeoutMs / 1000), method, relativePath);

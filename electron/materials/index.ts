@@ -28,6 +28,7 @@ import { cacheDir, localCanvasFile, storeThumb, thumbInsteadOf, thumbShaOf } fro
 import { createNasMonitor } from './nasMonitor.ts';
 import { FFMPEG_COMPONENT, ffmpegPath, installFfmpeg, isFfmpegInstalled, type VideoCompressOptions } from './ffmpeg.ts';
 import { mutateLibrary, readLibrary } from './libraryStore.ts';
+import { setRouteLogger } from './proxyBypass.ts';
 import { handleSkinRequest, SKIN_SCHEME } from './skinStore.ts';
 import { registerSkins } from './skins.ts';
 import * as webdav from './webdav.ts';
@@ -131,6 +132,17 @@ export function register({ ipcMain, userDataDir, updateBaseUrl, getWindow }: Reg
     },
   });
   webdav.setReachabilityListener(monitor.report);
+  // 绕开代理找线路的过程写 <userData>/logs/nas.log（超过 1MB 从头写），客户连不上 NAS 时看这里。
+  setRouteLogger((line) => {
+    try {
+      const file = path.join(userDataDir, 'logs', 'nas.log');
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      if (fs.existsSync(file) && fs.statSync(file).size > 1024 * 1024) fs.rmSync(file);
+      fs.appendFileSync(file, `${new Date().toISOString()} ${line}\n`);
+    } catch {
+      // 日志写不进去不影响连接。
+    }
+  });
   ipcMain.handle('materials:nas-status', () => nasStatus());
   ipcMain.handle('materials:nas-reconnect', async () => {
     await monitor.reconnect();

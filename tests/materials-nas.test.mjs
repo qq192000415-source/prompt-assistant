@@ -218,3 +218,39 @@ test('搬旧数据时目标已存在就停下，说明搬了哪些、其余还�
     nas.server.close();
   }
 });
+
+test('绕开代理：假地址网段判断；按指定线路连 NAS 时主机名照旧，地址和出口网卡换成指定的，上传下载、状态码都和 fetch 一样', async () => {
+  const { isFakeIp, routedFetch } = await import('../electron/materials/proxyBypass.ts');
+  assert.deepEqual(['198.18.0.12', '198.19.255.1', '198.20.0.1', '192.168.1.10'].map(isFakeIp), [true, true, false, false]);
+
+  const nas = await startFakeNas();
+  try {
+    // 主机名解析不了，只有按线路里的地址才连得上。
+    const base = nas.config.baseUrl.replace('127.0.0.1', 'nas.invalid');
+    const route = { address: '127.0.0.1', localAddress: '127.0.0.1' };
+    const auth = { Authorization: `Basic ${Buffer.from('user:pass').toString('base64')}` };
+    const url = (file) => new URL(file, normalizeBaseUrl(base)).toString();
+
+    const body = new Blob([Buffer.from('hello')]).stream();
+    const put = await routedFetch(url('a.txt'), { method: 'PUT', headers: { ...auth, 'Content-Length': '5' }, body }, route);
+    assert.ok(put.ok);
+    const get = await routedFetch(url('a.txt'), { method: 'GET', headers: auth }, route);
+    assert.equal(await get.text(), 'hello');
+    const missing = await routedFetch(url('b.txt'), { method: 'PROPFIND', headers: { ...auth, Depth: '0' } }, route);
+    assert.equal(missing.status, 404);
+    const denied = await routedFetch(url('a.txt'), { method: 'GET' }, route);
+    assert.equal(denied.status, 401);
+  } finally {
+    nas.server.close();
+  }
+
+  // IPv6 地址按 IPv6 连。
+  const server = http.createServer((request, response) => response.end(request.headers.host)).listen(0, '::1');
+  await new Promise((resolve) => server.once('listening', resolve));
+  try {
+    const response = await routedFetch(`http://nas.invalid:${server.address().port}/`, { method: 'GET' }, { address: '::1', localAddress: '::1' });
+    assert.equal(await response.text(), `nas.invalid:${server.address().port}`);
+  } finally {
+    server.close();
+  }
+});
