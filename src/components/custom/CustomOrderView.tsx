@@ -1,20 +1,64 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { ArrowDown, ArrowUp, Copy, Download, FileUp, ImagePlus, Maximize, Minimize, RotateCcw, RotateCw, Save, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Copy, Download, FileUp, ImagePlus, Maximize, Minimize, RotateCcw, RotateCw, Save, Trash2, TriangleAlert } from 'lucide-react';
 import { Button } from '../ui/button';
-import { emptyFace, facesFor, fitLayer, type FaceLayout, type ImageLayer, type OrderLayout } from '../../custom/layout';
-import type { CustomProduct } from '../../custom/product';
+import { MeshEditor } from './MeshEditor';
+import type { Point } from '../../materials/imageEdit';
+import { LOW_DPI, emptyFace, facesFor, fitLayer, printDpi, type FaceLayout, type ImageLayer, type OrderLayout } from '../../custom/layout';
+import type { CustomProduct, MockupTemplate } from '../../custom/product';
 import { cmToPx, productionFileName } from '../../custom/production';
-import { encodeJpeg, encodePng, encodeProductionJpeg, renderFace, renderMockup, renderProduction, type Drawable, type MockupAssets } from '../../custom/render';
+import { encodeJpeg, encodePng, encodeProductionJpeg, mockupFocus, renderConfirmation, renderFace, renderMockup, renderProduction, type Drawable, type MockupAssets } from '../../custom/render';
+import { defaultMesh, warpedBounds } from '../../custom/warp';
 
-// 来图定制（1.18.0 第一步）：选产品和尺寸 → 放买家的图排版 → 右边实时出样机效果 → 复制效果图 / 存一版到定制 NAS / 导出生产图。
-// 产品模板（样机 PSD）在左栏「产品设置」里导入，团队共用。修图工具、方果对接在后面几步加。
+// 来图定制：选产品和尺寸 → 放买家的图排版 → 右边实时出样机效果 → 复制效果图 / 存一版到定制 NAS / 导出生产图。
+// 样机在左栏「产品设置」里做：导入 PSD，或者用一张空白产品照拖网格（1.18.1），团队共用。两面不同时发给买家的是两面并排的对照图。
 
 type Source = { sha256: string; ext: string; bytes: Uint8Array<ArrayBuffer>; bitmap: ImageBitmap };
 type Face = 'front' | 'back';
 
 const PREVIEW_FACE = 1024;
 const STAGE_FACE = 900;
-const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+// IPC 抛回来的错误前面会带一串「Error invoking remote method …: Error:」，只留后面的中文。
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error)).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+type PhotoEdit = { bytes: Uint8Array<ArrayBuffer>; ext: string; bitmap: ImageBitmap; url: string; mesh: Point[] };
+
+// 照片样机的模板：四角取网格外框，网格控制点原样就是贴图位置；光影靠正片叠底取照片本身。
+function photoTemplate(edit: PhotoEdit): MockupTemplate {
+  const { minX, minY, maxX, maxY } = warpedBounds(edit.mesh);
+  const { width, height } = edit.bitmap;
+  return {
+    width,
+    height,
+    smartObject: { width, height, quad: [{ x: minX, y: minY }, { x: maxX, y: minY }, { x: maxX, y: maxY }, { x: minX, y: maxY }], mesh: edit.mesh },
+    blend: 'multiply',
+    opacity: 1,
+    clipped: false,
+    underFile: `under${edit.ext}`,
+    underIncludesBase: true,
+    over: [],
+    hasSample: false,
+  };
+}
+
+// 还没放图时，照片样机预览用一张浅灰网格看变形对不对。
+function gridFace(size: number) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#f2f2f2';
+  ctx.fillRect(0, 0, size, size);
+  ctx.strokeStyle = '#8a8a8a';
+  ctx.lineWidth = size / 200;
+  for (let i = 0; i <= 8; i += 1) {
+    const at = (i / 8) * size;
+    ctx.beginPath();
+    ctx.moveTo(at, 0);
+    ctx.lineTo(at, size);
+    ctx.moveTo(0, at);
+    ctx.lineTo(size, at);
+    ctx.stroke();
+  }
+  return canvas;
+}
 const hex = (buffer: ArrayBuffer) => Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, '0')).join('');
 const extOf = (name: string, type: string) => {
   const fromName = name.match(/\.(png|jpe?g|webp|bmp)$/i)?.[0].toLowerCase();
@@ -33,7 +77,12 @@ function useTemplateAssets(product: CustomProduct | null, notify: (message: stri
     const read = async (file: string) => createImageBitmap(new Blob([await customApi.readTemplateFile(product.id, file)]));
     const template = product.template;
     void (async () => {
-      const [under, base, over] = await Promise.all([read('under.png'), read('base.png'), template.hasOver ? read('over.png') : Promise.resolve(null)]);
+      // base 只有剪贴时（和 1.18.0 的旧模板）才有。
+      const [under, base, over] = await Promise.all([
+        read(template.underFile),
+        template.clipped || !template.underIncludesBase ? read('base.png') : Promise.resolve(null),
+        Promise.all(template.over.map((entry) => read(entry.file))),
+      ]);
       let sample: Uint8Array<ArrayBuffer> | null = null;
       if (template.hasSample) {
         for (const file of ['sample.jpg', 'sample.png', 'sample.webp']) {
@@ -64,7 +113,10 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
   const fileInput = useRef<HTMLInputElement>(null);
   const stageCanvas = useRef<HTMLCanvasElement>(null);
   const mockupCanvas = useRef<HTMLCanvasElement>(null);
-  const backCanvas = useRef<HTMLCanvasElement>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
+  // 右栏看哪一面（两面不同时）。
+  const [previewing, setPreviewing] = useState<Face>('front');
+  const [photoEdit, setPhotoEdit] = useState<PhotoEdit | null>(null);
   const drag = useRef<{ id: string; startX: number; startY: number; cx: number; cy: number; size: number } | null>(null);
 
   const product = products?.find((entry) => entry.id === productId) ?? null;
@@ -136,32 +188,34 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
     }
   }, [face, bitmaps]);
 
-  // 右边效果图：排版停下 150ms 后重画。
+  // 右边效果图：排版停下 150ms 后重画；正在用照片做样机时按正在拖的网格出预览。
+  const shownFace: Face = layout?.facesMode === 'different' ? previewing : 'front';
   useEffect(() => {
-    if (!layout || !product?.template || !assets) return;
+    if (!layout) return;
     const timer = window.setTimeout(() => {
       try {
         const faces = facesFor(layout);
-        const mockup = renderMockup(product.template!, assets, renderFace(faces.front, bitmaps, PREVIEW_FACE), product.watermark);
+        const faceLayout = shownFace === 'back' ? faces.back : faces.front;
+        let mockup: HTMLCanvasElement;
+        if (photoEdit) {
+          const face = faceLayout.layers.length ? renderFace(faceLayout, bitmaps, PREVIEW_FACE) : gridFace(PREVIEW_FACE);
+          mockup = renderMockup(photoTemplate(photoEdit), { under: photoEdit.bitmap, base: null, over: [] }, face);
+        } else {
+          if (!product?.template || !assets) return;
+          mockup = renderMockup(product.template, assets, renderFace(faceLayout, bitmaps, PREVIEW_FACE), product.watermark);
+        }
         const target = mockupCanvas.current;
         if (target) {
           target.width = mockup.width;
           target.height = mockup.height;
           target.getContext('2d')!.drawImage(mockup, 0, 0);
         }
-        const back = backCanvas.current;
-        if (back && layout.facesMode === 'different') {
-          const rendered = renderFace(faces.back, bitmaps, 480);
-          back.width = rendered.width;
-          back.height = rendered.height;
-          back.getContext('2d')!.drawImage(rendered, 0, 0);
-        }
       } catch {
         // 图还在读。
       }
-    }, 150);
+    }, photoEdit ? 60 : 150);
     return () => window.clearTimeout(timer);
-  }, [layout, assets, bitmaps, product]);
+  }, [layout, assets, bitmaps, product, shownFace, photoEdit]);
 
   const run = async (label: string, action: () => Promise<void>) => {
     setBusy(label);
@@ -174,12 +228,15 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
     }
   };
 
-  // 正面是贴好样机的效果图；两面不同时背面出平面预览。
-  const effectCanvas = (target: Face) => {
-    if (!layout || !product?.template || !assets) throw new Error('这个产品还没有样机，请先在「产品设置」里导入样机 PSD');
+  // 两面都贴在同一个样机上；两面不同时另出一张并排的对照图发给买家。
+  const mockupOf = (target: Face) => {
+    if (!layout || !product?.template || !assets) throw new Error('这个产品还没有样机，请先在「产品设置」里导入样机');
     const faces = facesFor(layout);
-    if (target === 'back') return renderFace(faces.back, bitmaps, PREVIEW_FACE);
-    return renderMockup(product.template, assets, renderFace(faces.front, bitmaps, PREVIEW_FACE), product.watermark);
+    return renderMockup(product.template, assets, renderFace(target === 'back' ? faces.back : faces.front, bitmaps, PREVIEW_FACE), product.watermark);
+  };
+  const confirmationOf = () => {
+    const meta = [orderName.trim() && `单号 ${orderName.trim()}`, layout && `${layout.sizeCm}×${layout.sizeCm}cm`].filter(Boolean).join('  ·  ');
+    return renderConfirmation(mockupOf('front'), mockupOf('back'), mockupFocus(product!.template!), meta);
   };
   const productionFile = async () => {
     if (!layout) throw new Error('还没有排版');
@@ -190,18 +247,22 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
     return { name: productionFileName(layout.sizeCm, orderName), bytes: await encodeProductionJpeg(renderProduction(front, back, layout.sizeCm)) };
   };
 
-  const copyEffect = (target: Face) =>
+  const copyEffect = () =>
     run('copy', async () => {
-      await customApi!.copyImage(new Uint8Array(await (await encodePng(effectCanvas(target))).arrayBuffer()));
-      notify(target === 'back' ? '背面预览已复制，可以粘贴到千牛' : '效果图已复制，可以粘贴到千牛');
+      const different = layout?.facesMode === 'different';
+      await customApi!.copyImage(new Uint8Array(await (await encodePng(different ? confirmationOf() : mockupOf('front'))).arrayBuffer()));
+      notify(different ? '正反面对照图已复制，可以粘贴到千牛' : '效果图已复制，可以粘贴到千牛');
     });
   const saveVersion = () =>
     run('save', async () => {
       if (!layout) return;
       if (!orderName.trim()) throw new Error('先填单号（或名称），生产图和这一版都按它命名');
       const faces = facesFor(layout);
-      const outputs = [{ name: '效果图-正面.jpg', bytes: await encodeJpeg(effectCanvas('front')) }];
-      if (layout.facesMode === 'different') outputs.push({ name: '效果图-背面.jpg', bytes: await encodeJpeg(effectCanvas('back')) });
+      const outputs = [{ name: '效果图-正面.jpg', bytes: await encodeJpeg(mockupOf('front')) }];
+      if (layout.facesMode === 'different') {
+        outputs.push({ name: '效果图-背面.jpg', bytes: await encodeJpeg(mockupOf('back')) });
+        outputs.push({ name: '效果确认.jpg', bytes: await encodeJpeg(confirmationOf()) });
+      }
       outputs.push(await productionFile());
       const used = new Set([...faces.front.layers, ...faces.back.layers].map((layer) => layer.sha256));
       const { version } = await customApi!.saveOrderVersion({
@@ -227,6 +288,31 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
       setProductForm(null);
       await loadProducts(saved.id);
       notify('产品已保存');
+    });
+  // 用照片做样机：选一张空白产品照，在中间拖网格，右边实时看效果，保存后整个团队都能用。
+  const startPhotoTemplate = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const bitmap = await createImageBitmap(new Blob([bytes]));
+      setPhotoEdit({ bytes, ext: extOf(file.name, file.type), bitmap, url: URL.createObjectURL(file), mesh: defaultMesh(bitmap.width, bitmap.height) });
+      setSelectedId('');
+    } catch {
+      notify(`「${file.name}」不是能读的图片`);
+    }
+  };
+  const closePhotoTemplate = () => {
+    if (photoEdit) URL.revokeObjectURL(photoEdit.url);
+    setPhotoEdit(null);
+  };
+  const savePhotoTemplate = () =>
+    run('photo', async () => {
+      if (!product || !photoEdit) return;
+      const { bytes, ext, bitmap, mesh } = photoEdit;
+      await customApi!.savePhotoTemplate(product.id, { bytes, ext, width: bitmap.width, height: bitmap.height, mesh });
+      closePhotoTemplate();
+      await loadProducts(product.id);
+      notify('样机已保存');
     });
   const importPsd = () =>
     run('psd', async () => {
@@ -273,6 +359,8 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
   if (!customApi) return <main className="custom-empty">来图定制只能在桌面版里使用</main>;
 
   const bleedPercent = layout && product ? (product.bleedCm / layout.sizeCm) * 100 : 0;
+  // 正在排的这一面里，按现在大小印出来不到 150dpi 的图。
+  const lowResLayers = layout && face ? face.layers.map((layer) => printDpi(layer, cmToPx(layout.sizeCm))).filter((dpi) => dpi < LOW_DPI) : [];
   return (
     <main className="materials-view is-canvas custom-view">
       <div className="custom-layout">
@@ -377,15 +465,28 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
                     >
                       修改
                     </Button>
-                    <Button className="button ghost compact" type="button" disabled={busy === 'psd'} onClick={() => void importPsd()}>
+                    <Button className="button ghost compact" type="button" disabled={busy === 'psd' || Boolean(photoEdit)} onClick={() => void importPsd()}>
                       <FileUp size={13} />
                       {busy === 'psd' ? '导入中…' : product.template ? '换样机 PSD' : '导入样机 PSD'}
                     </Button>
+                    <Button className="button ghost compact" type="button" disabled={Boolean(photoEdit)} title="选一张空白产品照，拖网格对准产品轮廓" onClick={() => photoInput.current?.click()}>
+                      <ImagePlus size={13} />
+                      用图片做样机
+                    </Button>
+                    <input
+                      ref={photoInput}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      hidden
+                      onChange={(event) => void startPhotoTemplate(event.target.files?.[0]).then(() => (event.target.value = ''))}
+                    />
                   </>
                 )}
               </span>
             )}
-            <p className="nas-form-note">样机 PSD 要有一个智能对象（换图的那层），可以剪贴到下面的产品层、用正片叠底；图层组、蒙版先在 PS 里合并掉。</p>
+            <p className="nas-form-note">
+              两种做法：导入样机 PSD（换图的那层要是智能对象，常用的混合模式、剪贴、蒙版、色阶、曲线、黑白都认）；或者用一张空白产品照，拖网格对准产品，光影直接取照片，适合白色、浅色产品。
+            </p>
           </details>
 
           {selected && (
@@ -437,6 +538,26 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
           )}
         </aside>
 
+        {photoEdit ? (
+          <section className="canvas-stage custom-stage" aria-label="用图片做样机">
+            <div className="custom-stage-head">
+              <strong>用图片做样机</strong>
+              <span className="custom-row">
+                <Button className="button ghost compact" type="button" onClick={() => setPhotoEdit({ ...photoEdit, mesh: defaultMesh(photoEdit.bitmap.width, photoEdit.bitmap.height) })}>
+                  重置网格
+                </Button>
+                <Button className="button ghost compact" type="button" onClick={closePhotoTemplate}>
+                  取消
+                </Button>
+                <Button className="button primary compact" type="button" disabled={busy === 'photo'} onClick={() => void savePhotoTemplate()}>
+                  {busy === 'photo' ? '保存中…' : '保存样机'}
+                </Button>
+              </span>
+            </div>
+            <MeshEditor url={photoEdit.url} width={photoEdit.bitmap.width} height={photoEdit.bitmap.height} mesh={photoEdit.mesh} onChange={(mesh) => setPhotoEdit({ ...photoEdit, mesh })} />
+            <p className="nas-form-note">拖四个角和四条边上的点，把网格对准产品的轮廓；边往外拱就是产品鼓起来的地方，中间的点会自动跟着弯。右边是实时效果。</p>
+          </section>
+        ) : (
         <section className="canvas-stage custom-stage" aria-label="排版">
           <div className="custom-stage-head">
             {layout?.facesMode === 'different' ? (
@@ -482,32 +603,37 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
           ) : (
             <p className="nas-form-note">先在左边选一个产品。</p>
           )}
+          {lowResLayers.length > 0 && (
+            <p className="custom-warning" role="status">
+              <TriangleAlert size={14} aria-hidden="true" />
+              原图偏小：按现在的大小印出来约 {Math.min(...lowResLayers)}dpi，可能模糊（建议不低于 {LOW_DPI}dpi）。换一张清晰的原图，或者把图缩小一些。
+            </p>
+          )}
           <p className="nas-form-note">虚线以外是出血位，裁切时可能被切掉：背景铺满到边，文字、人脸放在虚线以内。</p>
         </section>
+        )}
 
         <aside className="canvas-panel custom-preview" aria-label="效果图">
           <div className="canvas-panel-head">
-            <strong>效果图</strong>
-          </div>
-          {product?.template ? <canvas ref={mockupCanvas} className="custom-mockup" /> : <p className="nas-form-note">这个产品还没有样机，在左边「产品设置」里导入样机 PSD。</p>}
-          {layout?.facesMode === 'different' && (
-            <>
-              <span className="material-field-label">背面（平面预览）</span>
-              <canvas ref={backCanvas} className="custom-back" />
-            </>
-          )}
-          <div className="custom-actions">
-            <Button className="button primary" type="button" disabled={!product?.template || !face?.layers.length || Boolean(busy)} onClick={() => void copyEffect('front')}>
-              <Copy size={14} />
-              复制效果图
-            </Button>
+            <strong>{photoEdit ? '样机预览' : '效果图'}</strong>
             {layout?.facesMode === 'different' && (
-              <Button className="button ghost" type="button" disabled={Boolean(busy)} onClick={() => void copyEffect('back')}>
-                <Copy size={14} />
-                复制背面
-              </Button>
+              <div className="canvas-segmented custom-preview-faces" role="radiogroup" aria-label="看哪一面">
+                {(['front', 'back'] as const).map((target) => (
+                  <button key={target} type="button" role="radio" aria-checked={previewing === target} className={previewing === target ? 'is-active' : ''} onClick={() => setPreviewing(target)}>
+                    {target === 'front' ? '正面' : '背面'}
+                  </button>
+                ))}
+              </div>
             )}
-            <Button className="button ghost" type="button" disabled={!product?.template || !face?.layers.length || Boolean(busy)} onClick={() => void saveVersion()}>
+          </div>
+          {product?.template || photoEdit ? <canvas ref={mockupCanvas} className="custom-mockup" /> : <p className="nas-form-note">这个产品还没有样机，在左边「产品设置」里导入样机 PSD，或者用图片做样机。</p>}
+          {layout?.facesMode === 'different' && !photoEdit && <p className="nas-form-note">两面不同时，复制和保存的是正反面并排的对照图。</p>}
+          <div className="custom-actions">
+            <Button className="button primary" type="button" disabled={!product?.template || !face?.layers.length || Boolean(busy) || Boolean(photoEdit)} onClick={() => void copyEffect()}>
+              <Copy size={14} />
+              {layout?.facesMode === 'different' ? '复制正反面对照图' : '复制效果图'}
+            </Button>
+            <Button className="button ghost" type="button" disabled={!product?.template || !face?.layers.length || Boolean(busy) || Boolean(photoEdit)} onClick={() => void saveVersion()}>
               <Save size={14} />
               {busy === 'save' ? '保存中…' : '保存这一版'}
             </Button>

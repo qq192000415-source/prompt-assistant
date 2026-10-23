@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { clipboard, dialog, nativeImage, type BrowserWindow, type IpcMain } from 'electron';
-import { importMockupPsd, readProducts, readTemplateFile, saveOrderVersion, saveProduct, type OrderFile, type OrderSource, type ProductInput } from './customStore.ts';
+import { importMockupPsd, readProducts, readTemplateFile, saveOrderVersion, savePhotoTemplate, saveProduct, type OrderFile, type OrderSource, type ProductInput } from './customStore.ts';
 import { normalizeBaseUrl, type DavConfig } from './webdav.ts';
 import type { OrderLayout } from '../../src/custom/layout.ts';
 
@@ -33,6 +33,15 @@ export function registerCustom({ ipcMain, getWindow }: { ipcMain: IpcMain; getWi
     if (fs.statSync(file).size > MAX_PSD_BYTES) throw new Error('PSD 超过 300MB，请先在 PS 里合并不需要的图层再导入');
     return importMockupPsd(current(), String(productId), fs.readFileSync(file));
   });
+  ipcMain.handle('custom:save-photo-template', (_event, productId: string, input: { bytes: Uint8Array; ext: string; width: number; height: number; mesh: Array<{ x: number; y: number }> }) =>
+    savePhotoTemplate(current(), String(productId), {
+      bytes: asBytes(input?.bytes),
+      ext: String(input?.ext ?? ''),
+      width: Number(input?.width),
+      height: Number(input?.height),
+      mesh: Array.isArray(input?.mesh) ? input.mesh.map((point) => ({ x: Number(point?.x), y: Number(point?.y) })) : [],
+    }),
+  );
   ipcMain.handle('custom:read-template-file', (_event, productId: string, file: string) => readTemplateFile(current(), String(productId), String(file)));
   ipcMain.handle('custom:save-order-version', (_event, input: { name: string; layout: OrderLayout; sources: OrderSource[]; outputs: OrderFile[] }) =>
     saveOrderVersion(current(), {

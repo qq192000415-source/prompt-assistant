@@ -7802,3 +7802,75 @@ line.ref-editor-guide {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* 来图定制 1.18.1：照片样机的网格编辑、效果图正反面切换、原图偏小提醒 */
+.custom-mesh {
+  position: relative;
+  width: min(100%, calc((100vh - var(--topbar-height) - 190px) * var(--mesh-ratio, 1)));
+  justify-self: center;
+  user-select: none;
+}
+
+.custom-mesh img,
+.custom-mesh svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.custom-mesh svg {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+.custom-mesh path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-opacity: 0.55;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.custom-mesh path.is-edge {
+  stroke-opacity: 1;
+  stroke-width: 2;
+}
+
+.custom-mesh circle {
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  cursor: grab;
+}
+
+.custom-mesh circle.is-corner {
+  fill: var(--accent);
+}
+
+.custom-preview .canvas-panel-head {
+  margin-block: 0;
+}
+
+.custom-preview-faces {
+  min-width: 140px;
+}
+
+.custom-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  border-radius: var(--radius-sm);
+  background: var(--warning-weak);
+  color: var(--warning);
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 8px 10px;
+}
+
+.custom-warning svg {
+  flex: none;
+  margin-top: 3px;
+}

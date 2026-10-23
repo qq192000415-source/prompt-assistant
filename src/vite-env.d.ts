@@ -277,6 +277,10 @@ type DesktopCustomApi = {
   listProducts: () => Promise<{ products: import('./custom/product').CustomProduct[]; dropped: number }>;
   saveProduct: (input: { id?: string; name: string; sizes: number[]; bleedCm: number; watermark: string }) => Promise<import('./custom/product').CustomProduct>;
   importPsd: (productId: string) => Promise<{ product: import('./custom/product').CustomProduct; sampleExt: string | null } | null>;
+  savePhotoTemplate: (
+    productId: string,
+    input: { bytes: Uint8Array<ArrayBuffer>; ext: string; width: number; height: number; mesh: Array<{ x: number; y: number }> },
+  ) => Promise<import('./custom/product').CustomProduct>;
   readTemplateFile: (productId: string, file: string) => Promise<Uint8Array<ArrayBuffer>>;
   saveOrderVersion: (input: {
     name: string;

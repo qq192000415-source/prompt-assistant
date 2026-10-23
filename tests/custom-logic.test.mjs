@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-const { bezierPatch, makeWarp, warpGrid } = await import('../src/custom/warp.ts');
+const { bezierPatch, makeWarp, warpGrid, withCoonsInterior, defaultMesh, isBorderPoint, warpedBounds } = await import('../src/custom/warp.ts');
 const { cmToPx, stripLayout, productionFileName, setJpegDpi } = await import('../src/custom/production.ts');
-const { fitLayer, facesFor, normalizeLayout } = await import('../src/custom/layout.ts');
+const { fitLayer, facesFor, normalizeLayout, printDpi } = await import('../src/custom/layout.ts');
 const { normalizeProducts } = await import('../src/custom/product.ts');
 const { parseMockupPsd } = await import('../electron/materials/customPsd.ts');
 const { writePsdBuffer } = await import('ag-psd');
@@ -115,4 +115,37 @@ test('排版：铺满 / 完整显示的比例，两面相同时背面照抄正�
   assert.equal(facesFor(layout).back, layout.front);
   assert.equal(facesFor({ ...layout, facesMode: 'different' }).back.background, '#000000');
   assert.equal(normalizeLayout({}), null);
+});
+
+test('照片样机网格：默认在中间，中间 4 点按 Coons 从四条边插值，均匀网格保持不变', () => {
+  const mesh = defaultMesh(1000, 800);
+  assert.deepEqual([mesh[0], mesh[15]], [{ x: 300, y: 200 }, { x: 700, y: 600 }]);
+  assert.equal([...Array(16).keys()].filter(isBorderPoint).length, 12);
+  // 均匀网格的内点本来就是 Coons 插值的结果。
+  withCoonsInterior(mesh).forEach((p, i) => { near(p.x, mesh[i].x); near(p.y, mesh[i].y); });
+  // 上边中间两个点往上拱 30：内点也往上跟（上面一行跟得多，下面一行跟得少）。
+  const bent = mesh.map((p, i) => (i === 1 || i === 2 ? { x: p.x, y: p.y - 30 } : p));
+  const inner = withCoonsInterior(bent);
+  near(inner[5].y, mesh[5].y - 20);
+  near(inner[9].y, mesh[9].y - 10);
+  near(inner[5].x, mesh[5].x);
+});
+
+test('照片样机：四角取网格外框时，网格控制点原样就是贴图位置', () => {
+  const mesh = withCoonsInterior(defaultMesh(1000, 800).map((p, i) => (i === 1 ? { x: p.x, y: p.y - 40 } : p)));
+  const { minX, minY, maxX, maxY } = warpedBounds(mesh);
+  const quad = [{ x: minX, y: minY }, { x: maxX, y: minY }, { x: maxX, y: maxY }, { x: minX, y: maxY }];
+  const warp = makeWarp({ width: 1000, height: 800, quad, mesh });
+  for (const [u, v] of [[0, 0], [0.4, 0.2], [1, 1]]) {
+    const a = warp(u, v);
+    const b = bezierPatch(mesh, u, v);
+    near(a.x, b.x, 1e-6);
+    near(a.y, b.y, 1e-6);
+  }
+});
+
+test('印刷 dpi：原图 2362 像素铺满 40cm 是 150dpi', () => {
+  const layer = { id: 'a', sha256: 'a'.repeat(64), ext: '.png', width: 2362, height: 2362, cx: 0.5, cy: 0.5, scale: 1, rotation: 0 };
+  assert.equal(printDpi(layer, cmToPx(40)), 150);
+  assert.equal(printDpi({ ...layer, scale: 0.5 }, cmToPx(40)), 300);
 });

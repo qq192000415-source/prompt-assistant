@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld('promptAssistantDesktop', {
     listProducts: () => ipcRenderer.invoke('custom:list-products'),
     saveProduct: (input) => ipcRenderer.invoke('custom:save-product', input),
     importPsd: (productId) => ipcRenderer.invoke('custom:import-psd', productId),
+    savePhotoTemplate: (productId, input) => ipcRenderer.invoke('custom:save-photo-template', productId, input),
     readTemplateFile: (productId, file) => ipcRenderer.invoke('custom:read-template-file', productId, file),
     saveOrderVersion: (input) => ipcRenderer.invoke('custom:save-order-version', input),
     exportFiles: (files) => ipcRenderer.invoke('custom:export-files', files),

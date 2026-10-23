@@ -37,7 +37,7 @@ export function bezierPatch(mesh: Point[], u: number, v: number): Point {
 const BOUNDS_STEPS = 32;
 
 // 变形后图形在智能对象空间里的外框；曲面的极值可能落在边内侧，所以整片采样。
-function warpedBounds(mesh: Point[]) {
+export function warpedBounds(mesh: Point[]) {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -54,10 +54,24 @@ function warpedBounds(mesh: Point[]) {
   return { minX, minY, maxX, maxY };
 }
 
-// 设计图上 (u, v)（0–1）这一点落在样机上的哪里。
+// 设计图上 (u, v)（0–1）这一点落在样机上的哪里。智能对象带透视扭曲时（nonAffineTransform 不是矩形），
+// 要先把 16 个控制点按「外框 → 四角」的透视映射过去，再算贝塞尔曲面；先算曲面再整体透视会错开几个像素（客户第二个样机实测 3.59 vs 7.24，
+// 不带透视的样机是 3.06，剩下的是重采样误差）。
 export function makeWarp(geometry: SmartObjectGeometry): (u: number, v: number) => Point {
   const { width, height, quad, mesh } = geometry;
-  const { minX, minY, maxX, maxY } = mesh ? warpedBounds(mesh) : { minX: 0, minY: 0, maxX: width, maxY: height };
+  if (!mesh) {
+    const toDocument = solveHomography(
+      [
+        { x: 0, y: 0 },
+        { x: width, y: 0 },
+        { x: width, y: height },
+        { x: 0, y: height },
+      ],
+      quad,
+    );
+    return (u, v) => applyHomography(toDocument, u * width, v * height);
+  }
+  const { minX, minY, maxX, maxY } = warpedBounds(mesh);
   const toDocument = solveHomography(
     [
       { x: minX, y: minY },
@@ -67,10 +81,8 @@ export function makeWarp(geometry: SmartObjectGeometry): (u: number, v: number) 
     ],
     quad,
   );
-  return (u, v) => {
-    const local = mesh ? bezierPatch(mesh, u, v) : { x: u * width, y: v * height };
-    return applyHomography(toDocument, local.x, local.y);
-  };
+  const placed = mesh.map((point) => applyHomography(toDocument, point.x, point.y));
+  return (u, v) => bezierPatch(placed, u, v);
 }
 
 // (steps+1)×(steps+1) 个网格点，行优先：points[row * (steps + 1) + col]，界面按格子拆三角形画。
@@ -81,4 +93,38 @@ export function warpGrid(geometry: SmartObjectGeometry, steps: number): Point[] 
     for (let col = 0; col <= steps; col += 1) points.push(warp(col / steps, row / steps));
   }
   return points;
+}
+
+// ---- 用照片做样机时的网格编辑：只拖边上 12 个点（四角 + 每条边两个），中间 4 个按 Coons 曲面从四条边插值，
+// 这样四条边怎么弯，里面就均匀地跟着弯，和 PS 变形网格拖边的手感一致。
+export const isBorderPoint = (index: number) => {
+  const row = Math.floor(index / 4);
+  const col = index % 4;
+  return row === 0 || row === 3 || col === 0 || col === 3;
+};
+
+export function withCoonsInterior(mesh: Point[]): Point[] {
+  const at = (row: number, col: number) => mesh[row * 4 + col];
+  return mesh.map((point, index) => {
+    if (isBorderPoint(index)) return point;
+    const row = Math.floor(index / 4);
+    const col = index % 4;
+    const u = col / 3;
+    const v = row / 3;
+    const blend = (key: 'x' | 'y') =>
+      (1 - v) * at(0, col)[key] +
+      v * at(3, col)[key] +
+      (1 - u) * at(row, 0)[key] +
+      u * at(row, 3)[key] -
+      ((1 - u) * (1 - v) * at(0, 0)[key] + u * (1 - v) * at(0, 3)[key] + (1 - u) * v * at(3, 0)[key] + u * v * at(3, 3)[key]);
+    return { x: blend('x'), y: blend('y') };
+  });
+}
+
+// 默认网格：照片中间一块方形，边长取短边的一半。
+export function defaultMesh(width: number, height: number): Point[] {
+  const side = Math.min(width, height) / 2;
+  const left = (width - side) / 2;
+  const top = (height - side) / 2;
+  return Array.from({ length: 16 }, (_, index) => ({ x: left + ((index % 4) / 3) * side, y: top + (Math.floor(index / 4) / 3) * side }));
 }

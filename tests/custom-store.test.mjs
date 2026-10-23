@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { inflateSync } from 'node:zlib';
 
-const { encodePng, importMockupPsd, readProducts, readTemplateFile, saveOrderVersion, saveProduct } = await import('../electron/materials/customStore.ts');
+const { encodePng, importMockupPsd, readProducts, readTemplateFile, saveOrderVersion, savePhotoTemplate, saveProduct } = await import('../electron/materials/customStore.ts');
+const { defaultMesh } = await import('../src/custom/warp.ts');
 const { startFakeNas } = await import('./helpers/fake-nas.mjs');
 
 const ROOT = '/团队文件-素材/';
@@ -85,6 +86,25 @@ test('导入客户样机 PSD：图层和示例图传到 templates/<id>/，产品
     assert.equal(nas.files.has(`${ROOT}templates/${product.id}/over.png`), false);
     const under = await readTemplateFile(nas.config, product.id, 'under.png');
     assert.equal(under.readUInt32BE(16), 1254);
+  } finally {
+    nas.server.close();
+  }
+});
+
+test('照片样机：照片原样存成 under.jpg，模板不剪贴、四角是网格外框；格式和网格校验', async () => {
+  const nas = await startFakeNas();
+  try {
+    const product = await saveProduct(nas.config, { name: '方形抱枕', sizes: [40], bleedCm: 0.5, watermark: '' });
+    const mesh = defaultMesh(1000, 800);
+    const saved = await savePhotoTemplate(nas.config, product.id, { bytes: new Uint8Array([7, 7]), ext: '.JPEG', width: 1000, height: 800, mesh });
+    assert.deepEqual([...nas.files.get(`${ROOT}templates/${product.id}/under.jpg`)], [7, 7]);
+    assert.equal(saved.template.underFile, 'under.jpg');
+    assert.equal(saved.template.clipped, false);
+    assert.deepEqual(saved.template.smartObject.quad[0], { x: 300, y: 200 });
+    assert.deepEqual((await readProducts(nas.config)).products[0].template.smartObject.mesh, mesh);
+    assert.ok(await readTemplateFile(nas.config, product.id, 'under.jpg'));
+    await assert.rejects(savePhotoTemplate(nas.config, product.id, { bytes: new Uint8Array(), ext: '.gif', width: 1, height: 1, mesh }), /JPG、PNG、WebP/);
+    await assert.rejects(savePhotoTemplate(nas.config, product.id, { bytes: new Uint8Array(), ext: '.png', width: 1, height: 1, mesh: mesh.slice(1) }), /网格/);
   } finally {
     nas.server.close();
   }

@@ -4,17 +4,37 @@ import type { SmartObjectGeometry } from './warp.ts';
 
 export const PRODUCTS_FILE = 'products.json';
 
-// 样机：under（剪贴底下面的合成）+ base（剪贴底，设计图只出现在它的范围内）+ 变形后的设计图（按 blend 叠到 base 上）+ over（智能对象上面的层）。
-// 图片存在 templates/<产品 id>/ 下，sample 是 PSD 里智能对象原本放的那张图，用来出预览。
+// 智能对象上面的一层：整幅 PNG，出图时按 canvas 的混合模式叠；clipped 的只在 base 范围里。
+export type OverLayer = { file: string; blend: OverBlend; opacity: number; clipped: boolean };
+export type OverBlend =
+  | 'source-over'
+  | 'multiply'
+  | 'screen'
+  | 'overlay'
+  | 'darken'
+  | 'lighten'
+  | 'color-dodge'
+  | 'color-burn'
+  | 'hard-light'
+  | 'soft-light'
+  | 'difference'
+  | 'exclusion'
+  | 'lighter';
+const OVER_BLENDS: OverBlend[] = ['source-over', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference', 'exclusion', 'lighter'];
+
+// 样机：under（智能对象下面全部合成好的底图）+ 变形后的设计图（按 blend 叠上去，clipped 时只在 base.png 的范围里）+ over（上面的层）。
+// 图片存在 templates/<产品 id>/ 下；用照片做的样机 under 就是照片本身（under.jpg 等）、没有 base。sample 是示例图，用来出预览。
+// 1.18.0 导入的旧模板 under 不含产品层，出图时要先画 base（underIncludesBase=false）。
 export type MockupTemplate = {
   width: number;
   height: number;
   smartObject: SmartObjectGeometry;
   blend: 'multiply' | 'normal';
   opacity: number;
-  // 智能对象剪贴到 base 时，设计图只在 base 的范围里出现；不剪贴时整块显示。
   clipped: boolean;
-  hasOver: boolean;
+  underFile: string;
+  underIncludesBase: boolean;
+  over: OverLayer[];
   hasSample: boolean;
 };
 
@@ -35,6 +55,7 @@ export type CustomProducts = { schemaVersion: 1; updatedAt: string; products: Cu
 const text = (value: unknown) => (typeof value === 'string' ? value : '');
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const TEMPLATE_UNDER = /^under\.(png|jpg|webp)$/;
 const point = (value: unknown): Point | null => (isRecord(value) && finite(value.x) && finite(value.y) ? { x: value.x, y: value.y } : null);
 
 function normalizeTemplate(raw: unknown): MockupTemplate | null {
@@ -52,7 +73,17 @@ function normalizeTemplate(raw: unknown): MockupTemplate | null {
     blend: raw.blend === 'normal' ? 'normal' : 'multiply',
     opacity: finite(raw.opacity) ? Math.min(1, Math.max(0, raw.opacity)) : 1,
     clipped: raw.clipped !== false,
-    hasOver: raw.hasOver === true,
+    underFile: TEMPLATE_UNDER.test(text(raw.underFile)) ? text(raw.underFile) : 'under.png',
+    underIncludesBase: raw.underIncludesBase === true,
+    over: Array.isArray(raw.over)
+      ? raw.over.flatMap((entry) =>
+          isRecord(entry) && /^over-\d+\.png$/.test(text(entry.file)) && OVER_BLENDS.includes(entry.blend as OverBlend)
+            ? [{ file: text(entry.file), blend: entry.blend as OverBlend, opacity: finite(entry.opacity) ? Math.min(1, Math.max(0, entry.opacity)) : 1, clipped: entry.clipped === true }]
+            : [],
+        )
+      : raw.hasOver === true
+        ? [{ file: 'over.png', blend: 'source-over', opacity: 1, clipped: false }]
+        : [],
     hasSample: raw.hasSample === true,
   };
 }

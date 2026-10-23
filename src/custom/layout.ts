@@ -78,3 +78,7 @@ export function normalizeLayout(raw: unknown): OrderLayout | null {
     back: normalizeFace(raw.back),
   };
 }
+
+// 这张图按当前大小印出来大约多少 dpi（宽度方向）：原图像素 ÷ 它在生产图上占的像素 × 300。低于 150 印出来会明显发糊。
+export const LOW_DPI = 150;
+export const printDpi = (layer: ImageLayer, facePx: number) => Math.round((300 * layer.width) / (layer.scale * facePx));

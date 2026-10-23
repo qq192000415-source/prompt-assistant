@@ -6,7 +6,8 @@ import { setJpegDpi, stripLayout } from './production.ts';
 import { warpGrid } from './warp.ts';
 
 export type Drawable = CanvasImageSource & { width: number; height: number };
-export type MockupAssets = { under: Drawable; base: Drawable; over: Drawable | null };
+// over 和 template.over 一一对应；base 只用来裁切（照片做的样机没有）。
+export type MockupAssets = { under: Drawable; base: Drawable | null; over: Drawable[] };
 
 const MESH_STEPS = 40;
 export const MAX_PRODUCTION_BYTES = 2 * 1024 * 1024;
@@ -71,7 +72,7 @@ function drawTriangle(ctx: CanvasRenderingContext2D, image: Drawable, s: [Point,
   ctx.restore();
 }
 
-// 效果图：under → base → 变形后的设计图（剪贴到 base、按混合模式叠上去）→ over → 水印。
+// 效果图：under（智能对象下面全部合成好的底图）→ 变形后的设计图（剪贴到 base、按混合模式叠上去）→ 上面各层按原混合模式 → 水印。
 export function renderMockup(template: MockupTemplate, assets: MockupAssets, face: Drawable, watermark = ''): HTMLCanvasElement {
   const { width, height, smartObject } = template;
   const grid = warpGrid(smartObject, MESH_STEPS);
@@ -87,20 +88,35 @@ export function renderMockup(template: MockupTemplate, assets: MockupAssets, fac
       drawTriangle(layer.ctx, face, [src(row, col), src(row + 1, col + 1), src(row + 1, col)], [at(row, col), at(row + 1, col + 1), at(row + 1, col)]);
     }
   }
-  if (template.clipped) {
+  if (template.clipped && assets.base) {
     layer.ctx.globalCompositeOperation = 'destination-in';
     layer.ctx.drawImage(assets.base, 0, 0);
   }
 
   const out = canvas2d(width, height);
   out.ctx.drawImage(assets.under, 0, 0);
-  out.ctx.drawImage(assets.base, 0, 0);
+  // 1.18.0 导入的旧模板 under 里没有产品层。
+  if (!template.underIncludesBase && assets.base) out.ctx.drawImage(assets.base, 0, 0);
   out.ctx.globalCompositeOperation = template.blend === 'multiply' ? 'multiply' : 'source-over';
   out.ctx.globalAlpha = template.opacity;
   out.ctx.drawImage(layer.canvas, 0, 0);
+  template.over.forEach((entry, index) => {
+    const image = assets.over[index];
+    if (!image) return;
+    let source: Drawable = image;
+    if (entry.clipped && assets.base) {
+      const clip = canvas2d(width, height);
+      clip.ctx.drawImage(image, 0, 0);
+      clip.ctx.globalCompositeOperation = 'destination-in';
+      clip.ctx.drawImage(assets.base, 0, 0);
+      source = clip.canvas;
+    }
+    out.ctx.globalCompositeOperation = entry.blend;
+    out.ctx.globalAlpha = entry.opacity;
+    out.ctx.drawImage(source, 0, 0);
+  });
   out.ctx.globalCompositeOperation = 'source-over';
   out.ctx.globalAlpha = 1;
-  if (assets.over) out.ctx.drawImage(assets.over, 0, 0);
   if (watermark) {
     const fontSize = Math.max(14, Math.round(width / 40));
     out.ctx.font = `${fontSize}px sans-serif`;
@@ -113,6 +129,56 @@ export function renderMockup(template: MockupTemplate, assets: MockupAssets, fac
     out.ctx.fillText(watermark, width - fontSize, height - fontSize);
   }
   return out.canvas;
+}
+
+// 效果图里产品所在的区域（变形后图形的外框往外放 35%），两面对照图只裁这一块，免得两张整幅场景并排太散。
+export function mockupFocus(template: MockupTemplate) {
+  const grid = warpGrid(template.smartObject, 16);
+  const xs = grid.map((point) => point.x);
+  const ys = grid.map((point) => point.y);
+  const [minX, maxX, minY, maxY] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  const padX = (maxX - minX) * 0.35;
+  const padY = (maxY - minY) * 0.35;
+  const x = Math.max(0, Math.floor(minX - padX));
+  const y = Math.max(0, Math.floor(minY - padY));
+  return { x, y, w: Math.min(template.width, Math.ceil(maxX + padX)) - x, h: Math.min(template.height, Math.ceil(maxY + padY)) - y };
+}
+
+// 两面不同时发给买家的对照图：两面都贴在同一个样机上并排，标「正面」「背面」，上面写单号、尺寸，底下一句核对提醒。
+// 这是发出去的图，颜色固定用中性浅底深字，不跟软件主题走。
+export function renderConfirmation(front: HTMLCanvasElement, back: HTMLCanvasElement, focus: { x: number; y: number; w: number; h: number }, meta: string) {
+  const scale = Math.min(1, 900 / focus.w);
+  const cellW = Math.round(focus.w * scale);
+  const cellH = Math.round(focus.h * scale);
+  const pad = Math.round(cellW * 0.05) + 24;
+  const gap = pad;
+  const header = 96;
+  const footer = 132;
+  const width = pad * 2 + gap + cellW * 2;
+  const height = header + cellH + footer;
+  const { canvas, ctx } = canvas2d(width, height);
+  ctx.fillStyle = '#f6f4f0';
+  ctx.fillRect(0, 0, width, height);
+  ctx.imageSmoothingQuality = 'high';
+  [front, back].forEach((image, index) => ctx.drawImage(image, focus.x, focus.y, focus.w, focus.h, pad + index * (cellW + gap), header, cellW, cellH));
+  const font = (size: number, weight = 400) => `${weight} ${size}px "Microsoft YaHei UI", "Microsoft YaHei", sans-serif`;
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#1e1e1e';
+  ctx.font = font(36, 700);
+  ctx.textAlign = 'left';
+  ctx.fillText('效果确认', pad, header / 2);
+  ctx.fillStyle = '#6e6e6e';
+  ctx.font = font(22);
+  ctx.textAlign = 'right';
+  ctx.fillText(meta, width - pad, header / 2);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#1e1e1e';
+  ctx.font = font(30, 700);
+  ['正面', '背面'].forEach((text, index) => ctx.fillText(text, pad + index * (cellW + gap) + cellW / 2, header + cellH + 40));
+  ctx.fillStyle = '#828282';
+  ctx.font = font(21);
+  ctx.fillText('请核对图案、文字和方向，确认后安排生产', width / 2, height - 34);
+  return canvas;
 }
 
 // 生产长条图：白底，正面在上、背面在下，每面顺时针转 90°。
