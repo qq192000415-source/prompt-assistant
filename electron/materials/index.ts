@@ -119,7 +119,7 @@ export function register({ ipcMain, userDataDir, updateBaseUrl, getWindow }: Reg
   protocol.handle(SKIN_SCHEME, handleSkinRequest(userDataDir));
   registerSkins({ ipcMain, userDataDir, updateBaseUrl, getWindow });
   // 来图定制（1.18.0）也只是借这里的主进程打包，连接和数据都和素材库分开。
-  registerCustom({ ipcMain, getWindow });
+  registerCustom({ ipcMain, userDataDir, updateBaseUrl, getWindow });
 
   // NAS 连接状态推给界面，带上当前账号本机待上传的数量；从断开变成连上时补传。
   const nasStatus = () => ({ ...monitor.status(), pending: canvasService.pendingStats() });

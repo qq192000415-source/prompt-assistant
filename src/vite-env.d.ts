@@ -276,6 +276,11 @@ type DesktopCustomApi = {
   applyGrant: (grant: { baseUrl: string; username: string; password: string } | null) => Promise<{ connected: boolean }>;
   listProducts: () => Promise<{ products: import('./custom/product').CustomProduct[]; dropped: number }>;
   saveProduct: (input: { id?: string; name: string; sizes: number[]; bleedCm: number; watermark: string }) => Promise<import('./custom/product').CustomProduct>;
+  deleteProduct: (productId: string) => Promise<void>;
+  aiEdit: (input: { prompt: string; imageDataUrl: string; maskDataUrl?: string; size: string; ratio: string }) => Promise<{ bytes: Uint8Array<ArrayBuffer>; ext: string }>;
+  upscalerStatus: () => Promise<{ installed: boolean; downloadBytes: number }>;
+  installUpscaler: () => Promise<void>;
+  upscale: (input: { bytes: Uint8Array<ArrayBuffer>; ext: string; model: 'photo' | 'anime' }) => Promise<{ bytes: Uint8Array<ArrayBuffer> } | { error: string }>;
   importPsd: (productId: string) => Promise<{ product: import('./custom/product').CustomProduct; sampleExt: string | null } | null>;
   savePhotoTemplate: (
     productId: string,

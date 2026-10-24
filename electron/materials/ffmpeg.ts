@@ -25,22 +25,32 @@ export const isFfmpegInstalled = (userDataDir: string) => {
   }
 };
 
-export async function installFfmpeg(userDataDir: string, updateBaseUrl: string, onProgress: (done: number, total: number) => void) {
+export function installFfmpeg(userDataDir: string, updateBaseUrl: string, onProgress: (done: number, total: number) => void) {
+  return downloadComponent(updateBaseUrl, FFMPEG_COMPONENT, ffmpegPath(userDataDir), 'FFmpeg', onProgress);
+}
+
+// 按需下载的组件（FFmpeg、来图定制的高清放大）：从更新源下载，大小和 SHA256 都对上才改名启用，不对就丢掉，不留半截文件。
+export async function downloadComponent(
+  updateBaseUrl: string,
+  component: { file: string; size: number; sha256: string },
+  target: string,
+  label: string,
+  onProgress: (done: number, total: number) => void,
+) {
   if (!updateBaseUrl) {
-    throw new Error('这个版本没有配置更新源，无法下载 FFmpeg');
+    throw new Error(`这个版本没有配置更新源，无法下载 ${label}`);
   }
-  const target = ffmpegPath(userDataDir);
   const partial = `${target}.part`;
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  const url = `${updateBaseUrl.replace(/\/+$/, '')}/${FFMPEG_COMPONENT.file}`;
+  const url = `${updateBaseUrl.replace(/\/+$/, '')}/${component.file}`;
   let response: Response;
   try {
     response = await fetch(url);
   } catch (error) {
-    throw new Error(`下载 FFmpeg 失败：${error instanceof Error ? error.message : error}`);
+    throw new Error(`下载 ${label} 失败：${error instanceof Error ? error.message : error}`);
   }
   if (!response.ok || !response.body) {
-    throw new Error(`下载 FFmpeg 失败：服务器返回 ${response.status}`);
+    throw new Error(`下载 ${label} 失败：服务器返回 ${response.status}`);
   }
 
   const hash = crypto.createHash('sha256');
@@ -50,16 +60,16 @@ export async function installFfmpeg(userDataDir: string, updateBaseUrl: string, 
   source.on('data', (chunk: Buffer) => {
     hash.update(chunk);
     done += chunk.length;
-    if (done - lastReport > 1024 * 1024 || done === FFMPEG_COMPONENT.size) {
+    if (done - lastReport > 1024 * 1024 || done === component.size) {
       lastReport = done;
-      onProgress(done, FFMPEG_COMPONENT.size);
+      onProgress(done, component.size);
     }
   });
   try {
     await pipeline(source, fs.createWriteStream(partial));
     const sha256 = hash.digest('hex');
-    if (done !== FFMPEG_COMPONENT.size || sha256 !== FFMPEG_COMPONENT.sha256) {
-      throw new Error('下载的 FFmpeg 校验不通过（大小或 SHA256 不对），已丢弃');
+    if (done !== component.size || sha256 !== component.sha256) {
+      throw new Error(`下载的 ${label} 校验不通过（大小或 SHA256 不对），已丢弃`);
     }
     fs.renameSync(partial, target);
   } finally {

@@ -53,6 +53,14 @@ export function startFakeNas() {
           files.set(key, body);
           response.writeHead(201).end();
           return;
+        case 'DELETE': {
+          const isFolder = key.endsWith('/');
+          if (!(isFolder ? folderExists(key) : files.has(key))) return response.writeHead(404).end();
+          for (const name of [...files.keys()].filter((entry) => (isFolder ? entry.startsWith(key) : entry === key))) files.delete(name);
+          for (const name of [...folders].filter((entry) => entry.startsWith(key))) folders.delete(name);
+          response.writeHead(204).end();
+          return;
+        }
         case 'LOCK':
           if (lockToken) return response.writeHead(423).end();
           locks.set(key, `<t${nextToken++}>`);

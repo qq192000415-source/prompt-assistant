@@ -4,7 +4,7 @@ import fs from 'node:fs';
 
 const { bezierPatch, makeWarp, warpGrid, withCoonsInterior, defaultMesh, isBorderPoint, warpedBounds } = await import('../src/custom/warp.ts');
 const { cmToPx, stripLayout, productionFileName, setJpegDpi } = await import('../src/custom/production.ts');
-const { fitLayer, facesFor, normalizeLayout, printDpi } = await import('../src/custom/layout.ts');
+const { fitLayer, facesFor, imageLayers, isTextLayer, normalizeLayout, printDpi } = await import('../src/custom/layout.ts');
 const { normalizeProducts } = await import('../src/custom/product.ts');
 const { parseMockupPsd } = await import('../electron/materials/customPsd.ts');
 const { writePsdBuffer } = await import('ag-psd');
@@ -115,6 +115,19 @@ test('排版：铺满 / 完整显示的比例，两面相同时背面照抄正�
   assert.equal(facesFor(layout).back, layout.front);
   assert.equal(facesFor({ ...layout, facesMode: 'different' }).back.background, '#000000');
   assert.equal(normalizeLayout({}), null);
+});
+
+test('排版：文字图层归一（空文字丢掉、颜色和字号兜底），修过的图记下原图，imageLayers 不含文字', () => {
+  const image = { id: 'a', sha256: 'a'.repeat(64), ext: '.png', width: 10, height: 10, cx: 0.5, cy: 0.5, scale: 1, rotation: 0, originalSha256: 'b'.repeat(64), originalExt: '.JPG' };
+  const text = { kind: 'text', id: 't', text: '生日快乐', font: 'KaiTi', fontSize: 0.1, color: 'red', strokeColor: '#00ff00', strokeWidth: 0.1, bold: true, cx: 0.5, cy: 0.8, rotation: 0 };
+  const layout = normalizeLayout({ productId: 'p', front: { layers: [image, text, { ...text, id: 'empty', text: '  ' }, { ...image, id: 'c', originalSha256: 'bad' }] } });
+  const [a, t, c] = layout.front.layers;
+  assert.equal(layout.front.layers.length, 3);
+  assert.deepEqual([a.originalSha256, a.originalExt], ['b'.repeat(64), '.jpg']);
+  assert.ok(isTextLayer(t) && !isTextLayer(a));
+  assert.deepEqual([t.text, t.font, t.color, t.strokeColor, t.bold], ['生日快乐', 'KaiTi', '#000000', '#00ff00', true]);
+  assert.equal('originalSha256' in c, false);
+  assert.deepEqual(imageLayers(layout).map((layer) => layer.id), ['a', 'c']);
 });
 
 test('照片样机网格：默认在中间，中间 4 点按 Coons 从四条边插值，均匀网格保持不变', () => {

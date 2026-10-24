@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { ArrowDown, ArrowUp, Copy, Download, FileUp, ImagePlus, Maximize, Minimize, RotateCcw, RotateCw, Save, Trash2, TriangleAlert } from 'lucide-react';
+import { ArrowDown, ArrowUp, Copy, Download, FileUp, ImagePlus, Maximize, Minimize, RotateCcw, RotateCw, Save, Trash2, TriangleAlert, Type } from 'lucide-react';
 import { Button } from '../ui/button';
 import { MeshEditor } from './MeshEditor';
+import { RetouchCompare, RetouchPanel, type LocalKind } from './RetouchPanel';
+import { bytesOf, dataUrlOf, localEdit, outpaint, plainUpscale, restore, type RetouchResult } from '../../custom/retouchCanvas';
+import { MAX_UPSCALE_INPUT } from '../../custom/retouch';
+import { TextLayerPanel } from './TextLayerPanel';
+import { ReferenceEditor, type EditorMode } from '../materials/ReferenceEditor';
 import type { Point } from '../../materials/imageEdit';
-import { LOW_DPI, emptyFace, facesFor, fitLayer, printDpi, type FaceLayout, type ImageLayer, type OrderLayout } from '../../custom/layout';
+import { LOW_DPI, emptyFace, facesFor, fitLayer, imageLayers, isTextLayer, newTextLayer, printDpi, type FaceLayout, type ImageLayer, type Layer, type OrderLayout } from '../../custom/layout';
 import type { CustomProduct, MockupTemplate } from '../../custom/product';
 import { cmToPx, productionFileName } from '../../custom/production';
-import { encodeJpeg, encodePng, encodeProductionJpeg, mockupFocus, renderConfirmation, renderFace, renderMockup, renderProduction, type Drawable, type MockupAssets } from '../../custom/render';
+import { encodeJpeg, encodePng, encodeProductionJpeg, mockupFocus, renderConfirmation, renderFace, renderMockup, renderProduction, textBox, type Drawable, type MockupAssets } from '../../custom/render';
 import { defaultMesh, warpedBounds } from '../../custom/warp';
 
 // 来图定制：选产品和尺寸 → 放买家的图排版 → 右边实时出样机效果 → 复制效果图 / 存一版到定制 NAS / 导出生产图。
@@ -117,6 +122,12 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
   const photoInput = useRef<HTMLInputElement>(null);
   const [photoEdit, setPhotoEdit] = useState<PhotoEdit | null>(null);
   const drag = useRef<{ id: string; startX: number; startY: number; cx: number; cy: number; size: number } | null>(null);
+  // 正在中间区域修的图，以及每一层修图前的样子（撤销用，只在内存里）。
+  const [retouch, setRetouch] = useState<{ layerId: string; mode: EditorMode; dataUrl: string; local?: { kind: LocalKind; custom: string } } | null>(null);
+  // AI 出的结果先左右对照，点「用这张」才换进排版。
+  const [upscaleProgress, setUpscaleProgress] = useState('');
+  const [pending, setPending] = useState<{ layerId: string; before: string; after: string; result: RetouchResult; refit: boolean; note: string } | null>(null);
+  const [retouchHistory, setRetouchHistory] = useState<Map<string, ImageLayer[]>>(new Map());
 
   const product = products?.find((entry) => entry.id === productId) ?? null;
   const assets = useTemplateAssets(product, notify);
@@ -152,7 +163,8 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
 
   const updateFace = (target: Face, change: (face: FaceLayout) => FaceLayout) =>
     setLayout((current) => (current ? { ...current, [target === 'back' && current.facesMode === 'different' ? 'back' : 'front']: change(target === 'back' && current.facesMode === 'different' ? current.back : current.front) } : current));
-  const updateLayer = (id: string, patch: Partial<ImageLayer>) => updateFace(editing, (current) => ({ ...current, layers: current.layers.map((layer) => (layer.id === id ? { ...layer, ...patch } : layer)) }));
+  const replaceLayer = (id: string, change: (layer: Layer) => Layer) => updateFace(editing, (current) => ({ ...current, layers: current.layers.map((layer) => (layer.id === id ? change(layer) : layer)) }));
+  const updateLayer = (id: string, patch: Partial<ImageLayer> | Partial<Layer>) => replaceLayer(id, (layer) => ({ ...layer, ...patch }) as Layer);
 
   const addImages = async (files: Array<{ name: string; type: string; bytes: Uint8Array<ArrayBuffer> }>) => {
     for (const file of files) {
@@ -169,6 +181,101 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
       }
     }
   };
+  const addText = () => {
+    const layer = newTextLayer('Microsoft YaHei');
+    updateFace(editing, (current) => ({ ...current, layers: [...current.layers, layer] }));
+    setSelectedId(layer.id);
+  };
+
+  // 修好的图作为新原图加进来，换掉这一层；比例变了的（裁剪、透视）按铺满重新摆，比例没变的位置大小不动。
+  // 第一次修时记下买家原图（originalSha256），保存时一起存。
+  const applyRetouch = async (layerId: string, bytes: Uint8Array<ArrayBuffer>, ext: string, refit: boolean) => {
+    const before = face?.layers.find((layer) => layer.id === layerId);
+    if (!before || isTextLayer(before)) return;
+    const bitmap = await createImageBitmap(new Blob([bytes]));
+    const sha256 = hex(await crypto.subtle.digest('SHA-256', bytes));
+    setSources((current) => new Map(current).set(sha256, { sha256, ext, bytes, bitmap }));
+    setRetouchHistory((current) => new Map(current).set(layerId, [...(current.get(layerId) ?? []), before]));
+    replaceLayer(layerId, () => ({
+      ...before,
+      ...(refit ? fitLayer(bitmap.width, bitmap.height, 'cover') : {}),
+      sha256,
+      ext,
+      width: bitmap.width,
+      height: bitmap.height,
+      originalSha256: before.originalSha256 ?? before.sha256,
+      originalExt: before.originalExt ?? before.ext,
+    }));
+  };
+  const undoRetouch = (layerId: string) => {
+    const stack = retouchHistory.get(layerId) ?? [];
+    const previous = stack.at(-1);
+    if (!previous) return;
+    setRetouchHistory((current) => new Map(current).set(layerId, stack.slice(0, -1)));
+    replaceLayer(layerId, () => previous);
+  };
+  const selectedSource = () => {
+    if (!selected || isTextLayer(selected)) throw new Error('先选一张图');
+    const source = sources.get(selected.sha256);
+    if (!source) throw new Error('这张图还没读出来，请稍后再试');
+    return { layer: selected, source };
+  };
+  const startRetouch = (mode: EditorMode, local?: { kind: LocalKind; custom: string }) =>
+    run('retouch', async () => {
+      const { layer, source } = selectedSource();
+      setRetouch({ layerId: layer.id, mode, dataUrl: await dataUrlOf(source.bytes, source.ext), local });
+    });
+  const showResult = async (layerId: string, source: Source, result: RetouchResult, refit: boolean, note: string) => {
+    const blobUrl = (bytes: Uint8Array<ArrayBuffer>) => URL.createObjectURL(new Blob([bytes]));
+    setPending({ layerId, before: blobUrl(source.bytes), after: blobUrl(result.bytes), result, refit, note });
+  };
+  const closePending = () => {
+    if (pending) [pending.before, pending.after].forEach((url) => URL.revokeObjectURL(url));
+    setPending(null);
+  };
+  const aiEdit = customApi?.aiEdit;
+  const runOutpaint = (extra: number) =>
+    run('outpaint', async () => {
+      const { layer, source } = selectedSource();
+      await showResult(layer.id, source, await outpaint(aiEdit!, source.bitmap, extra), true, '四周是 AI 补出来的（颜色已对齐原图，分辨率比原图低一些），原图一个像素都没改。看接缝自然再用。');
+    });
+  // 高清放大：第一次用先下载组件；AI 放大跑不了（显卡不支持等）时退回普通放大，并在对照里写明。
+  const runUpscale = (model: 'photo' | 'anime') =>
+    run('upscale', async () => {
+      const { layer, source } = selectedSource();
+      if (Math.max(source.bitmap.width, source.bitmap.height) > MAX_UPSCALE_INPUT) throw new Error(`原图已经够大（最长边超过 ${MAX_UPSCALE_INPUT} 像素），不用放大`);
+      const status = await customApi!.upscalerStatus();
+      if (!status.installed) {
+        if (!window.confirm(`第一次用要下载高清放大组件（约 ${Math.round(status.downloadBytes / 1024 / 1024)}MB，只下载一次）。继续吗？`)) return;
+        const stop = window.promptAssistantDesktop?.materials?.onProgress((progress) => {
+          if (progress.task === '下载高清放大组件') setUpscaleProgress(`正在下载组件 ${Math.round((progress.done / Math.max(1, progress.total)) * 100)}%`);
+        });
+        try {
+          await customApi!.installUpscaler();
+        } finally {
+          stop?.();
+        }
+      }
+      setUpscaleProgress('正在放大，一般几秒到半分钟…');
+      try {
+        const upscaled = await customApi!.upscale({ bytes: source.bytes, ext: source.ext, model });
+        if ('bytes' in upscaled) {
+          await showResult(layer.id, source, { bytes: upscaled.bytes, ext: '.png' }, false, `AI 放大 4 倍（${model === 'anime' ? '插画模型' : '照片模型'}）。放大看细节，文字、五官有没有被改形。`);
+        } else {
+          await showResult(layer.id, source, await plainUpscale(source.bitmap), false, `没用上 AI 放大（${upscaled.error}），用的是普通放大：只是变大，细节不会变多。`);
+        }
+      } finally {
+        setUpscaleProgress('');
+      }
+    });
+  const runRestore = () => {
+    if (!window.confirm('AI 变清晰会把整张图重画一遍，人脸、文字可能被改。生成后请仔细和原图核对再用。继续吗？')) return;
+    void run('restore', async () => {
+      const { layer, source } = selectedSource();
+      await showResult(layer.id, source, await restore(aiEdit!, source.bitmap), false, '整张是 AI 重画的，颜色已拉回原图的色调：仔细看人脸、五官、文字有没有被改。');
+    });
+  };
+
   const addFileList = async (list: FileList | null) =>
     addImages(await Promise.all([...(list ?? [])].filter((file) => file.type.startsWith('image/')).map(async (file) => ({ name: file.name, type: file.type, bytes: new Uint8Array(await file.arrayBuffer()) }))));
 
@@ -254,12 +361,11 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
     run('save', async () => {
       if (!layout) return;
       if (!orderName.trim()) throw new Error('先填单号（或名称），生产图和这一版都按它命名');
-      const faces = facesFor(layout);
       const outputs = [{ name: '效果图-正面.jpg', bytes: await encodeJpeg(mockupOf('front')) }];
       if (layout.facesMode === 'different') outputs.push({ name: '效果图-背面.jpg', bytes: await encodeJpeg(mockupOf('back')) });
       outputs.push({ name: '效果确认.jpg', bytes: await encodeJpeg(confirmationOf()) });
       outputs.push(await productionFile());
-      const used = new Set([...faces.front.layers, ...faces.back.layers].map((layer) => layer.sha256));
+      const used = new Set(imageLayers(layout).flatMap((layer) => [layer.sha256, ...(layer.originalSha256 ? [layer.originalSha256] : [])]));
       const { version } = await customApi!.saveOrderVersion({
         name: orderName,
         layout,
@@ -309,6 +415,17 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
       await loadProducts(product.id);
       notify('样机已保存');
     });
+  const deleteProduct = () =>
+    run('product', async () => {
+      if (!product) return;
+      if (!window.confirm(`删除产品「${product.name}」？样机会一起删掉，团队里所有人都不能再用；已保存的单不受影响。`)) return;
+      try {
+        await customApi!.deleteProduct(product.id);
+      } finally {
+        await loadProducts();
+      }
+      notify(`产品「${product.name}」已删除`);
+    });
   const importPsd = () =>
     run('psd', async () => {
       if (!product) return;
@@ -325,8 +442,9 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
     const y = (event.clientY - rect.top) / rect.height;
     // 点到哪张图就选哪张（从上往下找，按没旋转的框算）；点空白处拖动当前选中的。
     const hit = [...face.layers].reverse().find((layer) => {
-      const halfW = layer.scale / 2;
-      const halfH = ((layer.scale * layer.height) / layer.width) / 2;
+      const box = isTextLayer(layer) ? textBox(layer) : { width: layer.scale, height: (layer.scale * layer.height) / layer.width };
+      const halfW = box.width / 2;
+      const halfH = box.height / 2;
       return Math.abs(x - layer.cx) <= halfW && Math.abs(y - layer.cy) <= halfH;
     });
     const target = hit ?? selected;
@@ -355,7 +473,7 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
 
   const bleedPercent = layout && product ? (product.bleedCm / layout.sizeCm) * 100 : 0;
   // 正在排的这一面里，按现在大小印出来不到 150dpi 的图。
-  const lowResLayers = layout && face ? face.layers.map((layer) => printDpi(layer, cmToPx(layout.sizeCm))).filter((dpi) => dpi < LOW_DPI) : [];
+  const lowResLayers = layout && face ? face.layers.filter((layer): layer is ImageLayer => !isTextLayer(layer)).map((layer) => printDpi(layer, cmToPx(layout.sizeCm))).filter((dpi) => dpi < LOW_DPI) : [];
   return (
     <main className="materials-view is-canvas custom-view">
       <div className="custom-layout">
@@ -460,6 +578,10 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
                     >
                       修改
                     </Button>
+                    <Button className="button ghost compact" type="button" disabled={busy === 'product' || Boolean(photoEdit)} onClick={() => void deleteProduct()}>
+                      <Trash2 size={13} />
+                      删除产品
+                    </Button>
                     <Button className="button ghost compact" type="button" disabled={busy === 'psd' || Boolean(photoEdit)} onClick={() => void importPsd()}>
                       <FileUp size={13} />
                       {busy === 'psd' ? '导入中…' : product.template ? '换样机 PSD' : '导入样机 PSD'}
@@ -485,25 +607,33 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
           </details>
 
           {selected && (
-            <div className="canvas-section custom-layer-tools" aria-label="选中的图">
-              <span className="material-field-label">选中的图</span>
-              <label className="field">
-                <span>大小 {Math.round(selected.scale * 100)}%</span>
-                <input type="range" min={5} max={400} value={Math.round(selected.scale * 100)} onChange={(event) => updateLayer(selected.id, { scale: Number(event.target.value) / 100 })} />
-              </label>
+            <div className="canvas-section custom-layer-tools" aria-label={isTextLayer(selected) ? '选中的文字' : '选中的图'}>
+              <span className="material-field-label">{isTextLayer(selected) ? '选中的文字' : '选中的图'}</span>
+              {isTextLayer(selected) ? (
+                <TextLayerPanel layer={selected} onChange={(patch) => updateLayer(selected.id, patch)} />
+              ) : (
+                <label className="field">
+                  <span>大小 {Math.round(selected.scale * 100)}%</span>
+                  <input type="range" min={5} max={400} value={Math.round(selected.scale * 100)} onChange={(event) => updateLayer(selected.id, { scale: Number(event.target.value) / 100 })} />
+                </label>
+              )}
               <label className="field">
                 <span>角度 {Math.round(selected.rotation)}°</span>
                 <input type="range" min={-180} max={180} value={Math.round(selected.rotation)} onChange={(event) => updateLayer(selected.id, { rotation: Number(event.target.value) })} />
               </label>
               <span className="custom-row">
-                <Button className="button ghost compact" type="button" title="铺满这一面，超出的部分裁掉" onClick={() => updateLayer(selected.id, fitLayer(selected.width, selected.height, 'cover'))}>
-                  <Maximize size={13} />
-                  铺满
-                </Button>
-                <Button className="button ghost compact" type="button" title="完整显示整张图" onClick={() => updateLayer(selected.id, fitLayer(selected.width, selected.height, 'contain'))}>
-                  <Minimize size={13} />
-                  完整显示
-                </Button>
+                {!isTextLayer(selected) && (
+                  <>
+                    <Button className="button ghost compact" type="button" title="铺满这一面，超出的部分裁掉" onClick={() => updateLayer(selected.id, fitLayer(selected.width, selected.height, 'cover'))}>
+                      <Maximize size={13} />
+                      铺满
+                    </Button>
+                    <Button className="button ghost compact" type="button" title="完整显示整张图" onClick={() => updateLayer(selected.id, fitLayer(selected.width, selected.height, 'contain'))}>
+                      <Minimize size={13} />
+                      完整显示
+                    </Button>
+                  </>
+                )}
                 <Button className="icon-button compact-icon" type="button" aria-label="逆时针转 90°" title="逆时针转 90°" onClick={() => updateLayer(selected.id, { rotation: selected.rotation - 90 })}>
                   <RotateCcw size={14} />
                 </Button>
@@ -519,8 +649,8 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
                 <Button
                   className="icon-button compact-icon"
                   type="button"
-                  aria-label="删除这张图"
-                  title="删除这张图"
+                  aria-label={isTextLayer(selected) ? '删除这段文字' : '删除这张图'}
+                  title={isTextLayer(selected) ? '删除这段文字' : '删除这张图'}
                   onClick={() => {
                     updateFace(editing, (current) => ({ ...current, layers: current.layers.filter((layer) => layer.id !== selected.id) }));
                     setSelectedId('');
@@ -531,9 +661,69 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
               </span>
             </div>
           )}
+          {selected && !isTextLayer(selected) && (
+            <RetouchPanel
+              disabled={Boolean(busy) || Boolean(retouch) || Boolean(photoEdit) || Boolean(pending)}
+              busy={busy}
+              canUndo={Boolean(retouchHistory.get(selected.id)?.length)}
+              onCrop={() => void startRetouch('crop')}
+              onPerspective={() => void startRetouch('perspective')}
+              onLocal={(kind, custom) => void startRetouch('mask', { kind, custom })}
+              onOutpaint={(extra) => void runOutpaint(extra)}
+              onRestore={runRestore}
+              onUpscale={(model) => void runUpscale(model)}
+              onUndo={() => undoRetouch(selected.id)}
+              progress={upscaleProgress}
+            />
+          )}
         </aside>
 
-        {photoEdit ? (
+        {pending ? (
+          <RetouchCompare
+            before={pending.before}
+            after={pending.after}
+            note={pending.note}
+            onReject={closePending}
+            onAccept={() =>
+              void run('retouch', async () => {
+                await applyRetouch(pending.layerId, pending.result.bytes, pending.result.ext, pending.refit);
+                closePending();
+              })
+            }
+          />
+        ) : retouch ? (
+          <section className="canvas-stage custom-stage" aria-label="修图">
+            <ReferenceEditor
+              reference={{ fileName: '', title: '买家的图', dataUrl: retouch.dataUrl }}
+              position={1}
+              initialMode={retouch.mode}
+              modes={retouch.local ? ['mask'] : ['crop', 'perspective']}
+              heading={retouch.local ? 'AI 局部修改' : '修图'}
+              saveLabel={retouch.local ? (busy === 'local' ? 'AI 处理中…' : '开始修改') : undefined}
+              maskHint="把要改的地方涂满（比整块水印、缺口稍大一圈）。只有涂过的地方会换成 AI 画的，其余像素保持原图。"
+              onCancel={() => setRetouch(null)}
+              onSave={(next) => {
+                const { local, layerId } = retouch;
+                if (busy) return;
+                if (!local) {
+                  void run('retouch', async () => {
+                    const { bytes, ext } = bytesOf(next.dataUrl);
+                    await applyRetouch(layerId, bytes, ext, true);
+                    setRetouch(null);
+                  });
+                  return;
+                }
+                void run('local', async () => {
+                  if (!next.maskDataUrl) throw new Error('先在图上涂要改的地方');
+                  const { source } = selectedSource();
+                  const result = await localEdit(aiEdit!, source.bitmap, { marked: next.dataUrl, mask: next.maskDataUrl, color: next.maskColor ?? '#00ff00', kind: local.kind, custom: local.custom });
+                  setRetouch(null);
+                  await showResult(layerId, source, result, false, '只有涂过的地方换成了 AI 画的，其余像素和原图一样。');
+                });
+              }}
+            />
+          </section>
+        ) : photoEdit ? (
           <section className="canvas-stage custom-stage" aria-label="用图片做样机">
             <div className="custom-stage-head">
               <strong>用图片做样机</strong>
@@ -570,6 +760,10 @@ export function CustomOrderView({ team, notify }: { team: string; notify: (messa
               <Button className="button ghost compact" type="button" disabled={!layout} onClick={() => fileInput.current?.click()}>
                 <ImagePlus size={13} />
                 放图
+              </Button>
+              <Button className="button ghost compact" type="button" disabled={!layout} onClick={addText}>
+                <Type size={13} />
+                加文字
               </Button>
               {assets?.sample && face && face.layers.length === 0 && (
                 <Button className="button ghost compact" type="button" onClick={() => void addImages([{ name: 'sample.jpg', type: 'image/jpeg', bytes: assets.sample! }])}>

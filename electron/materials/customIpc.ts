@@ -2,8 +2,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { clipboard, dialog, nativeImage, type BrowserWindow, type IpcMain } from 'electron';
-import { importMockupPsd, readProducts, readTemplateFile, saveOrderVersion, savePhotoTemplate, saveProduct, type OrderFile, type OrderSource, type ProductInput } from './customStore.ts';
+import { deleteProduct, importMockupPsd, readProducts, readTemplateFile, saveOrderVersion, savePhotoTemplate, saveProduct, type OrderFile, type OrderSource, type ProductInput } from './customStore.ts';
 import { normalizeBaseUrl, type DavConfig } from './webdav.ts';
+import { loadAiRuntime } from './aiSettings.ts';
+import { decodeGeneratedMedia, generateMedia } from './canvas.ts';
+import { UPSCALER_COMPONENT, installUpscaler, isUpscalerInstalled, upscaleImage, type UpscaleModel } from './upscaler.ts';
 import type { OrderLayout } from '../../src/custom/layout.ts';
 
 type Grant = { baseUrl: string; username: string; password: string };
@@ -11,7 +14,7 @@ type Grant = { baseUrl: string; username: string; password: string };
 const MAX_PSD_BYTES = 300 * 1024 * 1024;
 const asBytes = (value: unknown) => (value instanceof Uint8Array ? value : new Uint8Array(0));
 
-export function registerCustom({ ipcMain, getWindow }: { ipcMain: IpcMain; getWindow: () => BrowserWindow | null }) {
+export function registerCustom({ ipcMain, userDataDir, updateBaseUrl, getWindow }: { ipcMain: IpcMain; userDataDir: string; updateBaseUrl: string; getWindow: () => BrowserWindow | null }) {
   let config: DavConfig | null = null;
   const current = () => {
     if (!config) throw new Error('这个账号还没有开通来图定制，请联系管理员');
@@ -24,6 +27,7 @@ export function registerCustom({ ipcMain, getWindow }: { ipcMain: IpcMain; getWi
   });
   ipcMain.handle('custom:list-products', () => readProducts(current()));
   ipcMain.handle('custom:save-product', (_event, input: ProductInput) => saveProduct(current(), input));
+  ipcMain.handle('custom:delete-product', (_event, productId: string) => deleteProduct(current(), String(productId)));
   ipcMain.handle('custom:import-psd', async (_event, productId: string) => {
     const window = getWindow();
     const options = { title: '选择样机 PSD', properties: ['openFile' as const], filters: [{ name: 'Photoshop', extensions: ['psd'] }] };
@@ -50,6 +54,33 @@ export function registerCustom({ ipcMain, getWindow }: { ipcMain: IpcMain; getWi
       sources: (input?.sources ?? []).map((source) => ({ sha256: String(source.sha256), ext: String(source.ext), bytes: asBytes(source.bytes) })),
       outputs: (input?.outputs ?? []).map((output) => ({ name: String(output.name), bytes: asBytes(output.bytes) })),
     }),
+  );
+  // AI 修图：用「API 配置」里的生图模型出一张，不进画布队列、不记生成记录。贴回原图在界面里做（src/custom/retouch.ts）。
+  ipcMain.handle('custom:ai-edit', async (_event, input: { prompt: string; imageDataUrl: string; maskDataUrl?: string; size: string; ratio: string }) => {
+    const payload = {
+      prompt: String(input?.prompt ?? ''),
+      size: String(input?.size ?? ''),
+      ratio: String(input?.ratio ?? ''),
+      n: 1,
+      referenceImageDataUrls: [String(input?.imageDataUrl ?? '')],
+      ...(input?.maskDataUrl ? { maskDataUrl: String(input.maskDataUrl) } : {}),
+    } as Parameters<typeof generateMedia>[1];
+    const generated = await generateMedia(loadAiRuntime(userDataDir), payload);
+    const image = generated.images[0];
+    if (!image) throw new Error('模型没有返回图片');
+    const { buffer, ext } = decodeGeneratedMedia(image.dataUrl);
+    if (ext === '.mp4') throw new Error('模型返回的是视频，不是图片');
+    return { bytes: new Uint8Array(buffer), ext };
+  });
+  // 高清放大：组件按需下载（进度走素材库的 materials:progress 事件），放大失败时返回原因，界面退回普通放大。
+  ipcMain.handle('custom:upscaler-status', () => ({ installed: isUpscalerInstalled(userDataDir), downloadBytes: UPSCALER_COMPONENT.size }));
+  ipcMain.handle('custom:install-upscaler', (event) =>
+    installUpscaler(userDataDir, updateBaseUrl, (done, total) => {
+      if (!event.sender.isDestroyed()) event.sender.send('materials:progress', { task: '下载高清放大组件', done, total, current: '' });
+    }),
+  );
+  ipcMain.handle('custom:upscale', (_event, input: { bytes: Uint8Array; ext: string; model: UpscaleModel }) =>
+    upscaleImage(userDataDir, asBytes(input?.bytes), String(input?.ext ?? ''), input?.model === 'anime' ? 'anime' : 'photo'),
   );
   // 效果图放进剪贴板，直接粘贴到千牛发给买家。
   ipcMain.handle('custom:copy-image', (_event, png: Uint8Array) => {

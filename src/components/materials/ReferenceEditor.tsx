@@ -80,9 +80,14 @@ type ReferenceEditorProps = {
   initialMode: EditorMode;
   onSave: (next: CanvasReference) => void;
   onCancel: () => void;
+  // 来图定制复用时用：只给部分编辑方式、换标题和涂抹说明、换保存按钮的字。不传就是画布原来的样子。
+  modes?: EditorMode[];
+  heading?: string;
+  maskHint?: string;
+  saveLabel?: string;
 };
 
-export function ReferenceEditor({ reference, position, initialMode, onSave, onCancel }: ReferenceEditorProps) {
+export function ReferenceEditor({ reference, position, initialMode, onSave, onCancel, modes, heading, maskHint, saveLabel }: ReferenceEditorProps) {
   // 编辑一律从没涂过的原图开始；已有的遮罩放回遮罩层接着涂。
   const source = reference.sourceDataUrl ?? reference.dataUrl;
   const [image, setImage] = useState<HTMLImageElement | null>(null);
@@ -391,14 +396,14 @@ export function ReferenceEditor({ reference, position, initialMode, onSave, onCa
     <div className="ref-editor">
       <div className="ref-editor-head">
         <div className="ref-editor-title">
-          <strong>编辑参考图</strong>
+          <strong>{heading ?? '编辑参考图'}</strong>
           <span>
-            第 {position} 张 · {reference.title}
+            {heading ? reference.title : `第 ${position} 张 · ${reference.title}`}
             {image ? ` · ${width}×${height}` : ''}
           </span>
         </div>
         <div className="canvas-segmented" role="radiogroup" aria-label="编辑方式">
-          {MODES.map((option) => (
+          {MODES.filter((option) => !modes || modes.includes(option.value)).map((option) => (
             <button key={option.value} type="button" role="radio" aria-checked={mode === option.value} className={mode === option.value ? 'is-active' : ''} onClick={() => setMode(option.value)}>
               {option.label}
             </button>
@@ -409,7 +414,7 @@ export function ReferenceEditor({ reference, position, initialMode, onSave, onCa
           取消
         </Button>
         <Button className="button primary compact" type="button" disabled={!image || saving} onClick={() => void save()}>
-          {saving ? '正在处理…' : '保存并返回'}
+          {saving ? '正在处理…' : (saveLabel ?? '保存并返回')}
         </Button>
       </div>
 
@@ -559,7 +564,7 @@ export function ReferenceEditor({ reference, position, initialMode, onSave, onCa
       <p className={error ? 'canvas-detail-error' : 'nas-form-note'} role={error ? 'alert' : undefined}>
         {error ||
           (reference.maskDataUrl && mode !== 'mask' ? `这张已经涂过遮罩：${MODES.find((entry) => entry.value === mode)?.label}后遮罩会清掉，需要的话再涂。` : '') ||
-          hints[mode]}
+          (mode === 'mask' && maskHint) || hints[mode]}
       </p>
     </div>
   );

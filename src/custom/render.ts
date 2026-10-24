@@ -1,6 +1,6 @@
 // 来图定制的出图（浏览器 canvas）：一面 → 样机效果图、一面 ×2 → 生产长条图。几何在 warp.ts / production.ts。
 import type { Point } from '../materials/imageEdit.ts';
-import type { FaceLayout } from './layout.ts';
+import { isTextLayer, type FaceLayout, type TextLayer } from './layout.ts';
 import type { MockupTemplate } from './product.ts';
 import { setJpegDpi, stripLayout } from './production.ts';
 import { warpGrid } from './warp.ts';
@@ -28,6 +28,10 @@ export function renderFace(face: FaceLayout, images: Map<string, Drawable>, size
   ctx.fillRect(0, 0, size, size);
   ctx.imageSmoothingQuality = 'high';
   for (const layer of face.layers) {
+    if (isTextLayer(layer)) {
+      drawText(ctx, layer, size);
+      continue;
+    }
     const image = images.get(layer.sha256);
     if (!image) throw new Error('有一张图还没读出来，请稍后再试');
     const width = layer.scale * size;
@@ -39,6 +43,41 @@ export function renderFace(face: FaceLayout, images: Map<string, Drawable>, size
     ctx.restore();
   }
   return canvas;
+}
+
+const fontOf = (layer: TextLayer, size: number) => `${layer.bold ? 700 : 400} ${layer.fontSize * size}px "${layer.font.replace(/"/g, '')}", sans-serif`;
+const LINE_HEIGHT = 1.25;
+
+// 文字框占这一面边长的比例（没旋转时），排版区点选用。
+export function textBox(layer: TextLayer) {
+  const { ctx } = canvas2d(1, 1);
+  ctx.font = fontOf(layer, 1000);
+  const lines = layer.text.split('\n');
+  return { width: Math.max(...lines.map((line) => ctx.measureText(line).width)) / 1000, height: lines.length * layer.fontSize * LINE_HEIGHT };
+}
+
+// 多行居中，先描边再填色（描边在字外面一圈，不吃掉笔画）。
+function drawText(ctx: CanvasRenderingContext2D, layer: TextLayer, size: number) {
+  const fontPx = layer.fontSize * size;
+  const lines = layer.text.split('\n');
+  ctx.save();
+  ctx.translate(layer.cx * size, layer.cy * size);
+  ctx.rotate((layer.rotation * Math.PI) / 180);
+  ctx.font = fontOf(layer, size);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  lines.forEach((line, index) => {
+    const y = (index - (lines.length - 1) / 2) * fontPx * LINE_HEIGHT;
+    if (layer.strokeWidth > 0) {
+      ctx.strokeStyle = layer.strokeColor;
+      ctx.lineWidth = layer.strokeWidth * fontPx * 2;
+      ctx.strokeText(line, 0, y);
+    }
+    ctx.fillStyle = layer.color;
+    ctx.fillText(line, 0, y);
+  });
+  ctx.restore();
 }
 
 // 把源图上的三角形 (s0,s1,s2) 仿射贴到目标三角形 (d0,d1,d2)，目标三角形往外扩半像素，避免格子之间露缝。

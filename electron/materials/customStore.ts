@@ -8,7 +8,7 @@ import type { DavConfig } from './webdav.ts';
 import { PRODUCTS_FILE, normalizeProducts, type CustomProduct, type CustomProducts, type MockupTemplate } from '../../src/custom/product.ts';
 import { warpedBounds } from '../../src/custom/warp.ts';
 import type { Point } from '../../src/materials/imageEdit.ts';
-import { normalizeLayout, type OrderLayout } from '../../src/custom/layout.ts';
+import { imageLayers, normalizeLayout, type OrderLayout } from '../../src/custom/layout.ts';
 import { parseMockupPsd, type Rgba } from './customPsd.ts';
 
 export type ProductInput = { id?: string; name: string; sizes: number[]; bleedCm: number; watermark: string };
@@ -54,6 +54,18 @@ export async function saveProduct(config: DavConfig, input: ProductInput) {
     return { data: { ...data, updatedAt: now, products }, result: product };
   });
   return result;
+}
+
+// 删除产品：先从 products.json 去掉，再删样机文件夹。已保存的单不动（排版里只记了产品 id）。
+export async function deleteProduct(config: DavConfig, productId: string) {
+  if (!/^[0-9a-f-]{36}$/.test(productId)) throw new Error('产品 id 不对');
+  const now = new Date().toISOString();
+  await mutateProducts(config, (data) => ({ data: { ...data, updatedAt: now, products: data.products.filter((product) => product.id !== productId) }, result: null }));
+  try {
+    await webdav.remove(config, templateDir(productId));
+  } catch (error) {
+    throw new Error(`产品已删除，但样机文件没删掉：${error instanceof Error ? error.message : error}`);
+  }
 }
 
 // ---- PNG：样机图层是整幅 RGBA，自己编码，不经过 nativeImage（它要预乘 alpha，抱枕边缘会发黑）。
@@ -198,7 +210,10 @@ export async function saveOrderVersion(config: DavConfig, input: { name: string;
   if (!layout) throw new Error('排版数据不完整，没有保存');
   for (const output of input.outputs) if (!OUTPUT_NAME.test(output.name)) throw new Error(`文件名「${output.name}」不对`);
   const folder = orderFolder(input.name);
-  const needed = new Set([...layout.front.layers, ...layout.back.layers].map((layer) => `${layer.sha256}${layer.ext}`));
+  // 修过的图连买家原图一起存（originalSha256），以后有纠纷或要重修时找得回来。
+  const needed = new Set(
+    imageLayers(layout).flatMap((layer) => [`${layer.sha256}${layer.ext}`, ...(layer.originalSha256 ? [`${layer.originalSha256}${layer.originalExt}`] : [])]),
+  );
   const provided = new Map(input.sources.map((source) => [`${source.sha256}${source.ext}`, source]));
   // 排版里用到、这次又没带上的原图，必须是以前存过的；否则这一版打开会缺图，先报错再占版本号。
   for (const file of needed) {

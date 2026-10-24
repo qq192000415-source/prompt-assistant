@@ -9,6 +9,14 @@
 - 对应源码：https://github.com/FFmpeg/FFmpeg/commit/38b88335f9 ；构建来源：https://www.gyan.dev/ffmpeg/builds/ 、https://github.com/GyanD/codexffmpeg/releases/tag/8.1.2
 - 提示词助手通过命令行调用这个独立程序，没有链接 FFmpeg 的库。
 
+## Real-ESRGAN（按需下载的组件，不在安装包里）
+
+来图定制的「高清放大」会在第一次使用时，从部署者的更新源 `components/` 目录下载 Real-ESRGAN 的 ncnn-vulkan 版，下载后校验 SHA256 再解压启用。
+
+- 来源：[xinntao/Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) Release v0.2.5.0 的 `realesrgan-ncnn-vulkan-20220424-windows.zip`。由 `scripts/publish-upscaler-component.cjs` 重新打包，只保留程序、`vcomp140.dll`、`vcomp140d.dll`、`realesrgan-x4plus` 和 `realesrgan-x4plus-anime` 两个模型、`README_windows.md`，文件内容未修改。
+- 协议：BSD 3-Clause（Copyright (c) 2021, Xintao Wang），协议全文以 `LICENSE.txt` 放在组件包里。程序基于 [Tencent/ncnn](https://github.com/Tencent/ncnn)（BSD 3-Clause）。
+- 灵匣通过命令行调用这个独立程序。
+
 ## SuYan（素言）
 
 素材库的部分代码移植自 [guliacer/SuYan](https://github.com/guliacer/SuYan)，按 MIT 协议使用。移植过的文件在文件开头注明了来源：

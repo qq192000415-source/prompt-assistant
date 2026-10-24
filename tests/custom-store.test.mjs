@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { inflateSync } from 'node:zlib';
 
-const { encodePng, importMockupPsd, readProducts, readTemplateFile, saveOrderVersion, savePhotoTemplate, saveProduct } = await import('../electron/materials/customStore.ts');
+const { deleteProduct, encodePng, importMockupPsd, readProducts, readTemplateFile, saveOrderVersion, savePhotoTemplate, saveProduct } = await import('../electron/materials/customStore.ts');
 const { defaultMesh } = await import('../src/custom/warp.ts');
 const { startFakeNas } = await import('./helpers/fake-nas.mjs');
 
@@ -58,6 +58,37 @@ test('存一版：版本号递增，原图各版共用只传一次，缺原图�
     assert.equal(JSON.parse(nas.files.get(`${ROOT}orders/单1/order.json`).toString()).versions, 2);
     await assert.rejects(saveOrderVersion(nas.config, { name: '单1', layout: layout([]), sources: [], outputs: [{ name: '../x.jpg', bytes: new Uint8Array() }] }), /文件名/);
     await assert.rejects(saveOrderVersion(nas.config, { name: '  ', layout: layout([]), sources: [], outputs: [] }), /单名不能为空/);
+  } finally {
+    nas.server.close();
+  }
+});
+
+test('删除产品：products.json 里去掉，样机文件夹一起删，别的产品不动', async () => {
+  const nas = await startFakeNas();
+  try {
+    const keep = await saveProduct(nas.config, { name: '方形抱枕', sizes: [40], bleedCm: 0.5, watermark: '' });
+    const gone = await saveProduct(nas.config, { name: '建错的', sizes: [40], bleedCm: 0.5, watermark: '' });
+    await savePhotoTemplate(nas.config, gone.id, { bytes: new Uint8Array([1]), ext: '.jpg', width: 100, height: 100, mesh: defaultMesh(100, 100) });
+    await savePhotoTemplate(nas.config, keep.id, { bytes: new Uint8Array([2]), ext: '.jpg', width: 100, height: 100, mesh: defaultMesh(100, 100) });
+    await deleteProduct(nas.config, gone.id);
+    const { products } = await readProducts(nas.config);
+    assert.deepEqual(products.map((p) => p.name), ['方形抱枕']);
+    assert.equal([...nas.files.keys()].some((name) => name.includes(gone.id)), false);
+    assert.ok(nas.files.has(`${ROOT}templates/${keep.id}/under.jpg`));
+    await assert.rejects(deleteProduct(nas.config, '../x'), /产品 id 不对/);
+  } finally {
+    nas.server.close();
+  }
+});
+
+test('存一版：修过的图连买家原图一起存，缺原图时不保存', async () => {
+  const nas = await startFakeNas();
+  try {
+    const edited = { ...layer('a'), originalSha256: sha('b'), originalExt: '.jpg' };
+    const sources = [{ sha256: sha('a'), ext: '.png', bytes: new Uint8Array([1]) }, { sha256: sha('b'), ext: '.jpg', bytes: new Uint8Array([2]) }];
+    await saveOrderVersion(nas.config, { name: '单2', layout: layout([edited]), sources, outputs: [] });
+    assert.deepEqual([...nas.files.get(`${ROOT}orders/单2/sources/${sha('b')}.jpg`)], [2]);
+    await assert.rejects(saveOrderVersion(nas.config, { name: '单3', layout: layout([edited]), sources: sources.slice(0, 1), outputs: [] }), /原图没有传上来/);
   } finally {
     nas.server.close();
   }
